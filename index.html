@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel Personal Safety</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🛡️ OzIntel</h1>
+    <p class="username">Username: 
+      <input type="text" id="username-input" value="You" 
+             onchange="saveUsername()" style="background:#334155; color:white; border:1px solid #475569; padding:4px 8px; border-radius:4px; width:180px;">
+    </p>
+
+    <div class="buttons">
+      <button class="safe-btn" onclick="sendSafeAlert()">
+        ✅ SAFE ARRIVAL<br>
+        <small>I'm OK - Send Update</small>
+      </button>
+
+      <button class="emergency-btn" onclick="sendEmergencyAlert()">
+        🚨 SEND HELP<br>
+        <small>Emergency - Need Assistance</small>
+      </button>
+    </div>
+
+    <div class="section">
+      <h2>Safe Contacts</h2>
+      <div id="contacts-list"></div>
+      
+      <div class="add-contact">
+        <input type="tel" id="new-phone" placeholder="+61412345678" />
+        <input type="text" id="new-name" placeholder="Contact Name" />
+        <button onclick="addContact()">Add Contact</button>
+      </div>
+    </div>
+
+    <p id="status" class="status"></p>
+    <p class="note">Both alerts include your live Google Maps location.</p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
