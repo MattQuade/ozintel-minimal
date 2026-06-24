@@ -1,17 +1,32 @@
-let contacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
+let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
+let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 let username = localStorage.getItem("ozintelUsername") || "You";
 
 function renderContacts() {
-  const list = document.getElementById("contacts-list");
-  list.innerHTML = '';
-  contacts.forEach((contact, index) => {
+  // Safe Contacts
+  const safeList = document.getElementById("safe-contacts-list");
+  safeList.innerHTML = '';
+  safeContacts.forEach((contact, index) => {
     const div = document.createElement("div");
     div.className = "contact-item";
     div.innerHTML = `
       <span>${contact.name} — ${contact.phone}</span>
-      <button onclick="removeContact(${index})" style="background:#ef4444;color:white;padding:4px 8px;font-size:0.9rem;">Remove</button>
+      <button onclick="removeSafeContact(${index})" style="background:#ef4444;color:white;padding:4px 8px;font-size:0.9rem;">Remove</button>
     `;
-    list.appendChild(div);
+    safeList.appendChild(div);
+  });
+
+  // Emergency Contacts
+  const emergencyList = document.getElementById("emergency-contacts-list");
+  emergencyList.innerHTML = '';
+  emergencyContacts.forEach((contact, index) => {
+    const div = document.createElement("div");
+    div.className = "contact-item";
+    div.innerHTML = `
+      <span>${contact.name} — ${contact.phone}</span>
+      <button onclick="removeEmergencyContact(${index})" style="background:#ef4444;color:white;padding:4px 8px;font-size:0.9rem;">Remove</button>
+    `;
+    emergencyList.appendChild(div);
   });
 }
 
@@ -20,35 +35,49 @@ function saveUsername() {
   localStorage.setItem("ozintelUsername", username);
 }
 
-function addContact() {
-  const phone = document.getElementById("new-phone").value.trim();
-  const name = document.getElementById("new-name").value.trim() || "Contact";
+function addSafeContact() {
+  const phone = document.getElementById("new-safe-phone").value.trim();
+  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
+  if (!phone) return alert("Please enter a phone number");
   
-  if (!phone) {
-    alert("Please enter a phone number");
-    return;
-  }
-  
-  contacts.push({ name, phone });
-  localStorage.setItem("safeContacts", JSON.stringify(contacts));
+  safeContacts.push({ name, phone });
+  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
   renderContacts();
-  
-  document.getElementById("new-phone").value = "";
-  document.getElementById("new-name").value = "";
+  document.getElementById("new-safe-phone").value = "";
+  document.getElementById("new-safe-name").value = "";
 }
 
-function removeContact(index) {
-  contacts.splice(index, 1);
-  localStorage.setItem("safeContacts", JSON.stringify(contacts));
+function addEmergencyContact() {
+  const phone = document.getElementById("new-emergency-phone").value.trim();
+  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
+  if (!phone) return alert("Please enter a phone number");
+  
+  emergencyContacts.push({ name, phone });
+  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
+  renderContacts();
+  document.getElementById("new-emergency-phone").value = "";
+  document.getElementById("new-emergency-name").value = "";
+}
+
+function removeSafeContact(index) {
+  safeContacts.splice(index, 1);
+  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
+  renderContacts();
+}
+
+function removeEmergencyContact(index) {
+  emergencyContacts.splice(index, 1);
+  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
   renderContacts();
 }
 
 async function sendAlert(type) {
+  const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const btns = document.querySelectorAll('button');
   const status = document.getElementById("status");
   
   if (contacts.length === 0) {
-    alert("Please add at least one Safe Contact");
+    alert(`Please add at least one ${type === 'safe' ? 'Safe' : 'Emergency'} Contact`);
     return;
   }
 

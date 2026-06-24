@@ -27,13 +27,24 @@
     </div>
 
     <div class="section">
-      <h2>Safe Contacts</h2>
-      <div id="contacts-list"></div>
+      <h2>Safe Contacts (Green Button)</h2>
+      <div id="safe-contacts-list"></div>
       
       <div class="add-contact">
-        <input type="tel" id="new-phone" placeholder="+61412345678" />
-        <input type="text" id="new-name" placeholder="Contact Name" />
-        <button onclick="addContact()">Add Contact</button>
+        <input type="tel" id="new-safe-phone" placeholder="+61412345678" />
+        <input type="text" id="new-safe-name" placeholder="Contact Name" />
+        <button onclick="addSafeContact()">Add Safe Contact</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Emergency Contacts (Red Button)</h2>
+      <div id="emergency-contacts-list"></div>
+      
+      <div class="add-contact">
+        <input type="tel" id="new-emergency-phone" placeholder="+61412345678" />
+        <input type="text" id="new-emergency-name" placeholder="Contact Name" />
+        <button onclick="addEmergencyContact()">Add Emergency Contact</button>
       </div>
     </div>
 
