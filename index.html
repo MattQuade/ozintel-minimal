@@ -3,55 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OzIntel Personal Safety</title>
+  <title>OzIntel - Personal Safety</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
     <h1>🛡️ OzIntel</h1>
-    <p class="username">Username: 
-      <input type="text" id="username-input" value="You" 
-             onchange="saveUsername()" style="background:#334155; color:white; border:1px solid #475569; padding:4px 8px; border-radius:4px; width:180px;">
-    </p>
+    <p class="subtitle">Personal Safety Alert System</p>
 
-    <div class="buttons">
-      <button class="safe-btn" onclick="sendSafeAlert()">
-        ✅ SAFE ARRIVAL<br>
-        <small>I'm OK - Send Update</small>
-      </button>
+    <div id="auth-screen">
+      <h2>Create Account</h2>
+      <input type="text" id="first-name" placeholder="First Name" required>
+      <input type="text" id="last-name" placeholder="Last Name" required>
+      <input type="email" id="email" placeholder="Email Address" required>
+      <input type="tel" id="phone" placeholder="Phone Number (+614...)" >
 
-      <button class="emergency-btn" onclick="sendEmergencyAlert()">
-        🚨 SEND HELP<br>
-        <small>Emergency - Need Assistance</small>
-      </button>
+      <button onclick="signUp()">Sign Up with Magic Link</button>
+      <p id="status" class="status"></p>
+      <p class="small">We'll send you a magic link to log in instantly. No password needed.</p>
     </div>
 
-    <div class="section">
-      <h2>Safe Contacts (Green Button)</h2>
-      <div id="safe-contacts-list"></div>
-      
-      <div class="add-contact">
-        <input type="tel" id="new-safe-phone" placeholder="+61412345678" />
-        <input type="text" id="new-safe-name" placeholder="Contact Name" />
-        <button onclick="addSafeContact()">Add Safe Contact</button>
-      </div>
+    <div id="main-app" style="display: none;">
+      <!-- Main alert page will load here after login -->
     </div>
-
-    <div class="section">
-      <h2>Emergency Contacts (Red Button)</h2>
-      <div id="emergency-contacts-list"></div>
-      
-      <div class="add-contact">
-        <input type="tel" id="new-emergency-phone" placeholder="+61412345678" />
-        <input type="text" id="new-emergency-name" placeholder="Contact Name" />
-        <button onclick="addEmergencyContact()">Add Emergency Contact</button>
-      </div>
-    </div>
-
-    <p id="status" class="status"></p>
-    <p class="note">Both alerts include your live Google Maps location.</p>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>

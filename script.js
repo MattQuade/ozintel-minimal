@@ -1,139 +1,67 @@
-let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
-let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
-let username = localStorage.getItem("ozintelUsername") || "You";
+const supabaseUrl = 'https://qxisbataovfkkiavci.supabase.co';
+const supabaseKey = 'sb_publishable_3WxLu8ayfbS99TgA7Nt-HA_x5ruYGgZ';
+const supabase = Supabase.createClient(supabaseUrl, supabaseKey);
 
-function renderContacts() {
-  // Safe Contacts
-  const safeList = document.getElementById("safe-contacts-list");
-  safeList.innerHTML = '';
-  safeContacts.forEach((contact, index) => {
-    const div = document.createElement("div");
-    div.className = "contact-item";
-    div.innerHTML = `
-      <span>${contact.name} — ${contact.phone}</span>
-      <button onclick="removeSafeContact(${index})" style="background:#ef4444;color:white;padding:4px 8px;font-size:0.9rem;">Remove</button>
-    `;
-    safeList.appendChild(div);
-  });
+let currentUser = null;
 
-  // Emergency Contacts
-  const emergencyList = document.getElementById("emergency-contacts-list");
-  emergencyList.innerHTML = '';
-  emergencyContacts.forEach((contact, index) => {
-    const div = document.createElement("div");
-    div.className = "contact-item";
-    div.innerHTML = `
-      <span>${contact.name} — ${contact.phone}</span>
-      <button onclick="removeEmergencyContact(${index})" style="background:#ef4444;color:white;padding:4px 8px;font-size:0.9rem;">Remove</button>
-    `;
-    emergencyList.appendChild(div);
-  });
-}
+async function signUp() {
+  const firstName = document.getElementById('first-name').value.trim();
+  const lastName = document.getElementById('last-name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const phone = document.getElementById('phone').value.trim();
 
-function saveUsername() {
-  username = document.getElementById("username-input").value.trim() || "You";
-  localStorage.setItem("ozintelUsername", username);
-}
-
-function addSafeContact() {
-  const phone = document.getElementById("new-safe-phone").value.trim();
-  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
-  if (!phone) return alert("Please enter a phone number");
-  
-  safeContacts.push({ name, phone });
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-  document.getElementById("new-safe-phone").value = "";
-  document.getElementById("new-safe-name").value = "";
-}
-
-function addEmergencyContact() {
-  const phone = document.getElementById("new-emergency-phone").value.trim();
-  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
-  if (!phone) return alert("Please enter a phone number");
-  
-  emergencyContacts.push({ name, phone });
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
-  document.getElementById("new-emergency-phone").value = "";
-  document.getElementById("new-emergency-name").value = "";
-}
-
-function removeSafeContact(index) {
-  safeContacts.splice(index, 1);
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-}
-
-function removeEmergencyContact(index) {
-  emergencyContacts.splice(index, 1);
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
-}
-
-async function sendAlert(type) {
-  const contacts = type === 'safe' ? safeContacts : emergencyContacts;
-  const btns = document.querySelectorAll('button');
-  const status = document.getElementById("status");
-  
-  if (contacts.length === 0) {
-    alert(`Please add at least one ${type === 'safe' ? 'Safe' : 'Emergency'} Contact`);
+  if (!firstName || !lastName || !email) {
+    alert("First name, last name and email are required");
     return;
   }
 
-  btns.forEach(b => b.disabled = true);
-  status.textContent = "Getting location...";
-  status.style.color = "#eab308";
+  const status = document.getElementById('status');
+  status.textContent = "Sending magic link...";
 
   try {
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: email,
+      options: {
+        emailRedirectTo: window.location.origin + '/'
+      }
     });
 
-    const lat = position.coords.latitude.toFixed(6);
-    const lon = position.coords.longitude.toFixed(6);
-    const mapsLink = `https://www.google.com/maps?q=${lat},${lon}`;
+    if (error) throw error;
 
-    let message = '';
-    if (type === 'safe') {
-      message = `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}`;
-    } else {
-      message = `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
-    }
-
-    status.textContent = "Sending SMS alerts...";
-
-    const response = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts, message })
+    // Create profile
+    await supabase.from('profiles').upsert({
+      id: (await supabase.auth.getUser()).data.user?.id,
+      first_name: firstName,
+      last_name: lastName,
+      phone: phone
     });
 
-    const result = await response.json();
-    
-    if (result.success) {
-      status.textContent = `✅ ${type === 'safe' ? 'Safe Arrival' : 'Emergency'} alert sent to ${result.sent} contacts!`;
-      status.style.color = "#22c55e";
-    } else {
-      throw new Error(result.error);
-    }
+    status.textContent = "✅ Magic link sent! Check your email.";
+    status.style.color = "#22c55e";
   } catch (err) {
-    status.textContent = "❌ Error: " + err.message;
+    status.textContent = "Error: " + err.message;
     status.style.color = "#ef4444";
-    console.error(err);
-  } finally {
-    btns.forEach(b => b.disabled = false);
   }
 }
 
-function sendSafeAlert() {
-  sendAlert('safe');
+// Check if user is already logged in
+async function checkAuth() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    loadMainApp();
+  }
 }
 
-function sendEmergencyAlert() {
-  sendAlert('emergency');
+function loadMainApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  // For now we'll show a placeholder - we'll expand this in next step
+  document.getElementById('main-app').innerHTML = `
+    <h2>Welcome, ${currentUser.email}</h2>
+    <p>Logged in successfully. Building main alert screen...</p>
+  `;
+  document.getElementById('main-app').style.display = 'block';
 }
 
 // Init
-document.getElementById("username-input").value = username;
-renderContacts();
+checkAuth();
