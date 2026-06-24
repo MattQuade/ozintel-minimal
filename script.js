@@ -1,14 +1,10 @@
 const supabaseUrl = 'https://qxisbataovfkkiavci.supabase.co';
 const supabaseKey = 'sb_publishable_3WxLu8ayfbS99TgA7Nt-HA_x5ruYGgZ';
+const supabase = Supabase.createClient(supabaseUrl, supabaseKey);
 
-let supabase;
 let currentUser = null;
 let safeContacts = [];
 let emergencyContacts = [];
-
-function initSupabase() {
-  supabase = Supabase.createClient(supabaseUrl, supabaseKey);
-}
 
 async function signUp() {
   const firstName = document.getElementById('first-name').value.trim();
@@ -28,14 +24,12 @@ async function signUp() {
   try {
     const { error } = await supabase.auth.signInWithOtp({
       email: email,
-      options: { 
-        emailRedirectTo: window.location.origin 
-      }
+      options: { emailRedirectTo: window.location.origin }
     });
 
     if (error) throw error;
 
-    status.textContent = "✅ Magic link sent! Check your email (including spam folder).";
+    status.textContent = "✅ Magic link sent! Check your email (and spam folder).";
     status.style.color = "#22c55e";
   } catch (err) {
     console.error(err);
@@ -44,7 +38,6 @@ async function signUp() {
   }
 }
 
-// Rest of the functions remain the same...
 async function checkAuth() {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
@@ -63,7 +56,68 @@ async function loadMainApp() {
   await loadContacts();
 }
 
-// ... (keep all the other functions: loadContacts, renderContacts, addSafeContact, etc. the same as last version)
+async function loadContacts() {
+  const { data: safe } = await supabase.from('safe_contacts').select('*').eq('user_id', currentUser.id);
+  const { data: emergency } = await supabase.from('emergency_contacts').select('*').eq('user_id', currentUser.id);
+
+  safeContacts = safe || [];
+  emergencyContacts = emergency || [];
+  renderContacts();
+}
+
+function renderContacts() {
+  const safeList = document.getElementById("safe-contacts-list");
+  safeList.innerHTML = '';
+  safeContacts.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "contact-item";
+    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeSafeContact(${i})">Remove</button>`;
+    safeList.appendChild(div);
+  });
+
+  const emList = document.getElementById("emergency-contacts-list");
+  emList.innerHTML = '';
+  emergencyContacts.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "contact-item";
+    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeEmergencyContact(${i})">Remove</button>`;
+    emList.appendChild(div);
+  });
+}
+
+async function addSafeContact() {
+  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
+  const phone = document.getElementById("new-safe-phone").value.trim();
+  if (!phone) return alert("Phone required");
+
+  await supabase.from('safe_contacts').insert({ user_id: currentUser.id, name, phone });
+  loadContacts();
+  document.getElementById("new-safe-name").value = "";
+  document.getElementById("new-safe-phone").value = "";
+}
+
+async function addEmergencyContact() {
+  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
+  const phone = document.getElementById("new-emergency-phone").value.trim();
+  if (!phone) return alert("Phone required");
+
+  await supabase.from('emergency_contacts').insert({ user_id: currentUser.id, name, phone });
+  loadContacts();
+  document.getElementById("new-emergency-name").value = "";
+  document.getElementById("new-emergency-phone").value = "";
+}
+
+async function removeSafeContact(index) {
+  const contact = safeContacts[index];
+  await supabase.from('safe_contacts').delete().eq('id', contact.id);
+  loadContacts();
+}
+
+async function removeEmergencyContact(index) {
+  const contact = emergencyContacts[index];
+  await supabase.from('emergency_contacts').delete().eq('id', contact.id);
+  loadContacts();
+}
 
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
@@ -110,7 +164,6 @@ async function sendAlert(type) {
   } catch (err) {
     status.textContent = "❌ Error: " + err.message;
     status.style.color = "#ef4444";
-    console.error(err);
   } finally {
     btns.forEach(b => b.disabled = false);
   }
@@ -125,5 +178,4 @@ function logout() {
 }
 
 // Initialize
-initSupabase();
 checkAuth();
