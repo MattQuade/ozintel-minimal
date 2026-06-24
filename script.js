@@ -74,7 +74,7 @@ async function sendAlert(type) {
 
     status.textContent = "Sending SMS alerts...";
 
-    const response = await fetch("http://localhost:3000/send-safe-alert", {
+    const response = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts, message })
