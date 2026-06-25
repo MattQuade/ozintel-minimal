@@ -3,12 +3,15 @@ const express = require("express");
 const cors = require("cors");
 const twilio = require("twilio");
 
+// DEBUG: Check if variables are detected by the Node process
+console.log("--- DEBUG: CHECKING ENVIRONMENT VARIABLES ---");
+console.log("SID exists:", !!process.env.TWILIO_ACCOUNT_SID);
+console.log("TOKEN exists:", !!process.env.TWILIO_AUTH_TOKEN);
+console.log("---------------------------------------------");
+
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-console.log("TWILIO_ACCOUNT_SID loaded:", !!process.env.TWILIO_ACCOUNT_SID);
-console.log("TWILIO_AUTH_TOKEN loaded:", !!process.env.TWILIO_AUTH_TOKEN);
 
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -18,9 +21,10 @@ const client = twilio(
 const TWILIO_NUMBER = "+16062380495";
 
 app.post("/send-safe-alert", async (req, res) => {
-  console.log("🚨 Alert request received");
-
+  console.log("🚨 Alert request received:", new Date().toISOString());
+  
   const { contacts, message } = req.body;
+  
   if (!contacts || contacts.length === 0) {
     return res.status(400).json({ success: false, error: "No contacts" });
   }
@@ -33,17 +37,17 @@ app.post("/send-safe-alert", async (req, res) => {
         from: TWILIO_NUMBER,
         to: contact.phone
       });
-      console.log(`✅ Sent to ${contact.phone}`);
+      console.log(`✅ Sent to ${contact.phone} | SID: ${response.sid}`);
       sentCount++;
     }
     res.json({ success: true, sent: sentCount });
   } catch (error) {
-    console.error("Twilio Error:", error.message);
+    console.error("Twilio Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-app.post("/request-access", (req, res) => res.json({ success: true }));
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ OzIntel backend running on port ${PORT}`);
+});
