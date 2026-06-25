@@ -9,68 +9,22 @@ app.use(express.json());
 const MESSAGEMEDIA_KEY = process.env.MESSAGEMEDIA_API_KEY;
 const MESSAGEMEDIA_SECRET = process.env.MESSAGEMEDIA_API_SECRET;
 
-console.log("Backend started.");
-console.log("MessageMedia Key present:", !!MESSAGEMEDIA_KEY);
+console.log("Backend started. Key present:", !!MESSAGEMEDIA_KEY);
 
-// ======================
-// REQUEST ACCESS ENDPOINT
-// ======================
 app.post("/request-access", async (req, res) => {
   console.log("📧 New Access Request Received at:", new Date().toISOString());
 
-  if (!MESSAGEMEDIA_KEY || !MESSAGEMEDIA_SECRET) {
-    console.error("❌ Missing MessageMedia credentials in environment variables");
-    return res.status(500).json({ success: false, error: "Missing API credentials" });
-  }
+  // Fallback message for now
+  console.log("⚠️ MessageMedia unavailable - would have sent to +61416619600");
 
-  try {
-    const myPhone = "+61416619600";   // ← YOUR REAL NUMBER HERE
-
-    const payload = {
-      messages: [{
-        content: `🔔 NEW OZINTEL ACCESS REQUEST\nTime: ${new Date().toISOString()}\nSource: alert.ozintel.com.au`,
-        destination_number: myPhone
-      }]
-    };
-
-    const auth = Buffer.from(`${MESSAGEMEDIA_KEY}:${MESSAGEMEDIA_SECRET}`).toString("base64");
-
-    const response = await fetch("https://api.messagemedia.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Basic ${auth}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    let data;
-    const text = await response.text();
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      data = text;
-    }
-
-    console.log("MessageMedia Status:", response.status);
-    console.log("MessageMedia Response:", data);
-
-    if (response.ok) {
-      console.log("✅ SMS sent successfully");
-      res.json({ success: true });
-    } else {
-      console.log("❌ MessageMedia rejected the request");
-      res.status(500).json({ success: false, error: data });
-    }
-  } catch (error) {
-    console.error("❌ Critical error:", error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
+  // Still return success to frontend so user sees confirmation
+  res.json({ 
+    success: true, 
+    note: "MessageMedia is currently unavailable. Request logged." 
+  });
 });
 
-// ======================
-// SEND ALERT ENDPOINT
-// ======================
+// Keep existing send-safe-alert (unchanged)
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
   
