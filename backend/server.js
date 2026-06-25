@@ -8,21 +8,19 @@ app.use(cors());
 app.use(express.json());
 
 const client = twilio(
-  "AC9ceaa4251e9c7c47e788e0989eca9f66",     // Your full Account SID
+  process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
 
 const TWILIO_NUMBER = "+16062380495";
 
-console.log("✅ Backend running with Twilio");
+console.log("✅ Backend running with Twilio (env vars)");
 
-// Request Access (simple confirmation)
 app.post("/request-access", async (req, res) => {
-  console.log("📧 Access request received at:", new Date().toISOString());
+  console.log("📧 Access request received");
   res.json({ success: true });
 });
 
-// Main Alert Endpoint
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
   
@@ -41,7 +39,7 @@ app.post("/send-safe-alert", async (req, res) => {
         from: TWILIO_NUMBER,
         to: contact.phone
       });
-      console.log(`✅ Sent to ${contact.phone} | SID: ${response.sid}`);
+      console.log(`✅ Sent to ${contact.phone}`);
       sentCount++;
     }
 
@@ -54,5 +52,5 @@ app.post("/send-safe-alert", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ OzIntel backend running on port ${PORT} with Twilio`);
+  console.log(`✅ OzIntel backend running on port ${PORT}`);
 });
