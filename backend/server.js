@@ -9,17 +9,21 @@ app.use(express.json());
 const MESSAGEMEDIA_KEY = process.env.MESSAGEMEDIA_API_KEY;
 const MESSAGEMEDIA_SECRET = process.env.MESSAGEMEDIA_API_SECRET;
 
+console.log("Backend started. MessageMedia Key present:", !!MESSAGEMEDIA_KEY);
+
 // ======================
 // REQUEST ACCESS ENDPOINT
 // ======================
 app.post("/request-access", async (req, res) => {
-  console.log("📧 New Access Request Received:", new Date().toISOString());
+  console.log("📧 New Access Request Received at:", new Date().toISOString());
 
   try {
+    const myPhone = "+61416619600";   // ← CHANGE THIS TO YOUR REAL NUMBER
+
     const payload = {
       messages: [{
-        content: `🔔 NEW OZINTEL ACCESS REQUEST\n\nTime: ${new Date().toISOString()}\nSource: alert.ozintel.com.au\n\nPlease approve this user in Supabase (profiles table).\n\nReply to this number if you need more info.`,
-        destination_number: "+61416619600"   // ← CHANGE THIS TO YOUR PHONE NUMBER
+        content: `🔔 NEW OZINTEL ACCESS REQUEST\n\nTime: ${new Date().toISOString()}\nSource: alert.ozintel.com.au\n\nPlease check Supabase → profiles table to approve the user.`,
+        destination_number: myPhone
       }]
     };
 
@@ -34,17 +38,23 @@ app.post("/request-access", async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    console.log("Request notification sent:", response.ok);
-    res.json({ success: true });
+    const data = await response.json();
+    console.log("MessageMedia Response:", response.status, data);
+
+    if (response.ok) {
+      console.log("✅ Request notification sent successfully");
+      res.json({ success: true });
+    } else {
+      console.log("❌ MessageMedia failed:", data);
+      res.status(500).json({ success: false, error: data });
+    }
   } catch (error) {
-    console.error("Request error:", error);
+    console.error("❌ Critical error in request-access:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ======================
-// EXISTING ALERT ENDPOINT
-// ======================
+// Existing send-safe-alert endpoint (unchanged)
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
   
