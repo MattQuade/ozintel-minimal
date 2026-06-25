@@ -65,12 +65,11 @@ function showPricingPage() {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>OzIntel Access</title>
       <style>
-        body { font-family: system-ui, sans-serif; background: #0f172a; color: white; text-align: center; padding: 50px 20px; }
-        h1 { color: #22d3ee; margin-bottom: 10px; }
-        .price { font-size: 2.8rem; font-weight: bold; margin: 20px 0; color: #22c55e; }
-        .send-btn { background: #22c55e; color: white; font-size: 1.6rem; padding: 20px 80px; border: none; border-radius: 12px; cursor: pointer; margin-top: 40px; }
-        .send-btn:active { transform: scale(0.95); }
-        #result { margin-top: 30px; font-size: 1.1rem; }
+        body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:50px 20px; }
+        h1 { color:#22d3ee; }
+        .price { font-size:2.8rem; font-weight:bold; margin:20px 0; color:#22c55e; }
+        .send-btn { background:#22c55e; color:white; font-size:1.6rem; padding:20px 80px; border:none; border-radius:12px; cursor:pointer; margin-top:40px; }
+        .send-btn:active { transform:scale(0.95); }
       </style>
     </head>
     <body>
@@ -78,22 +77,20 @@ function showPricingPage() {
       <p class="price">$AUD11 / month</p>
       <button class="send-btn" onclick="sendRequest()">Send</button>
       <p id="result"></p>
-
       <script>
         async function sendRequest() {
           const result = document.getElementById('result');
-          result.textContent = "Sending request to admin@ozintel...";
-          
+          result.textContent = "Sending request...";
           try {
             await fetch("https://ozintel-backend.onrender.com/request-access", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {"Content-Type": "application/json"},
               body: JSON.stringify({ timestamp: new Date().toISOString() })
             });
-            result.innerHTML = "✅ Request sent successfully.<br>admin@ozintel will contact you soon.";
+            result.innerHTML = "✅ Request sent.<br>admin@ozintel will contact you soon.";
             result.style.color = "#22c55e";
           } catch(e) {
-            result.textContent = "❌ Failed to send request. Please try again.";
+            result.textContent = "Failed. Try again.";
             result.style.color = "red";
           }
         }
@@ -136,13 +133,10 @@ async function sendAlert(type) {
     });
 
     const result = await response.json();
-    
     if (result.success) {
-      status.textContent = `✅ ${type === 'safe' ? 'Safe Arrival' : 'Emergency'} alert sent to ${result.sent} contacts!`;
+      status.textContent = `✅ ${type === 'safe' ? 'Safe Arrival' : 'Emergency'} alert sent!`;
       status.style.color = "#22c55e";
-    } else {
-      throw new Error(result.error || "Unknown error");
-    }
+    } else throw new Error(result.error);
   } catch (err) {
     status.textContent = "❌ Error: " + err.message;
     status.style.color = "#ef4444";
