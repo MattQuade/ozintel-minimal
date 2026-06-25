@@ -11,25 +11,41 @@
     <h1>🛡️ OzIntel</h1>
     <p class="subtitle">Personal Safety Alert System</p>
 
-    <div id="auth-screen">
-      <h2>Sign Up</h2>
-      <input type="text" id="first-name" placeholder="First Name" style="width:100%;padding:10px;margin:5px 0;">
-      <input type="text" id="last-name" placeholder="Last Name" style="width:100%;padding:10px;margin:5px 0;">
-      <input type="email" id="email" placeholder="Email Address" style="width:100%;padding:10px;margin:5px 0;">
-      <input type="tel" id="phone" placeholder="Phone Number" style="width:100%;padding:10px;margin:5px 0;">
-
-      <button onclick="signUp()" style="width:100%;padding:15px;margin-top:10px;font-size:1.1rem;">Send Magic Link</button>
-      <p id="status" class="status"></p>
+    <div class="access-section">
+      <button class="admin-btn" onclick="showPricingPage()">
+        👤 admin@ozintel
+      </button>
+      <p id="access-status" class="status"></p>
     </div>
 
-    <div id="main-app" style="display:none;">
-      <h2>Welcome</h2>
-      <p id="user-name"></p>
-      <!-- We'll expand this later -->
+    <div class="section">
+      <h2>Safe Contacts (Green Button)</h2>
+      <div id="safe-contacts-list"></div>
+      <div class="add-contact">
+        <input type="tel" id="new-safe-phone" placeholder="+61412345678" />
+        <input type="text" id="new-safe-name" placeholder="Contact Name" />
+        <button onclick="addSafeContact()">Add</button>
+      </div>
     </div>
+
+    <div class="section">
+      <h2>Emergency Contacts (Red Button)</h2>
+      <div id="emergency-contacts-list"></div>
+      <div class="add-contact">
+        <input type="tel" id="new-emergency-phone" placeholder="+61412345678" />
+        <input type="text" id="new-emergency-name" placeholder="Contact Name" />
+        <button onclick="addEmergencyContact()">Add</button>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="safe-btn" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
+      <button class="emergency-btn" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
+    </div>
+
+    <p id="alert-status" class="status"></p>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="script.js"></script>
 </body>
 </html>
