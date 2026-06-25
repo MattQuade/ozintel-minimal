@@ -1,30 +1,28 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const twilio = require("twilio");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const MESSAGEMEDIA_KEY = process.env.MESSAGEMEDIA_API_KEY;
-const MESSAGEMEDIA_SECRET = process.env.MESSAGEMEDIA_API_SECRET;
+const client = twilio(
+  "AC9ceaa4251e9c7c47",                    // Your Account SID
+  process.env.TWILIO_AUTH_TOKEN             // We'll put this in Render
+);
 
-console.log("Backend started. Key present:", !!MESSAGEMEDIA_KEY);
+const TWILIO_NUMBER = "+16062380495";       // Your Twilio number
 
+console.log("✅ Backend running with Twilio");
+
+// Request Access (simple logging for now)
 app.post("/request-access", async (req, res) => {
-  console.log("📧 New Access Request Received at:", new Date().toISOString());
-
-  // Fallback message for now
-  console.log("⚠️ MessageMedia unavailable - would have sent to +61416619600");
-
-  // Still return success to frontend so user sees confirmation
-  res.json({ 
-    success: true, 
-    note: "MessageMedia is currently unavailable. Request logged." 
-  });
+  console.log("📧 Access request received at:", new Date().toISOString());
+  res.json({ success: true });
 });
 
-// Keep existing send-safe-alert (unchanged)
+// Main Alert Endpoint - Twilio
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
   
@@ -35,38 +33,26 @@ app.post("/send-safe-alert", async (req, res) => {
   }
 
   try {
-    const auth = Buffer.from(`${MESSAGEMEDIA_KEY}:${MESSAGEMEDIA_SECRET}`).toString("base64");
     let sentCount = 0;
 
     for (const contact of contacts) {
-      const payload = {
-        messages: [{
-          content: message,
-          destination_number: contact.phone,
-          delivery_report: true
-        }]
-      };
-
-      const response = await fetch("https://api.messagemedia.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Basic ${auth}`
-        },
-        body: JSON.stringify(payload)
+      const response = await client.messages.create({
+        body: message,
+        from: TWILIO_NUMBER,
+        to: contact.phone
       });
-
-      if (response.ok) sentCount++;
+      console.log(`✅ Sent to ${contact.phone} | SID: ${response.sid}`);
+      sentCount++;
     }
 
     res.json({ success: true, sent: sentCount });
   } catch (error) {
-    console.error("SMS Error:", error);
+    console.error("Twilio Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ OzIntel backend running on port ${PORT}`);
+  console.log(`✅ OzIntel backend running on port ${PORT} with Twilio`);
 });
