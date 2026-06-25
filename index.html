@@ -11,21 +11,25 @@
     <h1>🛡️ OzIntel</h1>
     <p class="subtitle">Personal Safety Alert System</p>
 
-    <div id="access-screen">
+    <div class="access-section">
       <button class="admin-btn" onclick="showPricingPage()">
         👤 admin@ozintel
       </button>
       <p id="access-status" class="status"></p>
     </div>
 
-    <div id="main-content" style="display: none;">
+    <div id="main-content">
+      <div class="overlay">
+        <p class="pending-message">Access pending approval by admin@ozintel</p>
+      </div>
+
       <div class="section">
         <h2>Safe Contacts (Green Button)</h2>
         <div id="safe-contacts-list"></div>
         <div class="add-contact">
-          <input type="tel" id="new-safe-phone" placeholder="+61412345678" />
-          <input type="text" id="new-safe-name" placeholder="Contact Name" />
-          <button onclick="addSafeContact()">Add</button>
+          <input type="tel" id="new-safe-phone" placeholder="+61412345678" disabled />
+          <input type="text" id="new-safe-name" placeholder="Contact Name" disabled />
+          <button onclick="addSafeContact()" disabled>Add</button>
         </div>
       </div>
 
@@ -33,15 +37,15 @@
         <h2>Emergency Contacts (Red Button)</h2>
         <div id="emergency-contacts-list"></div>
         <div class="add-contact">
-          <input type="tel" id="new-emergency-phone" placeholder="+61412345678" />
-          <input type="text" id="new-emergency-name" placeholder="Contact Name" />
-          <button onclick="addEmergencyContact()">Add</button>
+          <input type="tel" id="new-emergency-phone" placeholder="+61412345678" disabled />
+          <input type="text" id="new-emergency-name" placeholder="Contact Name" disabled />
+          <button onclick="addEmergencyContact()" disabled>Add</button>
         </div>
       </div>
 
       <div class="buttons">
-        <button class="safe-btn" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
-        <button class="emergency-btn" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
+        <button class="safe-btn" onclick="sendSafeAlert()" disabled>✅ SAFE ARRIVAL</button>
+        <button class="emergency-btn" onclick="sendEmergencyAlert()" disabled>🚨 SEND HELP</button>
       </div>
 
       <p id="alert-status" class="status"></p>

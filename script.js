@@ -7,7 +7,7 @@ function renderContacts() {
   safeContacts.forEach((c, i) => {
     const div = document.createElement("div");
     div.className = "contact-item";
-    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeSafeContact(${i})">Remove</button>`;
+    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeSafeContact(${i})" disabled>Remove</button>`;
     safeList.appendChild(div);
   });
 
@@ -16,43 +16,9 @@ function renderContacts() {
   emergencyContacts.forEach((c, i) => {
     const div = document.createElement("div");
     div.className = "contact-item";
-    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeEmergencyContact(${i})">Remove</button>`;
+    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeEmergencyContact(${i})" disabled>Remove</button>`;
     emList.appendChild(div);
   });
-}
-
-function addSafeContact() {
-  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
-  const phone = document.getElementById("new-safe-phone").value.trim();
-  if (!phone) return alert("Phone required");
-  safeContacts.push({name, phone});
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-  document.getElementById("new-safe-name").value = "";
-  document.getElementById("new-safe-phone").value = "";
-}
-
-function addEmergencyContact() {
-  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
-  const phone = document.getElementById("new-emergency-phone").value.trim();
-  if (!phone) return alert("Phone required");
-  emergencyContacts.push({name, phone});
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
-  document.getElementById("new-emergency-name").value = "";
-  document.getElementById("new-emergency-phone").value = "";
-}
-
-function removeSafeContact(i) {
-  safeContacts.splice(i, 1);
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-}
-
-function removeEmergencyContact(i) {
-  emergencyContacts.splice(i, 1);
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
 }
 
 function showPricingPage() {
@@ -100,53 +66,12 @@ function showPricingPage() {
   `);
 }
 
-async function sendAlert(type) {
-  const contacts = type === 'safe' ? safeContacts : emergencyContacts;
-  const status = document.getElementById("alert-status");
-  
-  if (contacts.length === 0) {
-    return alert(`Please add at least one ${type === 'safe' ? 'Safe' : 'Emergency'} contact`);
-  }
+// Disabled alert functions (for visual only)
+function sendSafeAlert() { alert("Access pending approval by admin@ozintel"); }
+function sendEmergencyAlert() { alert("Access pending approval by admin@ozintel"); }
 
-  const btns = document.querySelectorAll('.safe-btn, .emergency-btn');
-  btns.forEach(b => b.disabled = true);
-  status.textContent = "Getting location...";
-  status.style.color = "#eab308";
-
-  try {
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
-    });
-
-    const lat = position.coords.latitude.toFixed(6);
-    const lon = position.coords.longitude.toFixed(6);
-    const mapsLink = `https://www.google.com/maps?q=${lat},${lon}`;
-
-    let message = type === 'safe' 
-      ? `✅ OzIntel - Guest User - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}`
-      : `🚨 OzIntel - Guest User - EMERGENCY\nI need help! Current location: ${mapsLink}`;
-
-    const response = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts, message })
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      status.textContent = `✅ ${type === 'safe' ? 'Safe Arrival' : 'Emergency'} alert sent!`;
-      status.style.color = "#22c55e";
-    } else throw new Error(result.error);
-  } catch (err) {
-    status.textContent = "❌ Error: " + err.message;
-    status.style.color = "#ef4444";
-  } finally {
-    btns.forEach(b => b.disabled = false);
-  }
-}
-
-function sendSafeAlert() { sendAlert('safe'); }
-function sendEmergencyAlert() { sendAlert('emergency'); }
+function addSafeContact() { alert("Access pending approval by admin@ozintel"); }
+function addEmergencyContact() { alert("Access pending approval by admin@ozintel"); }
 
 // Init
 renderContacts();
