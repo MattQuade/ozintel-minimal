@@ -11,23 +11,15 @@ const MESSAGEMEDIA_SECRET = process.env.MESSAGEMEDIA_API_SECRET;
 
 console.log("Backend started. Key present:", !!MESSAGEMEDIA_KEY);
 
-// ======================
-// REQUEST ACCESS ENDPOINT
-// ======================
 app.post("/request-access", async (req, res) => {
   console.log("📧 New Access Request Received at:", new Date().toISOString());
 
-  if (!MESSAGEMEDIA_KEY || !MESSAGEMEDIA_SECRET) {
-    console.error("❌ Missing MessageMedia credentials");
-    return res.status(500).json({ success: false, error: "Missing API credentials" });
-  }
+  const myPhone = "+61436968006";   // ← Your number is already here
 
   try {
-    const myPhone = "+61416619600";   // ← MAKE SURE THIS IS YOUR REAL NUMBER
-
     const payload = {
       messages: [{
-        content: `🔔 NEW OZINTEL ACCESS REQUEST\n\nTime: ${new Date().toISOString()}\nSource: alert.ozintel.com.au`,
+        content: `🔔 NEW OZINTEL ACCESS REQUEST\nTime: ${new Date().toISOString()}\nSource: alert.ozintel.com.au`,
         destination_number: myPhone
       }]
     };
@@ -43,31 +35,32 @@ app.post("/request-access", async (req, res) => {
       body: JSON.stringify(payload)
     });
 
+    const text = await response.text();
     let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      data = await response.text();
-    }
+    try { data = JSON.parse(text); } catch(e) { data = text; }
 
     console.log("MessageMedia Status:", response.status);
-    console.log("MessageMedia Response:", data);
+    console.log("Response:", data);
 
     if (response.ok) {
-      console.log("✅ SMS sent successfully");
+      console.log("✅ Access request SMS sent successfully");
       res.json({ success: true });
     } else {
-      console.log("❌ MessageMedia API Error");
+      console.log("❌ MessageMedia Error");
       res.status(500).json({ success: false, error: data });
     }
   } catch (error) {
-    console.error("❌ Critical error:", error.message);
+    console.error("Critical error:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Keep the existing send-safe-alert endpoint unchanged
-app.post("/send-safe-alert", async (req, res) => { ... });   // (same as before)
+// Keep your existing /send-safe-alert endpoint (unchanged)
+app.post("/send-safe-alert", async (req, res) => {
+  // ... your existing code ...
+  console.log("🚨 Alert request received");
+  // (paste your full send-safe-alert code here if it's different)
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
