@@ -14,8 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
+  "AC9ceaa4251e9c7c47e788e0989eca9f66",
+  "99d6f4346a8bba4f0d791f12009e5efc"
 );
 
 const TWILIO_NUMBER = "+16062380495";
