@@ -8,21 +8,21 @@ app.use(cors());
 app.use(express.json());
 
 const client = twilio(
-  "AC9ceaa4251e9c7c47",                    // Your Account SID
-  process.env.TWILIO_AUTH_TOKEN             // We'll put this in Render
+  "AC9ceaa4251e9c7c47e788e0989eca9f66",     // Your full Account SID
+  process.env.TWILIO_AUTH_TOKEN
 );
 
-const TWILIO_NUMBER = "+16062380495";       // Your Twilio number
+const TWILIO_NUMBER = "+16062380495";
 
 console.log("✅ Backend running with Twilio");
 
-// Request Access (simple logging for now)
+// Request Access (simple confirmation)
 app.post("/request-access", async (req, res) => {
   console.log("📧 Access request received at:", new Date().toISOString());
   res.json({ success: true });
 });
 
-// Main Alert Endpoint - Twilio
+// Main Alert Endpoint
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
   
