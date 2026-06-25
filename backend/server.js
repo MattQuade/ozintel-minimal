@@ -7,14 +7,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+console.log("TWILIO_ACCOUNT_SID loaded:", !!process.env.TWILIO_ACCOUNT_SID);
+console.log("TWILIO_AUTH_TOKEN loaded:", !!process.env.TWILIO_AUTH_TOKEN);
+
+const client = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+
 const TWILIO_NUMBER = "+16062380495";
-
-console.log("TWILIO_SID present:", !!TWILIO_SID);
-console.log("TWILIO_TOKEN present:", !!TWILIO_TOKEN);
-
-const client = twilio(TWILIO_SID, TWILIO_TOKEN);
 
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received");
@@ -42,11 +43,7 @@ app.post("/send-safe-alert", async (req, res) => {
   }
 });
 
-app.post("/request-access", (req, res) => {
-  res.json({ success: true });
-});
+app.post("/request-access", (req, res) => res.json({ success: true }));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
