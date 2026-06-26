@@ -6,30 +6,28 @@
   <title>OzIntel</title>
   <style>
     body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
-    button { padding:25px; font-size:1.5rem; margin:15px; border:none; border-radius:12px; width:90%; max-width:400px; }
+    button { padding:20px; font-size:1.4rem; margin:10px; border:none; border-radius:12px; width:90%; max-width:400px; }
     .safe { background:#22c55e; }
     .emergency { background:#ef4444; }
     .status { margin:20px; font-size:1.2rem; min-height:40px; }
-    input { padding:10px; margin:5px; width:70%; }
-    .contact-item { background:#334155; padding:10px; margin:8px; border-radius:8px; }
+    input { padding:12px; margin:5px; width:65%; font-size:1rem; }
+    .contact-item { background:#334155; padding:12px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel</h1>
   <p>Personal Safety Alert System</p>
 
-  <button onclick="showPricingPage()" style="background:#64748b; padding:12px 30px; font-size:1rem;">👤 admin@ozintel</button>
-
-  <div style="margin:30px 0;">
-    <input type="tel" id="new-phone" placeholder="+61412345678" style="width:60%;">
-    <input type="text" id="new-name" placeholder="Name" style="width:30%;">
+  <div style="margin:20px 0;">
+    <input type="tel" id="new-phone" placeholder="+61412345678">
+    <input type="text" id="new-name" placeholder="Contact Name">
     <button onclick="addContact()">Add Contact</button>
   </div>
 
-  <div id="contacts-list" style="max-width:400px; margin:0 auto;"></div>
+  <div id="contacts-list"></div>
 
-  <button class="safe" onclick="sendAlert('safe')">✅ SAFE ARRIVAL</button>
-  <button class="emergency" onclick="sendAlert('emergency')">🚨 SEND HELP</button>
+  <button class="safe" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
+  <button class="emergency" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
 
   <p id="status" class="status"></p>
 
