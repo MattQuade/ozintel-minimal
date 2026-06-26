@@ -1,73 +1,60 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const fs = require("fs");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const USERS_FILE = './users.json';
+const KEY = process.env.MESSAGEMEDIA_API_KEY;
+const SECRET = process.env.MESSAGEMEDIA_API_SECRET;
 
-function loadUsers() {
-  try {
-    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-  } catch (e) {
-    return { pending: [], approved: [] };
-  }
-}
+console.log("MessageMedia Key loaded:", !!KEY);
 
-function saveUsers(data) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
-}
-
-// Submit Access Request
-app.post("/request-access", (req, res) => {
-  const { name, email, phone } = req.body;
-  const users = loadUsers();
-  
-  users.pending.push({
-    id: Date.now(),
-    name,
-    email,
-    phone,
-    requestedAt: new Date().toISOString()
-  });
-  
-  saveUsers(users);
-  console.log("New access request:", name, email);
-  res.json({ success: true });
-});
-
-// Get all users (for admin page)
-app.get("/admin/users", (req, res) => {
-  const users = loadUsers();
-  res.json(users);
-});
-
-// Approve user
-app.post("/admin/approve", (req, res) => {
-  const { id } = req.body;
-  const users = loadUsers();
-  
-  const userIndex = users.pending.findIndex(u => u.id === id);
-  if (userIndex !== -1) {
-    const user = users.pending.splice(userIndex, 1)[0];
-    user.approvedAt = new Date().toISOString();
-    users.approved.push(user);
-    saveUsers(users);
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ success: false });
-  }
-});
-
-// MessageMedia SMS endpoint
 app.post("/send-safe-alert", async (req, res) => {
-  // ... your existing MessageMedia code here (keep it as is)
-  console.log("Alert received");
-  res.json({ success: true, sent: 1 });
+  console.log("🚨 Alert received at", new Date().toISOString());
+
+  const { contacts, message } = req.body;
+
+  if (!contacts || contacts.length === 0) {
+    console.log("Error: No contacts provided");
+    return res.status(400).json({ success: false, error: "No contacts" });
+  }
+
+  try {
+    const auth = Buffer.from(`${KEY}:${SECRET}`).toString("base64");
+    let sentCount = 0;
+
+    for (const contact of contacts) {
+      const payload = {
+        messages: [{
+          content: message,
+          destination_number: contact.phone
+        }]
+      };
+
+      const response = await fetch("https://api.messagemedia.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${auth}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log(`To ${contact.phone}: ${response.status}`);
+      if (response.ok) sentCount++;
+    }
+
+    console.log(`✅ Alert processed - ${sentCount} SMS sent`);
+    res.json({ success: true, sent: sentCount });
+  } catch (error) {
+    console.error("MessageMedia Error:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Backend running on ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on port ${PORT}`);
+});
