@@ -33,8 +33,31 @@ function removeContact(i) {
   renderContacts();
 }
 
-function showPricingPage() {
-  alert("Access request feature coming soon.");
+// Updated: Real Access Request
+async function showPricingPage() {
+  const name = prompt("Your Full Name:");
+  if (!name) return;
+
+  const email = prompt("Your Email Address:");
+  if (!email) return;
+
+  const phone = prompt("Your Phone Number (optional):") || "";
+
+  try {
+    const res = await fetch("https://ozintel-backend.onrender.com/request-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, phone })
+    });
+
+    if (res.ok) {
+      alert("✅ Request sent to admin@ozintel.\nYou will be contacted soon.");
+    } else {
+      alert("Failed to send request.");
+    }
+  } catch (e) {
+    alert("Error sending request. Please try again.");
+  }
 }
 
 async function sendAlert(type) {
@@ -54,14 +77,15 @@ async function sendAlert(type) {
 
     let extraInfo = "";
 
+    if (type === 'safe' && lastSafeTime) {
+      const timeDiff = timeSince(new Date(lastSafeTime));
+      const distance = (lastSafeLat && lastSafeLon) 
+        ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
+        : "0";
+      extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
+    }
+
     if (type === 'safe') {
-      if (lastSafeTime) {
-        const timeDiff = timeSince(new Date(lastSafeTime));
-        const distance = (lastSafeLat && lastSafeLon) 
-          ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
-          : "0";
-        extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-      }
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
