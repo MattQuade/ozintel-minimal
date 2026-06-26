@@ -9,7 +9,7 @@
     table { width:100%; border-collapse:collapse; margin:20px 0; }
     th, td { padding:12px; border:1px solid #475569; text-align:left; }
     button { padding:8px 16px; background:#22c55e; color:white; border:none; border-radius:6px; cursor:pointer; }
-    .pending { background:#334155; }
+    .pending-row { background:#334155; }
   </style>
 </head>
 <body>
@@ -26,33 +26,41 @@
       const res = await fetch("https://ozintel-backend.onrender.com/admin/users");
       const data = await res.json();
 
-      // Pending
+      // Pending Requests
       let html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Requested</th><th>Action</th></tr>`;
-      data.pending.forEach(u => {
-        html += `<tr>
-          <td>${u.name}</td>
-          <td>${u.email}</td>
-          <td>${u.phone || '-'}</td>
-          <td>${new Date(u.requestedAt).toLocaleString()}</td>
-          <td><button onclick="approve(${u.id})">Approve</button></td>
-        </tr>`;
-      });
+      if (data.pending && data.pending.length > 0) {
+        data.pending.forEach(u => {
+          html += `<tr class="pending-row">
+            <td>${u.name}</td>
+            <td>${u.email}</td>
+            <td>${u.phone || '-'}</td>
+            <td>${new Date(u.requestedAt).toLocaleString()}</td>
+            <td><button onclick="approveUser(${u.id})">Approve</button></td>
+          </tr>`;
+        });
+      } else {
+        html += `<tr><td colspan="5" style="text-align:center; color:#94a3b8;">No pending requests</td></tr>`;
+      }
       document.getElementById("pending-table").innerHTML = html;
 
-      // Approved
+      // Approved Users
       html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Approved</th></tr>`;
-      data.approved.forEach(u => {
-        html += `<tr>
-          <td>${u.name}</td>
-          <td>${u.email}</td>
-          <td>${u.phone || '-'}</td>
-          <td>${new Date(u.approvedAt).toLocaleString()}</td>
-        </tr>`;
-      });
+      if (data.approved && data.approved.length > 0) {
+        data.approved.forEach(u => {
+          html += `<tr>
+            <td>${u.name}</td>
+            <td>${u.email}</td>
+            <td>${u.phone || '-'}</td>
+            <td>${new Date(u.approvedAt).toLocaleString()}</td>
+          </tr>`;
+        });
+      } else {
+        html += `<tr><td colspan="4" style="text-align:center; color:#94a3b8;">No approved users yet</td></tr>`;
+      }
       document.getElementById("approved-table").innerHTML = html;
     }
 
-    async function approve(id) {
+    async function approveUser(id) {
       if (confirm("Approve this user?")) {
         await fetch("https://ozintel-backend.onrender.com/admin/approve", {
           method: "POST",
@@ -63,7 +71,9 @@
       }
     }
 
+    // Auto refresh every 10 seconds
     loadData();
+    setInterval(loadData, 10000);
   </script>
 </body>
 </html>
