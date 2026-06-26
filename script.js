@@ -1,13 +1,9 @@
 let contacts = JSON.parse(localStorage.getItem("ozintelContacts")) || [];
 
-// Time + Distance tracking
+// Last Safe Arrival tracking
 let lastSafeTime = localStorage.getItem("lastSafeTime");
 let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
-
-console.log("=== INITIAL LOAD ===");
-console.log("Last Safe Time:", lastSafeTime);
-console.log("Last Lat/Lon:", lastSafeLat, lastSafeLon);
 
 function renderContacts() {
   const list = document.getElementById("contacts-list");
@@ -15,7 +11,7 @@ function renderContacts() {
   contacts.forEach((c, i) => {
     const div = document.createElement("div");
     div.className = "contact-item";
-    div.innerHTML = `${c.name} — ${c.phone} <button onclick="removeContact(${i})">Remove</button>`;
+    div.innerHTML = `${c.name} — ${c.phone} <button onclick="removeContact(${i})" class="small-btn">Remove</button>`;
     list.appendChild(div);
   });
 }
@@ -23,7 +19,7 @@ function renderContacts() {
 function addContact() {
   const phone = document.getElementById("new-phone").value.trim();
   const name = document.getElementById("new-name").value.trim() || "Contact";
-  if (!phone) return alert("Enter phone");
+  if (!phone) return alert("Enter phone number");
   contacts.push({name, phone});
   localStorage.setItem("ozintelContacts", JSON.stringify(contacts));
   renderContacts();
@@ -35,6 +31,10 @@ function removeContact(i) {
   contacts.splice(i, 1);
   localStorage.setItem("ozintelContacts", JSON.stringify(contacts));
   renderContacts();
+}
+
+function showPricingPage() {
+  alert("Access request feature coming soon.");
 }
 
 async function sendAlert(type) {
@@ -55,25 +55,16 @@ async function sendAlert(type) {
     let extraInfo = "";
 
     if (type === 'safe') {
-      console.log("Safe alert triggered. Previous data:", lastSafeTime, lastSafeLat, lastSafeLon);
-
       if (lastSafeTime) {
         const timeDiff = timeSince(new Date(lastSafeTime));
         const distance = (lastSafeLat && lastSafeLon) 
           ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
           : "0";
         extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-        console.log("Extra info added:", extraInfo);
       }
-
-      // Save current as last safe
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
-      lastSafeTime = new Date().toISOString();
-      lastSafeLat = lat;
-      lastSafeLon = lon;
-      console.log("Saved new lastSafe data");
     }
 
     const message = type === 'safe' 
@@ -92,7 +83,6 @@ async function sendAlert(type) {
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
     status.textContent = "❌ Error: " + e.message;
-    console.error(e);
   }
 }
 

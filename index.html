@@ -6,22 +6,26 @@
   <title>OzIntel</title>
   <style>
     body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
-    button { padding:20px; font-size:1.4rem; margin:10px; border:none; border-radius:12px; width:90%; max-width:400px; }
+    h1 { color:#22d3ee; }
+    button { padding:15px; font-size:1.1rem; margin:10px; border:none; border-radius:10px; width:85%; max-width:380px; }
     .safe { background:#22c55e; }
     .emergency { background:#ef4444; }
-    .status { margin:20px; font-size:1.2rem; min-height:40px; }
-    input { padding:12px; margin:5px; width:65%; font-size:1rem; }
-    .contact-item { background:#334155; padding:12px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
+    .status { margin:20px; font-size:1.1rem; min-height:40px; }
+    input { padding:10px; margin:6px; font-size:1rem; }
+    .contact-item { background:#334155; padding:10px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
+    .small-btn { padding:6px 12px; font-size:0.9rem; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel</h1>
   <p>Personal Safety Alert System</p>
 
-  <div style="margin:20px 0;">
-    <input type="tel" id="new-phone" placeholder="+61412345678">
-    <input type="text" id="new-name" placeholder="Contact Name">
-    <button onclick="addContact()">Add Contact</button>
+  <button onclick="showPricingPage()" style="background:#64748b; padding:10px 25px; font-size:1rem;">👤 admin@ozintel</button>
+
+  <div style="margin:25px 0;">
+    <input type="tel" id="new-phone" placeholder="+61412345678" style="width:45%;">
+    <input type="text" id="new-name" placeholder="Contact Name" style="width:35%;">
+    <button onclick="addContact()" class="small-btn">Add</button>
   </div>
 
   <div id="contacts-list"></div>
