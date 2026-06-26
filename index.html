@@ -11,7 +11,12 @@
     .safe { background:#22c55e; }
     .emergency { background:#ef4444; }
     .status { margin:20px; font-size:1.1rem; min-height:40px; }
-    input { padding:10px; margin:6px; font-size:1rem; }
+    input { padding:10px; margin:6px 4px; font-size:1rem; border-radius:6px; }
+    
+    /* Width reductions + alignment */
+    #new-phone { width: 42%; }     /* ~40% reduction */
+    #new-name  { width: 38%; }     /* ~30% reduction, aligned with phone */
+    
     .contact-item { background:#334155; padding:10px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
     .small-btn { padding:6px 12px; font-size:0.9rem; }
   </style>
@@ -23,8 +28,8 @@
   <button onclick="showPricingPage()" style="background:#64748b; padding:10px 25px; font-size:1rem;">👤 admin@ozintel</button>
 
   <div style="margin:25px 0;">
-    <input type="tel" id="new-phone" placeholder="+61412345678" style="width:45%;">
-    <input type="text" id="new-name" placeholder="Contact Name" style="width:35%;">
+    <input type="tel" id="new-phone" placeholder="+61412345678">
+    <input type="text" id="new-name" placeholder="Contact Name">
     <button onclick="addContact()" class="small-btn">Add</button>
   </div>
 
