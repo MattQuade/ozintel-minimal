@@ -1,119 +1,74 @@
-console.log("✅ OzIntel script loaded - Twilio mode");
-
-let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
-let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
-
-function renderContacts() {
-  // Safe Contacts
-  const safeList = document.getElementById("safe-contacts-list");
-  safeList.innerHTML = '';
-  safeContacts.forEach((c, i) => {
-    const div = document.createElement("div");
-    div.className = "contact-item";
-    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeSafeContact(${i})">Remove</button>`;
-    safeList.appendChild(div);
-  });
-
-  // Emergency Contacts
-  const emList = document.getElementById("emergency-contacts-list");
-  emList.innerHTML = '';
-  emergencyContacts.forEach((c, i) => {
-    const div = document.createElement("div");
-    div.className = "contact-item";
-    div.innerHTML = `<span>${c.name} — ${c.phone}</span><button onclick="removeEmergencyContact(${i})">Remove</button>`;
-    emList.appendChild(div);
-  });
-}
-
-function addSafeContact() {
-  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
-  const phone = document.getElementById("new-safe-phone").value.trim();
-  if (!phone) return alert("Please enter a phone number");
-  
-  safeContacts.push({name, phone});
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-  document.getElementById("new-safe-name").value = "";
-  document.getElementById("new-safe-phone").value = "";
-}
-
-function addEmergencyContact() {
-  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
-  const phone = document.getElementById("new-emergency-phone").value.trim();
-  if (!phone) return alert("Please enter a phone number");
-  
-  emergencyContacts.push({name, phone});
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
-  document.getElementById("new-emergency-name").value = "";
-  document.getElementById("new-emergency-phone").value = "";
-}
-
-function removeSafeContact(i) {
-  safeContacts.splice(i, 1);
-  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
-  renderContacts();
-}
-
-function removeEmergencyContact(i) {
-  emergencyContacts.splice(i, 1);
-  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
-  renderContacts();
-}
+// Store last safe arrival
+let lastSafeTime = localStorage.getItem("lastSafeTime");
+let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
+let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
 async function sendAlert(type) {
-  const contacts = type === 'safe' ? safeContacts : emergencyContacts;
-  const status = document.getElementById("alert-status");
-  
-  if (contacts.length === 0) {
-    return alert("Please add at least one contact first");
-  }
-
-  const btns = document.querySelectorAll('.safe-btn, .emergency-btn');
-  btns.forEach(b => b.disabled = true);
+  const status = document.getElementById("status");
   status.textContent = "Getting location...";
-  status.style.color = "#eab308";
 
   try {
-    const position = await new Promise((resolve, reject) => {
+    const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
     });
 
-    const lat = position.coords.latitude.toFixed(6);
-    const lon = position.coords.longitude.toFixed(6);
-    const mapsLink = `https://www.google.com/maps?q=${lat},${lon}`;
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
 
-    let message = type === 'safe' 
-      ? `✅ OzIntel - Test User - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}`
-      : `🚨 OzIntel - Test User - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+    let extraInfo = "";
 
-    status.textContent = "Sending via Twilio...";
+    if (type === 'safe') {
+      if (lastSafeTime) {
+        const timeDiff = timeSince(new Date(lastSafeTime));
+        const distance = calculateDistance(lastSafeLat, lastSafeLon, lat, lon);
+        extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance.toFixed(1)} km`;
+      }
+      
+      // Save current as last safe
+      localStorage.setItem("lastSafeTime", new Date().toISOString());
+      localStorage.setItem("lastSafeLat", lat);
+      localStorage.setItem("lastSafeLon", lon);
+    }
 
-    const response = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
+    const message = type === 'safe' 
+      ? `✅ OzIntel - Matt Quade - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+      : `🚨 OzIntel - Matt Quade - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+
+    status.textContent = "Sending SMS...";
+
+    const res = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts, message })
+      body: JSON.stringify({ 
+        contacts: [{ name: "Test", phone: "+61416619600" }], 
+        message 
+      })
     });
 
-    const result = await response.json();
-    
-    if (result.success) {
-      status.textContent = `✅ Alert sent successfully to ${result.sent} contact(s)!`;
-      status.style.color = "#22c55e";
-    } else {
-      throw new Error(result.error || "Unknown error");
-    }
-  } catch (err) {
-    console.error(err);
-    status.textContent = "❌ Failed: " + err.message;
-    status.style.color = "#ef4444";
-  } finally {
-    btns.forEach(b => b.disabled = false);
+    const data = await res.json();
+    status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
+  } catch (e) {
+    status.textContent = "❌ Error: " + e.message;
   }
 }
 
-function sendSafeAlert() { sendAlert('safe'); }
-function sendEmergencyAlert() { sendAlert('emergency'); }
+// Helper functions
+function timeSince(date) {
+  const seconds = Math.floor((new Date() - date) / 1000);
+  let interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours";
+  interval = seconds / 60;
+  return Math.floor(interval) + " minutes";
+}
 
-// Init
-renderContacts();
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}

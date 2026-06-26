@@ -1,24 +1,16 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const twilio = require("twilio");
-
-// DEBUG: Check if variables are detected by the Node process
-console.log("--- DEBUG: CHECKING ENVIRONMENT VARIABLES ---");
-console.log("SID exists:", !!process.env.TWILIO_ACCOUNT_SID);
-console.log("TOKEN exists:", !!process.env.TWILIO_AUTH_TOKEN);
-console.log("---------------------------------------------");
-
 const app = express();
+
 app.use(cors());
 app.use(express.json());
+console.log("DEBUG: Final SID string:", `"${process.env.TWILIO_ACCOUNT_SID}"`);
+console.log("DEBUG: Final Token string:", `"${process.env.TWILIO_AUTH_TOKEN}"`);
 
-const client = twilio(
-  "AC9ceaa4251e9c7c47e788e0989eca9f66",
-  "99d6f4346a8bba4f0d791f12009e5efc"
-);
-
-const TWILIO_NUMBER = "+16062380495";
+// These keys now point to your Twilio credentials from the .env file
+const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received:", new Date().toISOString());
@@ -30,19 +22,41 @@ app.post("/send-safe-alert", async (req, res) => {
   }
 
   try {
+    // Twilio requires Basic Auth: AccountSID:AuthToken
+    const auth = Buffer.from(`${TWILIO_SID}:${TWILIO_TOKEN}`).toString("base64");
+    
     let sentCount = 0;
     for (const contact of contacts) {
-      const response = await client.messages.create({
-        body: message,
-        from: TWILIO_NUMBER,
-        to: contact.phone
+      // Twilio Message API URL
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
+      
+      // Form-encoded body for Twilio
+      const params = new URLSearchParams();
+      params.append("To", contact.phone);
+      params.append("From", "+16062380495"); // Your Twilio number
+      params.append("Body", message);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params
       });
-      console.log(`✅ Sent to ${contact.phone} | SID: ${response.sid}`);
-      sentCount++;
+
+      const data = await response.json();
+      console.log(`SMS to ${contact.phone}:`, data);
+
+      if (response.ok) {
+        sentCount++;
+      } else {
+        throw new Error(`Twilio rejected: ${data.message || JSON.stringify(data)}`);
+      }
     }
     res.json({ success: true, sent: sentCount });
   } catch (error) {
-    console.error("Twilio Error:", error);
+    console.error("SMS Error:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
