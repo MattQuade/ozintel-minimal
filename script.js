@@ -1,10 +1,13 @@
 let contacts = JSON.parse(localStorage.getItem("ozintelContacts")) || [];
+
+// Time + Distance tracking
 let lastSafeTime = localStorage.getItem("lastSafeTime");
 let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
+console.log("=== INITIAL LOAD ===");
 console.log("Last Safe Time:", lastSafeTime);
-console.log("Last Location:", lastSafeLat, lastSafeLon);
+console.log("Last Lat/Lon:", lastSafeLat, lastSafeLon);
 
 function renderContacts() {
   const list = document.getElementById("contacts-list");
@@ -20,7 +23,7 @@ function renderContacts() {
 function addContact() {
   const phone = document.getElementById("new-phone").value.trim();
   const name = document.getElementById("new-name").value.trim() || "Contact";
-  if (!phone) return alert("Enter phone number");
+  if (!phone) return alert("Enter phone");
   contacts.push({name, phone});
   localStorage.setItem("ozintelContacts", JSON.stringify(contacts));
   renderContacts();
@@ -52,23 +55,25 @@ async function sendAlert(type) {
     let extraInfo = "";
 
     if (type === 'safe') {
-      console.log("Safe alert - checking previous data");
+      console.log("Safe alert triggered. Previous data:", lastSafeTime, lastSafeLat, lastSafeLon);
+
       if (lastSafeTime) {
         const timeDiff = timeSince(new Date(lastSafeTime));
-        const distance = lastSafeLat && lastSafeLon 
+        const distance = (lastSafeLat && lastSafeLon) 
           ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
           : "0";
         extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-        console.log("Added extra info:", extraInfo);
+        console.log("Extra info added:", extraInfo);
       }
 
-      // Save current
+      // Save current as last safe
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
       lastSafeTime = new Date().toISOString();
       lastSafeLat = lat;
       lastSafeLon = lon;
+      console.log("Saved new lastSafe data");
     }
 
     const message = type === 'safe' 
@@ -87,6 +92,7 @@ async function sendAlert(type) {
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
     status.textContent = "❌ Error: " + e.message;
+    console.error(e);
   }
 }
 
