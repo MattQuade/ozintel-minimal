@@ -7,65 +7,63 @@
   <style>
     body { font-family: system-ui; background:#0f172a; color:white; padding:20px; }
     table { width:100%; border-collapse:collapse; margin:20px 0; }
-    th, td { padding:10px; border:1px solid #334155; text-align:left; }
+    th, td { padding:12px; border:1px solid #475569; text-align:left; }
     button { padding:8px 16px; background:#22c55e; color:white; border:none; border-radius:6px; cursor:pointer; }
+    .pending { background:#334155; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel Admin Panel</h1>
-  <h2>Pending Approvals</h2>
+
+  <h2>Pending Requests</h2>
   <table id="pending-table"></table>
 
   <h2>Approved Users</h2>
   <table id="approved-table"></table>
 
   <script>
-    async function loadUsers() {
+    async function loadData() {
       const res = await fetch("https://ozintel-backend.onrender.com/admin/users");
       const data = await res.json();
 
       // Pending
-      const pendingBody = document.getElementById("pending-table");
-      pendingBody.innerHTML = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Requested</th><th>Action</th></tr>`;
-      data.pending.forEach(user => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone}</td>
-          <td>${new Date(user.requestedAt).toLocaleString()}</td>
-          <td><button onclick="approveUser(${user.id})">Approve</button></td>
-        `;
-        pendingBody.appendChild(row);
+      let html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Requested</th><th>Action</th></tr>`;
+      data.pending.forEach(u => {
+        html += `<tr>
+          <td>${u.name}</td>
+          <td>${u.email}</td>
+          <td>${u.phone || '-'}</td>
+          <td>${new Date(u.requestedAt).toLocaleString()}</td>
+          <td><button onclick="approve(${u.id})">Approve</button></td>
+        </tr>`;
       });
+      document.getElementById("pending-table").innerHTML = html;
 
       // Approved
-      const approvedBody = document.getElementById("approved-table");
-      approvedBody.innerHTML = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Approved</th></tr>`;
-      data.approved.forEach(user => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone}</td>
-          <td>${new Date(user.approvedAt).toLocaleString()}</td>
-        `;
-        approvedBody.appendChild(row);
+      html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Approved</th></tr>`;
+      data.approved.forEach(u => {
+        html += `<tr>
+          <td>${u.name}</td>
+          <td>${u.email}</td>
+          <td>${u.phone || '-'}</td>
+          <td>${new Date(u.approvedAt).toLocaleString()}</td>
+        </tr>`;
       });
+      document.getElementById("approved-table").innerHTML = html;
     }
 
-    async function approveUser(id) {
+    async function approve(id) {
       if (confirm("Approve this user?")) {
         await fetch("https://ozintel-backend.onrender.com/admin/approve", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({ id })
         });
-        loadUsers();
+        loadData();
       }
     }
 
-    loadUsers();
+    loadData();
   </script>
 </body>
 </html>
