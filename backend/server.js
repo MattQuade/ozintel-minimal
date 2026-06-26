@@ -10,6 +10,7 @@ app.use(express.json());
 const USERS_FILE = './users.json';
 const KEY = process.env.MESSAGEMEDIA_API_KEY;
 const SECRET = process.env.MESSAGEMEDIA_API_SECRET;
+const MY_PHONE = "+61416619600";   // Your personal number
 
 function loadUsers() {
   try {
@@ -23,10 +24,12 @@ function saveUsers(data) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
 }
 
-// Submit Access Request
-app.post("/request-access", (req, res) => {
+// Submit Access Request + Notify You
+app.post("/request-access", async (req, res) => {
   const { name, email, phone } = req.body || {};
-  if (!name || !email) return res.status(400).json({ success: false, error: "Name and email required" });
+  if (!name || !email) {
+    return res.status(400).json({ success: false, error: "Name and email required" });
+  }
 
   const users = loadUsers();
   users.pending.push({
@@ -38,33 +41,12 @@ app.post("/request-access", (req, res) => {
   });
 
   saveUsers(users);
-  console.log("📩 New request:", name);
-  res.json({ success: true });
-});
 
-// Get users for admin
-app.get("/admin/users", (req, res) => {
-  res.json(loadUsers());
-});
-
-// Approve user + send notification
-app.post("/admin/approve", async (req, res) => {
-  const { id } = req.body;
-  const users = loadUsers();
-
-  const index = users.pending.findIndex(u => u.id === id);
-  if (index === -1) return res.status(404).json({ success: false });
-
-  const user = users.pending.splice(index, 1)[0];
-  user.approvedAt = new Date().toISOString();
-  users.approved.push(user);
-  saveUsers(users);
-
-  // Send approval SMS if phone exists
-  if (user.phone && KEY && SECRET) {
+  // Send SMS notification to you
+  if (KEY && SECRET) {
     try {
       const auth = Buffer.from(`${KEY}:${SECRET}`).toString("base64");
-      const message = `✅ OzIntel Access Approved!\n\nYou can now use the Safe Arrival and Emergency buttons at https://alert.ozintel.com.au`;
+      const notifyMsg = `🔔 New OzIntel Signup Request\nName: ${name}\nEmail: ${email}\nPhone: ${phone || 'Not provided'}\nTime: ${new Date().toISOString()}`;
 
       await fetch("https://api.messagemedia.com/v1/messages", {
         method: "POST",
@@ -74,30 +56,63 @@ app.post("/admin/approve", async (req, res) => {
         },
         body: JSON.stringify({
           messages: [{
-            content: message,
-            destination_number: user.phone
+            content: notifyMsg,
+            destination_number: MY_PHONE
           }]
         })
       });
-      console.log("✅ Approval SMS sent to", user.phone);
+      console.log("✅ Notification SMS sent to your phone");
     } catch (e) {
-      console.error("Failed to send approval SMS:", e.message);
+      console.error("Failed to send notification SMS:", e.message);
     }
   }
 
-  console.log("✅ Approved:", user.name);
+  console.log("📩 New request from:", name);
   res.json({ success: true });
 });
 
-// SMS Alert Endpoint
+// Get users for admin
+app.get("/admin/users", (req, res) => res.json(loadUsers()));
+
+// Approve user
+app.post("/admin/approve", async (req, res) => {
+  const { id } = req.body;
+  const users = loadUsers();
+  const index = users.pending.findIndex(u => u.id === id);
+  if (index === -1) return res.status(404).json({ success: false });
+
+  const user = users.pending.splice(index, 1)[0];
+  user.approvedAt = new Date().toISOString();
+  users.approved.push(user);
+  saveUsers(users);
+
+  // Optional: Send approval SMS to the user
+  if (user.phone && KEY && SECRET) {
+    try {
+      const auth = Buffer.from(`${KEY}:${SECRET}`).toString("base64");
+      await fetch("https://api.messagemedia.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Basic ${auth}` },
+        body: JSON.stringify({
+          messages: [{ 
+            content: "✅ OzIntel Access Approved!\nYou can now use the Safe Arrival and Emergency buttons.", 
+            destination_number: user.phone 
+          }]
+        })
+      });
+    } catch (e) {}
+  }
+
+  res.json({ success: true });
+});
+
+// Alert endpoint
 app.post("/send-safe-alert", async (req, res) => {
   console.log("🚨 Alert request received");
   const { contacts, message } = req.body;
   if (!contacts || contacts.length === 0) {
     return res.status(400).json({ success: false, error: "No contacts" });
   }
-
-  // MessageMedia sending code (keep your existing logic here if you want)
   res.json({ success: true, sent: contacts.length });
 });
 
