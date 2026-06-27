@@ -9,7 +9,9 @@
     h1 { color:#22d3ee; }
     .price { font-size:2.2rem; color:#22c55e; margin:20px 0; }
     input { width:85%; max-width:380px; padding:12px; margin:10px 0; font-size:1.1rem; border-radius:8px; }
-    button { padding:18px; font-size:1.4rem; width:85%; max-width:380px; background:#22c55e; color:white; border:none; border-radius:12px; margin-top:20px; }
+    button { padding:18px; font-size:1.4rem; width:85%; max-width:380px; background:#22c55e; color:white; border:none; border-radius:12px; margin:10px; }
+    .home-btn { background:#64748b; }
+    .install-btn { background:#3b82f6; }
   </style>
 </head>
 <body>
@@ -21,10 +23,27 @@
   <input type="tel" id="phone" placeholder="Phone Number (+614...)" >
 
   <button onclick="submitRequest()">Send Request</button>
+  <button onclick="window.close()" class="home-btn">← Back to Home</button>
+  <button onclick="installPWA()" class="install-btn">📱 Add to Home Screen</button>
 
   <p id="result" style="margin-top:20px; font-size:1.1rem;"></p>
 
   <script>
+    let deferredPrompt;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      deferredPrompt = e;
+    });
+
+    async function installPWA() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt = null;
+      } else {
+        alert("Install option not available. You can use your browser's menu → 'Add to Home Screen'.");
+      }
+    }
+
     async function submitRequest() {
       const name = document.getElementById("name").value.trim();
       const email = document.getElementById("email").value.trim();
