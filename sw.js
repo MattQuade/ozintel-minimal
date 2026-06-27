@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ozintel-v1';
+const CACHE_NAME = 'ozintel-v4';  // Bump version
 const urlsToCache = [
   '/',
   '/index.html',
@@ -18,11 +18,4 @@ self.addEventListener('fetch', event => {
     caches.match(event.request)
       .then(response => response || fetch(event.request))
   );
-});
-
-// Force update on new version
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
