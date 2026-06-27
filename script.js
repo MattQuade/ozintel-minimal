@@ -18,7 +18,8 @@ function renderContacts(key, containerId) {
         const div = document.createElement("div");
         div.className = "contact-item";
         div.innerHTML = `
-            <input type="text" value="${contact}" data-index="${index}">
+            <input type="text" placeholder="Name" value="${contact.name}" data-index="${index}" data-field="name">
+            <input type="text" placeholder="+61XXXXXXXXX" value="${contact.phone}" data-index="${index}" data-field="phone">
             <button class="remove-btn" data-index="${index}">Remove</button>
         `;
         container.appendChild(div);
@@ -36,7 +37,8 @@ function renderContacts(key, containerId) {
     container.querySelectorAll("input").forEach(input => {
         input.onchange = () => {
             const idx = input.dataset.index;
-            contacts[idx] = input.value;
+            const field = input.dataset.field;
+            contacts[idx][field] = input.value;
             saveContacts(key, contacts);
         };
     });
@@ -48,7 +50,7 @@ function addContact(key, containerId) {
         alert("Maximum of 3 contacts allowed.");
         return;
     }
-    contacts.push("");
+    contacts.push({ name: "", phone: "" });
     saveContacts(key, contacts);
     renderContacts(key, containerId);
 }

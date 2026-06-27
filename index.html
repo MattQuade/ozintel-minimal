@@ -16,12 +16,16 @@
         }
         .contact-item {
             display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 15px;
+            background: #222;
+            padding: 10px;
+            border-radius: 6px;
         }
         .contact-item input {
-            flex: 1;
             padding: 8px;
+            width: 100%;
         }
         .remove-btn {
             background-color: #444;
@@ -29,6 +33,7 @@
             border: none;
             padding: 8px;
             cursor: pointer;
+            width: 100%;
         }
         .add-btn {
             margin-top: 10px;
@@ -62,16 +67,13 @@
 
 <body>
 
-    <!-- HEADER -->
     <header style="text-align:center; margin-top:20px;">
-        <img src="icon-512.png" alt="OzIntel Logo" style="width:80px; height:80px;">
-        <h1 style="margin:10px 0 0 0; font-size:32px;">OzIntel</h1>
+        <h1 style="margin:10px 0 0 0; font-size:32px;">🛡️ OzIntel</h1>
         <h2 style="margin:0; font-size:18px;">Alert System</h2>
     </header>
 
     <main style="padding:20px;">
 
-        <!-- SAFE CONTACTS -->
         <section>
             <h3>Safe Arrival Contacts</h3>
             <div id="safeContacts"></div>
@@ -80,7 +82,6 @@
 
         <hr style="margin:25px 0; opacity:0.3;">
 
-        <!-- EMERGENCY CONTACTS -->
         <section>
             <h3>Emergency Contacts</h3>
             <div id="emergencyContacts"></div>
@@ -89,7 +90,6 @@
 
         <hr style="margin:25px 0; opacity:0.3;">
 
-        <!-- ACTION BUTTONS -->
         <div style="display:flex; gap:20px; justify-content:center; margin-top:30px;">
             <button id="safeAlertBtn" class="safe-btn">✔ SAFE ARRIVAL</button>
             <button id="emergencyAlertBtn" class="emergency-btn">🚨 SEND HELP</button>
