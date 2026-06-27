@@ -1,12 +1,12 @@
 {
   "name": "OzIntel",
   "short_name": "OzIntel",
-  "description": "Alert System",
-  "start_url": "/",
+  "description": "Personal Safety Alert System",
+  "start_url": "/?v=5.0",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#22d3ee",
-  "version": "4.0",
+  "version": "5.0",
   "icons": [
     {
       "src": "icon-512.png",

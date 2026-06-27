@@ -1,3 +1,6 @@
+// Cache bust
+const CACHE_BUST = '?v=5.0';
+
 let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 
@@ -101,7 +104,7 @@ async function sendAlert(type) {
 
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
 
-    const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
+    const res = await fetch("https://ozintel-backend.onrender.com" + endpoint + CACHE_BUST, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts, message })
