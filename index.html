@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OzIntel</title>
+  <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
     h1 { color:#22d3ee; }
@@ -24,7 +25,6 @@
   <p>Personal Safety Alert System</p>
 
   <button onclick="showSignUpPage()" style="background:#64748b; padding:12px 30px; font-size:1rem;">👤 admin@ozintel</button>
-  <button onclick="clearCacheAndReload()" style="background:#64748b; padding:8px 20px; font-size:0.9rem;">🔄 Update App</button>
 
   <div class="section">
     <h2>Safe Arrival Contacts</h2>
@@ -42,4 +42,16 @@
     <button onclick="addEmergencyContact()" class="small-btn">Add Emergency</button>
   </div>
 
-  <button class="safe" onclick="sendSafeAlert...
+  <button class="safe" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
+  <button class="emergency" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
+
+  <p id="status" class="status"></p>
+
+  <script src="script.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
