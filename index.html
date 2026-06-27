@@ -1,101 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OzIntel Alert System</title>
-    <link rel="manifest" href="manifest.json">
-    <script defer src="script.js"></script>
-    <style>
-        body {
-            background-color: #111;
-            font-family: Arial, sans-serif;
-            color: white;
-            margin: 0;
-            padding: 0;
-        }
-        .contact-item {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-bottom: 15px;
-            background: #222;
-            padding: 10px;
-            border-radius: 6px;
-        }
-        .contact-item input {
-            padding: 8px;
-            width: 100%;
-        }
-        .remove-btn {
-            background-color: #444;
-            color: white;
-            border: none;
-            padding: 8px;
-            cursor: pointer;
-            width: 100%;
-        }
-        .add-btn {
-            margin-top: 10px;
-            padding: 10px;
-            width: 100%;
-            background-color: #333;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        .safe-btn {
-            background-color: #2ecc71;
-            color: white;
-            border: none;
-            padding: 15px;
-            width: 150px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        .emergency-btn {
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            padding: 15px;
-            width: 150px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel</title>
+  <style>
+    body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
+    h1 { color:#22d3ee; }
+    button { padding:15px; font-size:1.1rem; margin:10px; border:none; border-radius:10px; width:85%; max-width:380px; }
+    .safe { background:#22c55e; }
+    .emergency { background:#ef4444; }
+    .status { margin:20px; font-size:1.1rem; min-height:40px; }
+    input { padding:10px; margin:6px 4px; font-size:1rem; border-radius:6px; }
+    .section { margin:30px 0; border-top:1px solid #334155; padding-top:20px; }
+    #new-safe-phone, #new-safe-name { width: 35% !important; }
+    #new-emergency-phone, #new-emergency-name { width: 35% !important; }
+    .small-btn { padding:8px 16px; font-size:0.95rem; }
+    .contact-item { background:#334155; padding:10px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
+  </style>
 </head>
-
 <body>
+  <h1>🛡️ OzIntel</h1>
+  <p>Personal Safety Alert System</p>
 
-    <header style="text-align:center; margin-top:20px;">
-        <h1 style="margin:10px 0 0 0; font-size:32px;">🛡️ OzIntel</h1>
-        <h2 style="margin:0; font-size:18px;">Alert System</h2>
-    </header>
+  <button onclick="showSignUpPage()" style="background:#64748b; padding:12px 30px; font-size:1rem;">👤 admin@ozintel</button>
+  <button onclick="clearCacheAndReload()" style="background:#64748b; padding:8px 20px; font-size:0.9rem;">🔄 Update App</button>
 
-    <main style="padding:20px;">
+  <div class="section">
+    <h2>Safe Arrival Contacts</h2>
+    <div id="safe-contacts-list"></div>
+    <input type="tel" id="new-safe-phone" placeholder="+61412345678">
+    <input type="text" id="new-safe-name" placeholder="Name">
+    <button onclick="addSafeContact()" class="small-btn">Add Safe</button>
+  </div>
 
-        <section>
-            <h3>Safe Arrival Contacts</h3>
-            <div id="safeContacts"></div>
-            <button id="addSafeContactBtn" class="add-btn">Add Safe Contact</button>
-        </section>
+  <div class="section">
+    <h2>Emergency Contacts</h2>
+    <div id="emergency-contacts-list"></div>
+    <input type="tel" id="new-emergency-phone" placeholder="+61412345678">
+    <input type="text" id="new-emergency-name" placeholder="Name">
+    <button onclick="addEmergencyContact()" class="small-btn">Add Emergency</button>
+  </div>
 
-        <hr style="margin:25px 0; opacity:0.3;">
-
-        <section>
-            <h3>Emergency Contacts</h3>
-            <div id="emergencyContacts"></div>
-            <button id="addEmergencyContactBtn" class="add-btn">Add Emergency Contact</button>
-        </section>
-
-        <hr style="margin:25px 0; opacity:0.3;">
-
-        <div style="display:flex; gap:20px; justify-content:center; margin-top:30px;">
-            <button id="safeAlertBtn" class="safe-btn">✔ SAFE ARRIVAL</button>
-            <button id="emergencyAlertBtn" class="emergency-btn">🚨 SEND HELP</button>
-        </div>
-
-    </main>
-
-</body>
-</html>
+  <button class="safe" onclick="sendSafeAlert...

@@ -1,95 +1,114 @@
-const SAFE_KEY = "ozintelSafeContacts";
-const EMER_KEY = "ozintelEmergencyContacts";
+// Separate lists
+let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
+let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 
-function loadContacts(key) {
-    return JSON.parse(localStorage.getItem(key)) || [];
+function renderContacts() {
+  // Safe
+  const safeList = document.getElementById("safe-contacts-list");
+  safeList.innerHTML = '';
+  safeContacts.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "contact-item";
+    div.innerHTML = `${c.name} — ${c.phone} <button onclick="removeSafe(${i})" class="small-btn">Remove</button>`;
+    safeList.appendChild(div);
+  });
+
+  // Emergency
+  const emList = document.getElementById("emergency-contacts-list");
+  emList.innerHTML = '';
+  emergencyContacts.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "contact-item";
+    div.innerHTML = `${c.name} — ${c.phone} <button onclick="removeEmergency(${i})" class="small-btn">Remove</button>`;
+    emList.appendChild(div);
+  });
 }
 
-function saveContacts(key, contacts) {
-    localStorage.setItem(key, JSON.stringify(contacts));
+function addSafeContact() {
+  const phone = document.getElementById("new-safe-phone").value.trim();
+  const name = document.getElementById("new-safe-name").value.trim() || "Contact";
+  if (!phone) return alert("Enter phone number");
+  safeContacts.push({name, phone});
+  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
+  renderContacts();
+  document.getElementById("new-safe-phone").value = "";
+  document.getElementById("new-safe-name").value = "";
 }
 
-function renderContacts(key, containerId) {
-    const contacts = loadContacts(key);
-    const container = document.getElementById(containerId);
-    container.innerHTML = "";
+function addEmergencyContact() {
+  const phone = document.getElementById("new-emergency-phone").value.trim();
+  const name = document.getElementById("new-emergency-name").value.trim() || "Contact";
+  if (!phone) return alert("Enter phone number");
+  emergencyContacts.push({name, phone});
+  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
+  renderContacts();
+  document.getElementById("new-emergency-phone").value = "";
+  document.getElementById("new-emergency-name").value = "";
+}
 
-    contacts.forEach((contact, index) => {
-        const div = document.createElement("div");
-        div.className = "contact-item";
-        div.innerHTML = `
-            <input type="text" placeholder="Name" value="${contact.name}" data-index="${index}" data-field="name">
-            <input type="text" placeholder="+61XXXXXXXXX" value="${contact.phone}" data-index="${index}" data-field="phone">
-            <button class="remove-btn" data-index="${index}">Remove</button>
-        `;
-        container.appendChild(div);
+function removeSafe(i) {
+  safeContacts.splice(i, 1);
+  localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
+  renderContacts();
+}
+
+function removeEmergency(i) {
+  emergencyContacts.splice(i, 1);
+  localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
+  renderContacts();
+}
+
+async function sendAlert(type) {
+  const contacts = type === 'safe' ? safeContacts : emergencyContacts;
+  const status = document.getElementById("status");
+  if (contacts.length === 0) return alert("Add at least one contact for this category");
+
+  status.textContent = "Getting location...";
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
     });
 
-    container.querySelectorAll(".remove-btn").forEach(btn => {
-        btn.onclick = () => {
-            const idx = btn.dataset.index;
-            contacts.splice(idx, 1);
-            saveContacts(key, contacts);
-            renderContacts(key, containerId);
-        };
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    const mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
+
+    const message = type === 'safe' 
+      ? `✅ OzIntel - Matt Quade - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}`
+      : `🚨 OzIntel - Matt Quade - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+
+    status.textContent = "Sending SMS...";
+
+    const res = await fetch("https://ozintel-backend.onrender.com/send-safe-alert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contacts, message })
     });
 
-    container.querySelectorAll("input").forEach(input => {
-        input.onchange = () => {
-            const idx = input.dataset.index;
-            const field = input.dataset.field;
-            contacts[idx][field] = input.value;
-            saveContacts(key, contacts);
-        };
+    const data = await res.json();
+    status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
+  } catch (e) {
+    status.textContent = "❌ Error: " + e.message;
+  }
+}
+
+function sendSafeAlert() { sendAlert('safe'); }
+function sendEmergencyAlert() { sendAlert('emergency'); }
+
+function clearCacheAndReload() {
+  if ('serviceWorker' in navigator) {
+    caches.keys().then(names => {
+      for (let name of names) caches.delete(name);
     });
+  }
+  window.location.reload(true);
+  alert("Cache cleared. Please close and reopen the app from home screen.");
 }
 
-function addContact(key, containerId) {
-    const contacts = loadContacts(key);
-    if (contacts.length >= 3) {
-        alert("Maximum of 3 contacts allowed.");
-        return;
-    }
-    contacts.push({ name: "", phone: "" });
-    saveContacts(key, contacts);
-    renderContacts(key, containerId);
+function showSignUpPage() {
+  window.open("signup.html", "_blank");
 }
 
-async function sendAlert(url, contacts, message) {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contacts, message })
-    });
-
-    const result = await response.json();
-    if (result.success) {
-        alert("Alert sent successfully.");
-    } else {
-        alert("Failed: " + result.error);
-    }
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-
-    renderContacts(SAFE_KEY, "safeContacts");
-    renderContacts(EMER_KEY, "emergencyContacts");
-
-    document.getElementById("addSafeContactBtn").onclick = () =>
-        addContact(SAFE_KEY, "safeContacts");
-
-    document.getElementById("addEmergencyContactBtn").onclick = () =>
-        addContact(EMER_KEY, "emergencyContacts");
-
-    document.getElementById("safeAlertBtn").onclick = () => {
-        const contacts = loadContacts(SAFE_KEY);
-        if (contacts.length === 0) return alert("No safe contacts added.");
-        sendAlert("https://ozintel-backend.onrender.com/send-safe-alert", contacts, "I have arrived safely.");
-    };
-
-    document.getElementById("emergencyAlertBtn").onclick = () => {
-        const contacts = loadContacts(EMER_KEY);
-        if (contacts.length === 0) return alert("No emergency contacts added.");
-        sendAlert("https://ozintel-backend.onrender.com/send-emergency-alert", contacts, "I need help urgently.");
-    };
-});
+// Init
+renderContacts();
