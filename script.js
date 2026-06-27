@@ -1,7 +1,6 @@
 let contacts = JSON.parse(localStorage.getItem("ozintelContacts")) || [];
 let username = localStorage.getItem("username") || "Guest User";
 
-// Last Safe Arrival tracking
 let lastSafeTime = localStorage.getItem("lastSafeTime");
 let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
@@ -36,6 +35,16 @@ function removeContact(i) {
 
 function showSignUpPage() {
   window.open("signup.html", "_blank");
+}
+
+function clearCacheAndReload() {
+  if ('serviceWorker' in navigator) {
+    caches.keys().then(names => {
+      for (let name of names) caches.delete(name);
+    });
+  }
+  window.location.reload(true);
+  alert("Cache cleared. Please close and reopen the app from home screen.");
 }
 
 async function sendAlert(type) {
