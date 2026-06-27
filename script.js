@@ -1,4 +1,5 @@
 let contacts = JSON.parse(localStorage.getItem("ozintelContacts")) || [];
+let username = localStorage.getItem("username") || "Guest User";
 
 // Last Safe Arrival tracking
 let lastSafeTime = localStorage.getItem("lastSafeTime");
@@ -69,8 +70,8 @@ async function sendAlert(type) {
     }
 
     const message = type === 'safe' 
-      ? `✅ OzIntel - Matt Quade - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
-      : `🚨 OzIntel - Matt Quade - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+      ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+      : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
 
     status.textContent = "Sending SMS...";
 
