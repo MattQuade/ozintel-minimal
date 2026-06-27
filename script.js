@@ -33,31 +33,8 @@ function removeContact(i) {
   renderContacts();
 }
 
-// Updated: Real Access Request
-async function showPricingPage() {
-  const name = prompt("Your Full Name:");
-  if (!name) return;
-
-  const email = prompt("Your Email Address:");
-  if (!email) return;
-
-  const phone = prompt("Your Phone Number (optional):") || "";
-
-  try {
-    const res = await fetch("https://ozintel-backend.onrender.com/request-access", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, phone })
-    });
-
-    if (res.ok) {
-      alert("✅ Request sent to admin@ozintel.\nYou will be contacted soon.");
-    } else {
-      alert("Failed to send request.");
-    }
-  } catch (e) {
-    alert("Error sending request. Please try again.");
-  }
+function showSignUpPage() {
+  window.open("signup.html", "_blank");
 }
 
 async function sendAlert(type) {

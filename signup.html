@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel Sign Up</title>
+  <style>
+    body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:40px 20px; }
+    h1 { color:#22d3ee; }
+    .price { font-size:2.2rem; color:#22c55e; margin:20px 0; }
+    input { width:85%; max-width:380px; padding:12px; margin:10px 0; font-size:1.1rem; border-radius:8px; }
+    button { padding:18px; font-size:1.4rem; width:85%; max-width:380px; background:#22c55e; color:white; border:none; border-radius:12px; margin-top:20px; }
+  </style>
+</head>
+<body>
+  <h1>Safe/Emergency Location Alerts</h1>
+  <p class="price">$AUD11 / month</p>
+
+  <input type="text" id="name" placeholder="Full Name" required>
+  <input type="email" id="email" placeholder="Email Address" required>
+  <input type="tel" id="phone" placeholder="Phone Number (+614...)" >
+
+  <button onclick="submitRequest()">Send Request</button>
+
+  <p id="result" style="margin-top:20px; font-size:1.1rem;"></p>
+
+  <script>
+    async function submitRequest() {
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+
+      if (!name || !email) {
+        alert("Name and email are required");
+        return;
+      }
+
+      const result = document.getElementById("result");
+      result.textContent = "Sending request...";
+
+      try {
+        const res = await fetch("https://ozintel-backend.onrender.com/request-access", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ name, email, phone })
+        });
+
+        if (res.ok) {
+          result.innerHTML = "✅ Request sent successfully.<br>admin@ozintel will contact you soon.";
+          result.style.color = "#22c55e";
+        } else {
+          throw new Error();
+        }
+      } catch (e) {
+        result.textContent = "❌ Failed to send request. Please try again.";
+        result.style.color = "red";
+      }
+    }
+  </script>
+</body>
+</html>

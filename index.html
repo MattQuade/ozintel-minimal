@@ -13,19 +13,16 @@
     .status { margin:20px; font-size:1.1rem; min-height:40px; }
     input { padding:10px; margin:6px 4px; font-size:1rem; border-radius:6px; }
     
-    /* Width reductions + alignment */
-    #new-phone { width: 42%; }     /* ~40% reduction */
-    #new-name  { width: 38%; }     /* ~30% reduction, aligned with phone */
-    
-    .contact-item { background:#334155; padding:10px; margin:8px auto; border-radius:8px; max-width:400px; text-align:left; }
-    .small-btn { padding:6px 12px; font-size:0.9rem; }
+    /* Width reductions */
+    #new-phone, #new-name { width: 42%; }   /* 30% reduction + alignment */
+    .small-btn { padding:8px 16px; font-size:0.95rem; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel</h1>
   <p>Personal Safety Alert System</p>
 
-  <button onclick="showPricingPage()" style="background:#64748b; padding:10px 25px; font-size:1rem;">👤 admin@ozintel</button>
+  <button onclick="showSignUpPage()" style="background:#64748b; padding:12px 30px; font-size:1rem;">👤 admin@ozintel</button>
 
   <div style="margin:25px 0;">
     <input type="tel" id="new-phone" placeholder="+61412345678">
