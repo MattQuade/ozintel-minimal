@@ -1,6 +1,10 @@
-// Cache bust
-const CACHE_BUST = '?v=5.0';
+// ====================== USER PROFILE (localStorage) ======================
+let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
 
+// If no user is activated yet, we'll handle it in the UI later
+let username = currentUser ? currentUser.name : "Guest User";
+
+// ====================== EXISTING CONTACT LISTS (DO NOT CHANGE STRUCTURE) ======================
 let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 
@@ -8,8 +12,9 @@ let lastSafeTime = localStorage.getItem("lastSafeTime");
 let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
+// ====================== RENDER CONTACTS (unchanged logic) ======================
 function renderContacts() {
-  // Safe
+  // Safe Arrival Contacts
   const safeList = document.getElementById("safe-contacts-list");
   safeList.innerHTML = '';
   safeContacts.forEach((c, i) => {
@@ -19,7 +24,7 @@ function renderContacts() {
     safeList.appendChild(div);
   });
 
-  // Emergency
+  // Emergency Contacts
   const emList = document.getElementById("emergency-contacts-list");
   emList.innerHTML = '';
   emergencyContacts.forEach((c, i) => {
@@ -30,6 +35,7 @@ function renderContacts() {
   });
 }
 
+// ====================== ADD / REMOVE CONTACTS (unchanged) ======================
 function addSafeContact() {
   const phone = document.getElementById("new-safe-phone").value.trim();
   const name = document.getElementById("new-safe-name").value.trim() || "Contact";
@@ -64,9 +70,15 @@ function removeEmergency(i) {
   renderContacts();
 }
 
+// ====================== SEND ALERTS (now uses dynamic username) ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
+
+  if (!currentUser) {
+    return alert("Please activate your profile first (enter your email once after approval).");
+  }
+
   if (contacts.length === 0) return alert("Add at least one contact for this category");
 
   status.textContent = "Getting location...";
@@ -97,17 +109,21 @@ async function sendAlert(type) {
     }
 
     const message = type === 'safe' 
-      ? `✅ OzIntel - Matt Quade - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
-      : `🚨 OzIntel - Matt Quade - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+      ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+      : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
 
     status.textContent = "Sending SMS...";
 
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
 
-    const res = await fetch("https://ozintel-backend.onrender.com" + endpoint + CACHE_BUST, {
+    const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts, message })
+      body: JSON.stringify({ 
+        userId: currentUser.id,
+        contacts, 
+        message 
+      })
     });
 
     const data = await res.json();
@@ -141,5 +157,5 @@ function showSignUpPage() {
   window.open("signup.html", "_blank");
 }
 
-// Init
+// ====================== INIT ======================
 renderContacts();
