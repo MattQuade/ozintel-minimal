@@ -1,8 +1,8 @@
-// ====================== USER PROFILE ======================
+// ====================== USER PROFILE (localStorage) ======================
 let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
 let username = currentUser ? currentUser.name : "Guest User";
 
-// ====================== CONTACTS ======================
+// ====================== CONTACTS (localStorage) ======================
 let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 
@@ -10,8 +10,9 @@ let lastSafeTime = localStorage.getItem("lastSafeTime");
 let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
+// ====================== RENDER CONTACTS ======================
 function renderContacts() {
-  // Safe
+  // Safe Arrival
   const safeList = document.getElementById("safe-contacts-list");
   safeList.innerHTML = '';
   safeContacts.forEach((c, i) => {
@@ -32,6 +33,7 @@ function renderContacts() {
   });
 }
 
+// ====================== ADD / REMOVE CONTACTS ======================
 function addSafeContact() {
   const phone = document.getElementById("new-safe-phone").value.trim();
   const name = document.getElementById("new-safe-name").value.trim() || "Contact";
@@ -66,15 +68,15 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== ALERTS ======================
+// ====================== SEND ALERTS ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
 
   if (!currentUser) {
-    return alert("Please activate your profile first.");
+    return alert("Please activate your profile first (enter your email).");
   }
-  if (contacts.length === 0) return alert("Add at least one contact");
+  if (contacts.length === 0) return alert("Add at least one contact for this category");
 
   status.textContent = "Getting location...";
 
@@ -135,24 +137,56 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + 
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
 }
 
 function sendSafeAlert() { sendAlert('safe'); }
 function sendEmergencyAlert() { sendAlert('emergency'); }
 
-function activateProfile() {
-  // Placeholder - we'll improve this next if needed
-  alert("Activation feature coming in next update. For now, contact admin to activate.");
+// ====================== ACTIVATION ======================
+async function activateProfile() {
+  const email = document.getElementById("activate-email").value.trim();
+  if (!email) return alert("Please enter your email");
+
+  const status = document.getElementById("status");
+  status.textContent = "Activating...";
+
+  try {
+    const res = await fetch("https://ozintel-backend.onrender.com/activate-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+
+    const data = await res.json();
+
+    if (data.success && data.user) {
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      currentUser = data.user;
+      username = data.user.name;
+
+      document.getElementById("activation-section").style.display = "none";
+      status.textContent = `✅ Activated as ${username}`;
+      renderContacts();
+    } else {
+      status.textContent = "❌ " + (data.message || "Activation failed");
+    }
+  } catch (e) {
+    status.textContent = "❌ Error activating profile";
+  }
 }
 
-function showSignUpPage() {
-  window.location.href = "signup.html";
+// ====================== INIT ======================
+function init() {
+  renderContacts();
+
+  // Show activation section if user is not activated
+  if (!currentUser) {
+    document.getElementById("activation-section").style.display = "block";
+  }
 }
 
-// Init
-renderContacts();
+init();
