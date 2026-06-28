@@ -14,7 +14,7 @@
     .status { margin:20px; font-size:1.1rem; min-height:40px; }
     input { padding:12px; margin:8px 4px; font-size:1rem; border-radius:8px; }
     .section { margin:30px 0; border-top:1px solid #334155; padding-top:20px; }
-    #new-safe-phone, #new-safe-name { width: 38% !important; }
+    #new-safe-phone, #new-safe-name,
     #new-emergency-phone, #new-emergency-name { width: 38% !important; }
     .small-btn { padding:10px 20px; font-size:1rem; }
     .contact-item { background:#334155; padding:12px; margin:10px auto; border-radius:8px; max-width:400px; text-align:left; }
@@ -29,7 +29,7 @@
   <!-- Activation Section -->
   <div id="activation-section" class="activation-box" style="display:none;">
     <h3>Activate Your Profile</h3>
-    <p>Enter the email you registered with to activate your alerts.</p>
+    <p>Enter the email you registered with.</p>
     <input type="email" id="activate-email" placeholder="Your registered email">
     <button onclick="activateProfile()" class="small-btn">Activate</button>
   </div>
@@ -38,12 +38,12 @@
   <button class="safe" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
   <button class="emergency" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
 
-  <!-- Register Button - Now below the alert buttons -->
+  <!-- Register Button -->
   <button onclick="window.location.href='signup.html'" class="register-btn">
     👤 Register New User
   </button>
 
-  <!-- Contact Sections -->
+  <!-- Safe Arrival Contacts -->
   <div class="section">
     <h2>Safe Arrival Contacts</h2>
     <div id="safe-contacts-list"></div>
@@ -52,6 +52,7 @@
     <button onclick="addSafeContact()" class="small-btn">Add Safe</button>
   </div>
 
+  <!-- Emergency Contacts -->
   <div class="section">
     <h2>Emergency Contacts</h2>
     <div id="emergency-contacts-list"></div>
