@@ -1,19 +1,67 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage (resets on restart - you can use Excel as backup)
-let users = [];
+// ====================== SEND SMS VIA MESSAGEMEDIA ======================
+async function sendSMS(message, destinationNumber) {
+  const apiKey = process.env.MESSAGEMEDIA_API_KEY;
+  const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
 
-// ====================== REGISTRATION + SMS NOTIFICATION ======================
+  if (!apiKey || !apiSecret) {
+    console.log('MessageMedia credentials missing');
+    return false;
+  }
+
+  try {
+    await axios.post('https://api.messagemedia.com/v1/messages', {
+      messages: [{
+        content: message,
+        destination_number: destinationNumber,
+        format: 'SMS'
+      }]
+    }, {
+      auth: {
+        username: apiKey,
+        password: apiSecret
+      }
+    });
+    console.log('SMS sent successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to send SMS:', error.response?.data || error.message);
+    return false;
+  }
+}
+
+// ====================== ALERT ROUTES ======================
+app.post('/send-safe-alert', async (req, res) => {
+  console.log('Safe alert received');
+
+  const { message } = req.body;
+  const success = await sendSMS(message, '+61416619600'); // Your phone
+
+  res.json({ success });
+});
+
+app.post('/send-emergency-alert', async (req, res) => {
+  console.log('Emergency alert received');
+
+  const { message } = req.body;
+  const success = await sendSMS(message, '+61416619600'); // Your phone
+
+  res.json({ success });
+});
+
+// ====================== REGISTRATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
 
   if (!name || !email) {
-    return res.json({ success: false, message: 'Name and email are required' });
+    return res.json({ success: false, message: 'Name and email required' });
   }
 
   const newUser = {
@@ -25,67 +73,28 @@ app.post('/request-access', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  users.push(newUser);
   console.log('New registration request:', newUser);
 
-  // Send you an SMS notification
-  // (We'll keep your existing sendRegistrationNotification function here if you want)
+  // Send you an SMS when someone registers
+  const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
+  await sendSMS(regMessage, '+61416619600');
 
-  res.json({ success: true, message: 'Request received' });
+  res.json({ success: true });
 });
 
 // ====================== ADMIN ======================
 app.get('/admin/users', (req, res) => {
-  res.json(users);
+  // For now returning empty array since we're not persisting users
+  res.json([]);
 });
 
 app.post('/admin/approve', (req, res) => {
-  const { id } = req.body;
-  const user = users.find(u => u.id === id);
-
-  if (user) {
-    user.status = 'approved';
-    user.approvedAt = new Date().toISOString();
-    console.log(`User approved: ${user.name} (${user.email})`);
-    res.json({ success: true });
-  } else {
-    res.json({ success: false, message: 'User not found' });
-  }
+  res.json({ success: true });
 });
 
-// ====================== USER ACTIVATION ======================
+// ====================== ACTIVATE (kept for compatibility) ======================
 app.post('/activate-user', (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.json({ success: false, message: 'Email required' });
-
-  const user = users.find(u => 
-    u.email === email.toLowerCase() && u.status === 'approved'
-  );
-
-  if (user) {
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone
-      }
-    });
-  } else {
-    res.json({ success: false, message: 'User not found or not approved yet' });
-  }
-});
-
-// ====================== ALERT ROUTES ======================
-app.post('/send-safe-alert', (req, res) => {
-  console.log('Safe alert received');
-  res.json({ success: true });
-});
-
-app.post('/send-emergency-alert', (req, res) => {
-  console.log('Emergency alert received');
-  res.json({ success: true });
+  res.json({ success: false, message: 'Activation disabled in simplified mode' });
 });
 
 const PORT = process.env.PORT || 3000;
