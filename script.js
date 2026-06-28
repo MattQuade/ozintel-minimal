@@ -1,7 +1,6 @@
 // ====================== USER NAME (localStorage) ======================
 let username = localStorage.getItem("ozintelUserName") || "";
 
-// Show name input if not set
 function checkUserName() {
   if (!username) {
     document.getElementById("name-section").style.display = "block";
@@ -26,7 +25,6 @@ let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
 function renderContacts() {
-  // Safe Arrival
   const safeList = document.getElementById("safe-contacts-list");
   safeList.innerHTML = '';
   safeContacts.forEach((c, i) => {
@@ -36,7 +34,6 @@ function renderContacts() {
     safeList.appendChild(div);
   });
 
-  // Emergency
   const emList = document.getElementById("emergency-contacts-list");
   emList.innerHTML = '';
   emergencyContacts.forEach((c, i) => {
@@ -81,7 +78,7 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== SEND ALERT ======================
+// ====================== SEND ALERT (Previous Working Version) ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
@@ -91,47 +88,38 @@ async function sendAlert(type) {
   }
   if (contacts.length === 0) return alert("Add at least one contact");
 
-  status.textContent = "Sending alert...";
-
-  let mapsLink = "Location unavailable";
+  status.textContent = "Getting location...";
 
   try {
     const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        timeout: 6000,
-        enableHighAccuracy: false
-      });
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
     });
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
-    mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
+    const mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
+
+    let extraInfo = "";
+    if (type === 'safe' && lastSafeTime) {
+      const timeDiff = timeSince(new Date(lastSafeTime));
+      const distance = (lastSafeLat && lastSafeLon) 
+        ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
+        : "0";
+      extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
+    }
 
     if (type === 'safe') {
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
     }
-  } catch (geoError) {
-    console.log("Could not get location — sending without it");
-  }
 
-  let extraInfo = "";
-  if (type === 'safe' && lastSafeTime) {
-    const timeDiff = timeSince(new Date(lastSafeTime));
-    const distance = (lastSafeLat && lastSafeLon) 
-      ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
-      : "0";
-    extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-  }
+    const message = type === 'safe' 
+      ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+      : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
 
-  const message = type === 'safe' 
-    ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
-    : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+    status.textContent = "Sending SMS...";
 
-  status.textContent = "Sending SMS...";
-
-  try {
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
 
     const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
@@ -143,7 +131,7 @@ async function sendAlert(type) {
     const data = await res.json();
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
-    status.textContent = "❌ Network error";
+    status.textContent = "❌ Error: " + e.message;
   }
 }
 
