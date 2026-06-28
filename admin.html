@@ -6,74 +6,111 @@
   <title>OzIntel Admin</title>
   <style>
     body { font-family: system-ui; background:#0f172a; color:white; padding:20px; }
-    table { width:100%; border-collapse:collapse; margin:20px 0; }
-    th, td { padding:12px; border:1px solid #475569; text-align:left; }
-    button { padding:8px 16px; background:#22c55e; color:white; border:none; border-radius:6px; cursor:pointer; }
-    .pending-row { background:#334155; }
+    h1 { color:#22d3ee; }
+    table { width:100%; border-collapse: collapse; margin-top:20px; }
+    th, td { padding:12px; border:1px solid #334155; text-align:left; }
+    th { background:#1e2937; }
+    .pending { color:#fbbf24; }
+    .approved { color:#22c55e; }
+    button { padding:8px 16px; margin:4px; border:none; border-radius:6px; cursor:pointer; }
+    .approve-btn { background:#22c55e; color:white; }
+    .section { margin:40px 0; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel Admin Panel</h1>
 
-  <h2>Pending Requests</h2>
-  <table id="pending-table"></table>
+  <div class="section">
+    <h2>Pending Approvals</h2>
+    <table id="pending-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Registered</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
-  <h2>Approved Users</h2>
-  <table id="approved-table"></table>
+  <div class="section">
+    <h2>Approved Users</h2>
+    <table id="approved-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Approved On</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
   <script>
-    async function loadData() {
-      const res = await fetch("https://ozintel-backend.onrender.com/admin/users");
-      const data = await res.json();
+    async function loadUsers() {
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/users');
+      const users = await res.json();
 
-      // Pending Requests
-      let html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Requested</th><th>Action</th></tr>`;
-      if (data.pending && data.pending.length > 0) {
-        data.pending.forEach(u => {
-          html += `<tr class="pending-row">
-            <td>${u.name}</td>
-            <td>${u.email}</td>
-            <td>${u.phone || '-'}</td>
-            <td>${new Date(u.requestedAt).toLocaleString()}</td>
-            <td><button onclick="approveUser(${u.id})">Approve</button></td>
-          </tr>`;
-        });
-      } else {
-        html += `<tr><td colspan="5" style="text-align:center; color:#94a3b8;">No pending requests</td></tr>`;
-      }
-      document.getElementById("pending-table").innerHTML = html;
+      // Pending users
+      const pendingBody = document.querySelector('#pending-table tbody');
+      pendingBody.innerHTML = '';
+      
+      const pendingUsers = users.filter(u => u.status === 'pending');
+      
+      pendingUsers.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td>${new Date(user.createdAt).toLocaleString()}</td>
+          <td><button class="approve-btn" onclick="approveUser(${user.id})">Approve</button></td>
+        `;
+        pendingBody.appendChild(row);
+      });
 
-      // Approved Users
-      html = `<tr><th>Name</th><th>Email</th><th>Phone</th><th>Approved</th></tr>`;
-      if (data.approved && data.approved.length > 0) {
-        data.approved.forEach(u => {
-          html += `<tr>
-            <td>${u.name}</td>
-            <td>${u.email}</td>
-            <td>${u.phone || '-'}</td>
-            <td>${new Date(u.approvedAt).toLocaleString()}</td>
-          </tr>`;
-        });
-      } else {
-        html += `<tr><td colspan="4" style="text-align:center; color:#94a3b8;">No approved users yet</td></tr>`;
-      }
-      document.getElementById("approved-table").innerHTML = html;
+      // Approved users
+      const approvedBody = document.querySelector('#approved-table tbody');
+      approvedBody.innerHTML = '';
+      
+      const approvedUsers = users.filter(u => u.status === 'approved');
+      
+      approvedUsers.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td>${user.approvedAt ? new Date(user.approvedAt).toLocaleString() : 'N/A'}</td>
+        `;
+        approvedBody.appendChild(row);
+      });
     }
 
     async function approveUser(id) {
-      if (confirm("Approve this user?")) {
-        await fetch("https://ozintel-backend.onrender.com/admin/approve", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ id })
-        });
-        loadData();
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        alert('User approved successfully');
+        loadUsers(); // Refresh the tables
+      } else {
+        alert('Failed to approve user');
       }
     }
 
-    // Auto refresh every 10 seconds
-    loadData();
-    setInterval(loadData, 10000);
+    // Load users on page load
+    loadUsers();
   </script>
 </body>
 </html>
