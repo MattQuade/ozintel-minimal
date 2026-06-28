@@ -5,122 +5,138 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OzIntel Admin</title>
   <style>
-    body { font-family: system-ui; background:#0f172a; color:white; padding:20px; }
-    h1 { color:#22d3ee; }
-    table { width:100%; border-collapse: collapse; margin-top:20px; }
-    th, td { padding:12px; border:1px solid #334155; text-align:left; }
-    th { background:#1e2937; }
-    button { padding:8px 16px; margin:4px; border:none; border-radius:6px; cursor:pointer; font-size:1rem; }
-    .approve-btn { background:#22c55e; color:white; }
-    .status-pending { color:#fbbf24; font-weight:bold; }
-    .status-approved { color:#22c55e; font-weight:bold; }
+    body {
+      font-family: system-ui;
+      background: #0f172a;
+      color: white;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { color: #22d3ee; }
+    h2 { margin-top: 40px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #334155;
+      text-align: left;
+    }
+    th { background: #1e2937; }
+    button {
+      padding: 8px 16px;
+      background: #22c55e;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    button:hover { background: #16a34a; }
+    .status {
+      font-weight: bold;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .pending { background: #854d0e; color: #fef08c; }
+    .approved { background: #166534; color: #bbf7d0; }
+    .refresh-btn {
+      background: #64748b;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel Admin Panel</h1>
 
-  <div>
-    <h2>Pending Approvals</h2>
-    <table id="pending-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Phone</th>
-          <th>Registered</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+  <button onclick="loadUsers()" class="refresh-btn">🔄 Refresh List</button>
 
-  <div style="margin-top:50px;">
-    <h2>All Users</h2>
-    <table id="all-users-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Phone</th>
-          <th>Status</th>
-          <th>Registered</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+  <h2>Pending Registrations</h2>
+  <table id="pending-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Registered</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Approved Users</h2>
+  <table id="approved-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Approved On</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
   <script>
     async function loadUsers() {
-      try {
-        const res = await fetch('https://ozintel-backend.onrender.com/admin/users');
-        const users = await res.json();
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/users');
+      const users = await res.json();
 
-        // Pending table
-        const pendingBody = document.querySelector('#pending-table tbody');
-        pendingBody.innerHTML = '';
-        const pendingUsers = users.filter(u => u.status === 'pending');
+      // Pending table
+      const pendingBody = document.querySelector('#pending-table tbody');
+      pendingBody.innerHTML = '';
 
-        pendingUsers.forEach(user => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${user.name}</td>
-            <td>${user.email}</td>
-            <td>${user.phone || '-'}</td>
-            <td>${new Date(user.createdAt).toLocaleString()}</td>
-            <td><button class="approve-btn" onclick="approveUser(${user.id}, this)">Approve</button></td>
-          `;
-          pendingBody.appendChild(row);
-        });
+      const pendingUsers = users.filter(u => u.status === 'pending');
+      pendingUsers.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td>${new Date(user.createdAt).toLocaleString()}</td>
+          <td><button onclick="approveUser(${user.id}, this)">Approve</button></td>
+        `;
+        pendingBody.appendChild(row);
+      });
 
-        // All users table
-        const allBody = document.querySelector('#all-users-table tbody');
-        allBody.innerHTML = '';
+      // Approved table
+      const approvedBody = document.querySelector('#approved-table tbody');
+      approvedBody.innerHTML = '';
 
-        users.forEach(user => {
-          const statusClass = user.status === 'approved' ? 'status-approved' : 'status-pending';
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${user.name}</td>
-            <td>${user.email}</td>
-            <td>${user.phone || '-'}</td>
-            <td class="${statusClass}">${user.status.toUpperCase()}</td>
-            <td>${new Date(user.createdAt).toLocaleString()}</td>
-          `;
-          allBody.appendChild(row);
-        });
-
-      } catch (error) {
-        console.error('Failed to load users:', error);
-        alert('Failed to load users from server');
-      }
+      const approvedUsers = users.filter(u => u.status === 'approved');
+      approvedUsers.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td>${user.approvedAt ? new Date(user.approvedAt).toLocaleString() : 'N/A'}</td>
+        `;
+        approvedBody.appendChild(row);
+      });
     }
 
     async function approveUser(id, button) {
       button.disabled = true;
       button.textContent = 'Approving...';
 
-      try {
-        const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
-        });
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
 
-        const data = await res.json();
+      const data = await res.json();
 
-        if (data.success) {
-          alert('User approved successfully');
-          loadUsers(); // Refresh both tables
-        } else {
-          alert('Failed to approve: ' + (data.message || 'Unknown error'));
-          button.disabled = false;
-          button.textContent = 'Approve';
-        }
-      } catch (error) {
-        console.error('Approve error:', error);
-        alert('Error approving user');
+      if (data.success) {
+        alert('User approved');
+        loadUsers();
+      } else {
+        alert('Failed to approve user');
         button.disabled = false;
         button.textContent = 'Approve';
       }
