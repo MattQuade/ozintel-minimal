@@ -18,20 +18,19 @@
     #new-emergency-phone, #new-emergency-name { width: 38% !important; }
     .small-btn { padding:10px 20px; font-size:1rem; }
     .contact-item { background:#334155; padding:12px; margin:10px auto; border-radius:8px; max-width:400px; text-align:left; }
-    .activation-box { background:#1e2937; padding:20px; border-radius:12px; margin:20px auto; max-width:400px; }
     .register-btn { background:#64748b; padding:12px 30px; font-size:1rem; width:auto; max-width:300px; }
+    .name-box { background:#1e2937; padding:15px; border-radius:10px; margin:20px auto; max-width:400px; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel</h1>
   <p>Alert System</p>
 
-  <!-- Activation Section -->
-  <div id="activation-section" class="activation-box" style="display:none;">
-    <h3>Activate Your Profile</h3>
-    <p>Enter the email you used to register.</p>
-    <input type="email" id="activate-email" placeholder="Your registered email">
-    <button onclick="activateProfile()" class="small-btn">Activate Profile</button>
+  <!-- Name Section (only shows if no name is set) -->
+  <div id="name-section" class="name-box" style="display:none;">
+    <p><strong>Set your name for alerts</strong></p>
+    <input type="text" id="user-name" placeholder="Your Full Name">
+    <button onclick="saveUserName()" class="small-btn">Save Name</button>
   </div>
 
   <!-- Big Alert Buttons -->
