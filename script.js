@@ -1,18 +1,26 @@
-// ====================== USER NAME (localStorage) ======================
+// ====================== USER DETAILS (localStorage) ======================
 let username = localStorage.getItem("ozintelUserName") || "";
+let userEmail = localStorage.getItem("ozintelUserEmail") || "";
 
-function checkUserName() {
-  if (!username) {
+function checkUserDetails() {
+  if (!username || !userEmail) {
     document.getElementById("name-section").style.display = "block";
   }
 }
 
-function saveUserName() {
-  const nameInput = document.getElementById("user-name").value.trim();
-  if (!nameInput) return alert("Please enter your name");
+function saveUserDetails() {
+  const name = document.getElementById("user-name").value.trim();
+  const email = document.getElementById("user-email").value.trim();
 
-  localStorage.setItem("ozintelUserName", nameInput);
-  username = nameInput;
+  if (!name || !email) {
+    return alert("Please enter both name and email");
+  }
+
+  localStorage.setItem("ozintelUserName", name);
+  localStorage.setItem("ozintelUserEmail", email);
+  username = name;
+  userEmail = email;
+
   document.getElementById("name-section").style.display = "none";
 }
 
@@ -78,7 +86,7 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== SEND ALERT (Previous Working Version) ======================
+// ====================== SEND ALERT ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
@@ -88,50 +96,63 @@ async function sendAlert(type) {
   }
   if (contacts.length === 0) return alert("Add at least one contact");
 
-  status.textContent = "Getting location...";
+  status.textContent = "Sending alert...";
+
+  let mapsLink = "Location unavailable";
 
   try {
     const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 6000,
+        enableHighAccuracy: false
+      });
     });
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
-    const mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    let extraInfo = "";
-    if (type === 'safe' && lastSafeTime) {
-      const timeDiff = timeSince(new Date(lastSafeTime));
-      const distance = (lastSafeLat && lastSafeLon) 
-        ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
-        : "0";
-      extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-    }
+    mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
 
     if (type === 'safe') {
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
     }
+  } catch (e) {
+    console.log("Location not available");
+  }
 
-    const message = type === 'safe' 
-      ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
-      : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+  let extraInfo = "";
+  if (type === 'safe' && lastSafeTime && lastSafeLat && lastSafeLon) {
+    const timeDiff = timeSince(new Date(lastSafeTime));
+    const distance = calculateDistance(lastSafeLat, lastSafeLon, 
+      parseFloat(localStorage.getItem("lastSafeLat")), 
+      parseFloat(localStorage.getItem("lastSafeLon"))).toFixed(1);
+    extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
+  }
 
-    status.textContent = "Sending SMS...";
+  const message = type === 'safe' 
+    ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+    : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
 
+  status.textContent = "Sending SMS...";
+
+  try {
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
 
     const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts, message })
+      body: JSON.stringify({ 
+        contacts, 
+        message,
+        email: userEmail 
+      })
     });
 
     const data = await res.json();
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
-    status.textContent = "❌ Error: " + e.message;
+    status.textContent = "❌ Network error";
   }
 }
 
@@ -159,9 +180,9 @@ function sendEmergencyAlert() { sendAlert('emergency'); }
 // ====================== INIT ======================
 function init() {
   renderContacts();
-  checkUserName();
+  checkUserDetails();
 
-  if (!username) {
+  if (!username || !userEmail) {
     document.getElementById("name-section").style.display = "block";
   }
 }
