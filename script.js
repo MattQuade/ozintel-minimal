@@ -26,7 +26,7 @@ let lastSafeLat = parseFloat(localStorage.getItem("lastSafeLat"));
 let lastSafeLon = parseFloat(localStorage.getItem("lastSafeLon"));
 
 function renderContacts() {
-  // Safe
+  // Safe Arrival
   const safeList = document.getElementById("safe-contacts-list");
   safeList.innerHTML = '';
   safeContacts.forEach((c, i) => {
@@ -81,48 +81,57 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== SEND ALERTS ======================
+// ====================== SEND ALERT (Improved) ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
 
   if (!username) {
-    return alert("Please set your name first (at the top of the page).");
+    return alert("Please set your name first.");
   }
   if (contacts.length === 0) return alert("Add at least one contact");
 
   status.textContent = "Getting location...";
 
+  let mapsLink = "Location unavailable";
+
   try {
     const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 15000,
+        enableHighAccuracy: true
+      });
     });
 
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
-    const mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    let extraInfo = "";
-    if (type === 'safe' && lastSafeTime) {
-      const timeDiff = timeSince(new Date(lastSafeTime));
-      const distance = (lastSafeLat && lastSafeLon) 
-        ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
-        : "0";
-      extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
-    }
+    mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
 
     if (type === 'safe') {
       localStorage.setItem("lastSafeTime", new Date().toISOString());
       localStorage.setItem("lastSafeLat", lat);
       localStorage.setItem("lastSafeLon", lon);
     }
+  } catch (geoError) {
+    console.log("Geolocation failed — sending without location");
+  }
 
-    const message = type === 'safe' 
-      ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
-      : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
+  let extraInfo = "";
+  if (type === 'safe' && lastSafeTime) {
+    const timeDiff = timeSince(new Date(lastSafeTime));
+    const distance = (lastSafeLat && lastSafeLon) 
+      ? calculateDistance(lastSafeLat, lastSafeLon, lat, lon).toFixed(1) 
+      : "0";
+    extraInfo = `\n\nPrevious alert: ${timeDiff} ago\nDistance from previous: ${distance} km`;
+  }
 
-    status.textContent = "Sending SMS...";
+  const message = type === 'safe' 
+    ? `✅ OzIntel - ${username} - SAFE ARRIVAL\nI'm OK. Current location: ${mapsLink}${extraInfo}`
+    : `🚨 OzIntel - ${username} - EMERGENCY\nI need help! Current location: ${mapsLink}`;
 
+  status.textContent = "Sending SMS...";
+
+  try {
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
 
     const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
@@ -134,7 +143,7 @@ async function sendAlert(type) {
     const data = await res.json();
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
-    status.textContent = "❌ Error: " + e.message;
+    status.textContent = "❌ Network error";
   }
 }
 
@@ -150,7 +159,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + 
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
 }
@@ -163,7 +173,6 @@ function init() {
   renderContacts();
   checkUserName();
 
-  // Show name section if no name is saved
   if (!username) {
     document.getElementById("name-section").style.display = "block";
   }
