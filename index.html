@@ -3,147 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OzIntel Admin</title>
+  <title>OzIntel</title>
+  <link rel="manifest" href="manifest.json">
   <style>
-    body {
-      font-family: system-ui;
-      background: #0f172a;
-      color: white;
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    h1 { color: #22d3ee; }
-    h2 { margin-top: 40px; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-    th, td {
-      padding: 12px;
-      border: 1px solid #334155;
-      text-align: left;
-    }
-    th { background: #1e2937; }
-    button {
-      padding: 8px 16px;
-      background: #22c55e;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-    button:hover { background: #16a34a; }
-    .status {
-      font-weight: bold;
-      padding: 4px 10px;
-      border-radius: 4px;
-    }
-    .pending { background: #854d0e; color: #fef08c; }
-    .approved { background: #166534; color: #bbf7d0; }
-    .refresh-btn {
-      background: #64748b;
-      margin-bottom: 20px;
-    }
+    body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
+    h1 { color:#22d3ee; }
+    button { padding:20px; font-size:1.3rem; margin:15px; border:none; border-radius:12px; width:90%; max-width:400px; }
+    .safe { background:#22c55e; }
+    .emergency { background:#ef4444; }
+    .status { margin:20px; font-size:1.1rem; min-height:40px; }
+    input { padding:12px; margin:8px 4px; font-size:1rem; border-radius:8px; }
+    .section { margin:30px 0; border-top:1px solid #334155; padding-top:20px; }
+    #new-safe-phone, #new-safe-name,
+    #new-emergency-phone, #new-emergency-name { width: 38% !important; }
+    .small-btn { padding:10px 20px; font-size:1rem; }
+    .contact-item { background:#334155; padding:12px; margin:10px auto; border-radius:8px; max-width:400px; text-align:left; }
+    .activation-box { background:#1e2937; padding:20px; border-radius:12px; margin:20px auto; max-width:400px; }
+    .register-btn { background:#64748b; padding:12px 30px; font-size:1rem; width:auto; max-width:300px; }
   </style>
 </head>
 <body>
-  <h1>🛡️ OzIntel Admin Panel</h1>
+  <h1>🛡️ OzIntel</h1>
+  <p>Alert System</p>
 
-  <button onclick="loadUsers()" class="refresh-btn">🔄 Refresh List</button>
+  <!-- Activation Section -->
+  <div id="activation-section" class="activation-box" style="display:none;">
+    <h3>Activate Your Profile</h3>
+    <p>Enter the email you used to register.</p>
+    <input type="email" id="activate-email" placeholder="Your registered email">
+    <button onclick="activateProfile()" class="small-btn">Activate Profile</button>
+  </div>
 
-  <h2>Pending Registrations</h2>
-  <table id="pending-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Registered</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <!-- Big Alert Buttons -->
+  <button class="safe" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
+  <button class="emergency" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
 
-  <h2>Approved Users</h2>
-  <table id="approved-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Approved On</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <!-- Register Button -->
+  <button onclick="window.location.href='signup.html'" class="register-btn">
+    👤 Register New User
+  </button>
 
-  <script>
-    async function loadUsers() {
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/users');
-      const users = await res.json();
+  <!-- Safe Arrival Contacts -->
+  <div class="section">
+    <h2>Safe Arrival Contacts</h2>
+    <div id="safe-contacts-list"></div>
+    <input type="tel" id="new-safe-phone" placeholder="+61412345678">
+    <input type="text" id="new-safe-name" placeholder="Name">
+    <button onclick="addSafeContact()" class="small-btn">Add Safe</button>
+  </div>
 
-      // Pending table
-      const pendingBody = document.querySelector('#pending-table tbody');
-      pendingBody.innerHTML = '';
+  <!-- Emergency Contacts -->
+  <div class="section">
+    <h2>Emergency Contacts</h2>
+    <div id="emergency-contacts-list"></div>
+    <input type="tel" id="new-emergency-phone" placeholder="+61412345678">
+    <input type="text" id="new-emergency-name" placeholder="Name">
+    <button onclick="addEmergencyContact()" class="small-btn">Add Emergency</button>
+  </div>
 
-      const pendingUsers = users.filter(u => u.status === 'pending');
-      pendingUsers.forEach(user => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td>${new Date(user.createdAt).toLocaleString()}</td>
-          <td><button onclick="approveUser(${user.id}, this)">Approve</button></td>
-        `;
-        pendingBody.appendChild(row);
-      });
+  <p id="status" class="status"></p>
 
-      // Approved table
-      const approvedBody = document.querySelector('#approved-table tbody');
-      approvedBody.innerHTML = '';
-
-      const approvedUsers = users.filter(u => u.status === 'approved');
-      approvedUsers.forEach(user => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td>${user.approvedAt ? new Date(user.approvedAt).toLocaleString() : 'N/A'}</td>
-        `;
-        approvedBody.appendChild(row);
-      });
-    }
-
-    async function approveUser(id, button) {
-      button.disabled = true;
-      button.textContent = 'Approving...';
-
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        alert('User approved');
-        loadUsers();
-      } else {
-        alert('Failed to approve user');
-        button.disabled = false;
-        button.textContent = 'Approve';
-      }
-    }
-
-    // Load users when page opens
-    loadUsers();
-  </script>
+  <script src="script.js"></script>
 </body>
 </html>
