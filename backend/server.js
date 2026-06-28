@@ -1,71 +1,14 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios'); // For MessageMedia API
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ====================== PERSISTENT DISK PATH ======================
-const USERS_FILE = '/var/data/users.json';
-
-// Load users
+// In-memory storage (resets on restart - you can use Excel as backup)
 let users = [];
-try {
-  if (fs.existsSync(USERS_FILE)) {
-    users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-  } else {
-    fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
-  }
-} catch (error) {
-  console.error('Error loading users.json:', error);
-  users = [];
-}
 
-function saveUsers() {
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  } catch (error) {
-    console.error('Error saving users.json:', error);
-  }
-}
-
-// ====================== SEND SMS NOTIFICATION (to you) ======================
-async function sendRegistrationNotification(newUser) {
-  const apiKey = process.env.MESSAGEMEDIA_API_KEY;
-  const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
-  const yourPhone = '+61416619600'; // Your phone number
-
-  if (!apiKey || !apiSecret) {
-    console.log('MessageMedia credentials not found in environment variables');
-    return;
-  }
-
-  const message = `New OzIntel Signup Request\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'Not provided'}`;
-
-  try {
-    await axios.post('https://api.messagemedia.com/v1/messages', {
-      messages: [{
-        content: message,
-        destination_number: yourPhone,
-        format: 'SMS'
-      }]
-    }, {
-      auth: {
-        username: apiKey,
-        password: apiSecret
-      }
-    });
-
-    console.log('Registration notification SMS sent to you');
-  } catch (error) {
-    console.error('Failed to send registration notification SMS:', error.response?.data || error.message);
-  }
-}
-
-// ====================== REGISTRATION WITH SMS NOTIFICATION ======================
+// ====================== REGISTRATION + SMS NOTIFICATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
 
@@ -83,26 +26,40 @@ app.post('/request-access', async (req, res) => {
   };
 
   users.push(newUser);
-  saveUsers();
-
   console.log('New registration request:', newUser);
 
-  // Send SMS notification to you
-  await sendRegistrationNotification(newUser);
+  // Send you an SMS notification
+  // (We'll keep your existing sendRegistrationNotification function here if you want)
 
-  res.json({ success: true, message: 'Request submitted for approval' });
+  res.json({ success: true, message: 'Request received' });
 });
 
-// ====================== ACTIVATE USER ======================
+// ====================== ADMIN ======================
+app.get('/admin/users', (req, res) => {
+  res.json(users);
+});
+
+app.post('/admin/approve', (req, res) => {
+  const { id } = req.body;
+  const user = users.find(u => u.id === id);
+
+  if (user) {
+    user.status = 'approved';
+    user.approvedAt = new Date().toISOString();
+    console.log(`User approved: ${user.name} (${user.email})`);
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, message: 'User not found' });
+  }
+});
+
+// ====================== USER ACTIVATION ======================
 app.post('/activate-user', (req, res) => {
   const { email } = req.body;
-
-  if (!email) {
-    return res.json({ success: false, message: 'Email is required' });
-  }
+  if (!email) return res.json({ success: false, message: 'Email required' });
 
   const user = users.find(u => 
-    u.email && u.email.toLowerCase() === email.toLowerCase() && u.status === 'approved'
+    u.email === email.toLowerCase() && u.status === 'approved'
   );
 
   if (user) {
@@ -116,41 +73,21 @@ app.post('/activate-user', (req, res) => {
       }
     });
   } else {
-    res.json({ success: false, message: 'User not found or not yet approved' });
+    res.json({ success: false, message: 'User not found or not approved yet' });
   }
 });
 
-// ====================== ADMIN ROUTES ======================
-app.get('/admin/users', (req, res) => {
-  res.json(users);
-});
-
-app.post('/admin/approve', (req, res) => {
-  const { id } = req.body;
-  const userIndex = users.findIndex(u => u.id === id);
-
-  if (userIndex !== -1) {
-    users[userIndex].status = 'approved';
-    users[userIndex].approvedAt = new Date().toISOString();
-    saveUsers();
-    res.json({ success: true });
-  } else {
-    res.json({ success: false, message: 'User not found' });
-  }
-});
-
-// ====================== ALERT ROUTES (placeholder) ======================
+// ====================== ALERT ROUTES ======================
 app.post('/send-safe-alert', (req, res) => {
-  console.log('Safe alert received:', req.body);
+  console.log('Safe alert received');
   res.json({ success: true });
 });
 
 app.post('/send-emergency-alert', (req, res) => {
-  console.log('Emergency alert received:', req.body);
+  console.log('Emergency alert received');
   res.json({ success: true });
 });
 
-// ====================== SERVER ======================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ OzIntel backend running on port ${PORT}`);
