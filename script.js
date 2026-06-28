@@ -81,7 +81,7 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== SEND ALERT (Improved) ======================
+// ====================== SEND ALERT ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
@@ -91,15 +91,15 @@ async function sendAlert(type) {
   }
   if (contacts.length === 0) return alert("Add at least one contact");
 
-  status.textContent = "Getting location...";
+  status.textContent = "Sending alert...";
 
   let mapsLink = "Location unavailable";
 
   try {
     const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        timeout: 15000,
-        enableHighAccuracy: true
+        timeout: 6000,
+        enableHighAccuracy: false
       });
     });
 
@@ -113,7 +113,7 @@ async function sendAlert(type) {
       localStorage.setItem("lastSafeLon", lon);
     }
   } catch (geoError) {
-    console.log("Geolocation failed — sending without location");
+    console.log("Could not get location — sending without it");
   }
 
   let extraInfo = "";
