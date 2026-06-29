@@ -1,30 +1,7 @@
-// ====================== USER DETAILS (localStorage) ======================
-let username = localStorage.getItem("ozintelUserName") || "";
-let userEmail = localStorage.getItem("ozintelUserEmail") || "";
+let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
+let username = currentUser ? currentUser.name : "";
+let userEmail = currentUser ? currentUser.email : "";
 
-function checkUserDetails() {
-  if (!username || !userEmail) {
-    document.getElementById("name-section").style.display = "block";
-  }
-}
-
-function saveUserDetails() {
-  const name = document.getElementById("user-name").value.trim();
-  const email = document.getElementById("user-email").value.trim();
-
-  if (!name || !email) {
-    return alert("Please enter both name and email");
-  }
-
-  localStorage.setItem("ozintelUserName", name);
-  localStorage.setItem("ozintelUserEmail", email);
-  username = name;
-  userEmail = email;
-
-  document.getElementById("name-section").style.display = "none";
-}
-
-// ====================== CONTACTS ======================
 let safeContacts = JSON.parse(localStorage.getItem("safeContacts")) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem("emergencyContacts")) || [];
 
@@ -59,8 +36,6 @@ function addSafeContact() {
   safeContacts.push({ name, phone });
   localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
   renderContacts();
-  document.getElementById("new-safe-phone").value = "";
-  document.getElementById("new-safe-name").value = "";
 }
 
 function addEmergencyContact() {
@@ -70,8 +45,6 @@ function addEmergencyContact() {
   emergencyContacts.push({ name, phone });
   localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
   renderContacts();
-  document.getElementById("new-emergency-phone").value = "";
-  document.getElementById("new-emergency-name").value = "";
 }
 
 function removeSafe(i) {
@@ -86,14 +59,14 @@ function removeEmergency(i) {
   renderContacts();
 }
 
-// ====================== SEND ALERT ======================
 async function sendAlert(type) {
   const contacts = type === 'safe' ? safeContacts : emergencyContacts;
   const status = document.getElementById("status");
 
-  if (!username) {
-    return alert("Please set your name first.");
+  if (!currentUser) {
+    return alert("Please activate your account first after admin approval.");
   }
+
   if (contacts.length === 0) return alert("Add at least one contact");
 
   status.textContent = "Sending alert...";
@@ -102,24 +75,12 @@ async function sendAlert(type) {
 
   try {
     const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        timeout: 6000,
-        enableHighAccuracy: false
-      });
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
     });
-
     const lat = pos.coords.latitude;
     const lon = pos.coords.longitude;
     mapsLink = `https://www.google.com/maps?q=${lat.toFixed(6)},${lon.toFixed(6)}`;
-
-    if (type === 'safe') {
-      localStorage.setItem("lastSafeTime", new Date().toISOString());
-      localStorage.setItem("lastSafeLat", lat);
-      localStorage.setItem("lastSafeLon", lon);
-    }
-  } catch (e) {
-    console.log("Location not available");
-  }
+  } catch (e) {}
 
   let extraInfo = "";
   if (type === 'safe' && lastSafeTime && lastSafeLat && lastSafeLon) {
@@ -138,21 +99,15 @@ async function sendAlert(type) {
 
   try {
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
-
     const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        contacts, 
-        message,
-        email: userEmail 
-      })
+      body: JSON.stringify({ contacts, message, email: userEmail })
     });
-
     const data = await res.json();
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
-    status.textContent = "❌ Network error";
+    status.textContent = "❌ Error sending alert";
   }
 }
 
@@ -168,8 +123,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + 
-            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
 }
@@ -177,14 +131,41 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function sendSafeAlert() { sendAlert('safe'); }
 function sendEmergencyAlert() { sendAlert('emergency'); }
 
-// ====================== INIT ======================
-function init() {
-  renderContacts();
-  checkUserDetails();
+async function activateProfile() {
+  const email = document.getElementById("activate-email").value.trim();
+  if (!email) return alert("Please enter your email");
 
-  if (!username || !userEmail) {
-    document.getElementById("name-section").style.display = "block";
+  const status = document.getElementById("status");
+  status.textContent = "Checking approval...";
+
+  try {
+    const res = await fetch("https://ozintel-backend.onrender.com/activate-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if (data.success && data.user) {
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      currentUser = data.user;
+      username = data.user.name;
+      userEmail = data.user.email;
+      document.getElementById("activation-section").style.display = "none";
+      status.textContent = `✅ Account activated as ${username}`;
+    } else {
+      status.textContent = "❌ " + (data.message || "Not approved yet");
+    }
+  } catch (e) {
+    status.textContent = "❌ Error checking approval";
   }
 }
 
+// Init
+function init() {
+  renderContacts();
+  if (!currentUser) {
+    document.getElementById("activation-section").style.display = "block";
+  }
+}
 init();
