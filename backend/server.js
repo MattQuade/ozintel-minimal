@@ -53,7 +53,10 @@ async function sendSMS(message, destinationNumber) {
   const apiKey = process.env.MESSAGEMEDIA_API_KEY;
   const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
 
-  if (!apiKey || !apiSecret) return false;
+  if (!apiKey || !apiSecret) {
+    console.log('MessageMedia credentials missing');
+    return false;
+  }
 
   try {
     await axios.post('https://api.messagemedia.com/v1/messages', {
@@ -68,9 +71,10 @@ async function sendSMS(message, destinationNumber) {
         password: apiSecret
       }
     });
+    console.log('SMS sent successfully to', destinationNumber);
     return true;
   } catch (error) {
-    console.error('SMS Error:', error.response?.data || error.message);
+    console.error('Failed to send SMS:', error.response?.data || error.message);
     return false;
   }
 }
@@ -78,7 +82,10 @@ async function sendSMS(message, destinationNumber) {
 // ====================== REGISTRATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
-  if (!name || !email) return res.json({ success: false, message: 'Name and email required' });
+
+  if (!name || !email) {
+    return res.json({ success: false, message: 'Name and email are required' });
+  }
 
   const newUser = {
     id: Date.now(),
@@ -92,10 +99,12 @@ app.post('/request-access', async (req, res) => {
   users.push(newUser);
   saveUsers();
 
+  console.log('New registration request:', newUser);
+
   const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
   await sendSMS(regMessage, '+61416619600');
 
-  res.json({ success: true });
+  res.json({ success: true, message: 'Request submitted for approval' });
 });
 
 // ====================== ADMIN ROUTES ======================
@@ -150,24 +159,44 @@ app.post('/activate-user', (req, res) => {
   }
 });
 
-// ====================== ALERT ROUTES ======================
+// ====================== ALERT ROUTES (SENDS TO USER'S CONTACTS) ======================
 app.post('/send-safe-alert', async (req, res) => {
-  const { email, message } = req.body;
+  const { contacts, message, email } = req.body;
+
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Blocked' });
+    return res.json({ success: false, message: 'Your account has been blocked' });
   }
-  const success = await sendSMS(message, '+61416619600');
-  res.json({ success });
+
+  console.log('Safe alert received from:', email || 'unknown');
+
+  let successCount = 0;
+  for (const contact of contacts) {
+    const sent = await sendSMS(message, contact.phone);
+    if (sent) successCount++;
+  }
+
+  res.json({ success: successCount > 0 });
 });
 
 app.post('/send-emergency-alert', async (req, res) => {
-  const { email, message } = req.body;
+  const { contacts, message, email } = req.body;
+
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Blocked' });
+    return res.json({ success: false, message: 'Your account has been blocked' });
   }
-  const success = await sendSMS(message, '+61416619600');
-  res.json({ success });
+
+  console.log('Emergency alert received from:', email || 'unknown');
+
+  let successCount = 0;
+  for (const contact of contacts) {
+    const sent = await sendSMS(message, contact.phone);
+    if (sent) successCount++;
+  }
+
+  res.json({ success: successCount > 0 });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ OzIntel backend running on port ${PORT}`);
+});
