@@ -1,67 +1,20 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ====================== SEND SMS VIA MESSAGEMEDIA ======================
-async function sendSMS(message, destinationNumber) {
-  const apiKey = process.env.MESSAGEMEDIA_API_KEY;
-  const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
-
-  if (!apiKey || !apiSecret) {
-    console.log('MessageMedia credentials missing');
-    return false;
-  }
-
-  try {
-    await axios.post('https://api.messagemedia.com/v1/messages', {
-      messages: [{
-        content: message,
-        destination_number: destinationNumber,
-        format: 'SMS'
-      }]
-    }, {
-      auth: {
-        username: apiKey,
-        password: apiSecret
-      }
-    });
-    console.log('SMS sent successfully');
-    return true;
-  } catch (error) {
-    console.error('Failed to send SMS:', error.response?.data || error.message);
-    return false;
-  }
-}
-
-// ====================== ALERT ROUTES ======================
-app.post('/send-safe-alert', async (req, res) => {
-  console.log('Safe alert received');
-
-  const { message } = req.body;
-  const success = await sendSMS(message, '+61416619600'); // Your phone
-
-  res.json({ success });
-});
-
-app.post('/send-emergency-alert', async (req, res) => {
-  console.log('Emergency alert received');
-
-  const { message } = req.body;
-  const success = await sendSMS(message, '+61416619600'); // Your phone
-
-  res.json({ success });
-});
+// ====================== IN-MEMORY STORAGE ======================
+let users = [];
+let blockedEmails = new Set(); // Blocked email addresses
 
 // ====================== REGISTRATION ======================
-app.post('/request-access', async (req, res) => {
+app.post('/request-access', (req, res) => {
   const { name, email, phone } = req.body;
 
   if (!name || !email) {
-    return res.json({ success: false, message: 'Name and email required' });
+    return res.json({ success: false, message: 'Name and email are required' });
   }
 
   const newUser = {
@@ -73,28 +26,95 @@ app.post('/request-access', async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
+  users.push(newUser);
   console.log('New registration request:', newUser);
 
-  // Send you an SMS when someone registers
-  const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
-  await sendSMS(regMessage, '+61416619600');
-
-  res.json({ success: true });
+  res.json({ success: true, message: 'Request submitted for approval' });
 });
 
 // ====================== ADMIN ======================
 app.get('/admin/users', (req, res) => {
-  // For now returning empty array since we're not persisting users
-  res.json([]);
+  res.json(users);
 });
 
 app.post('/admin/approve', (req, res) => {
+  const { id } = req.body;
+  const user = users.find(u => u.id === id);
+
+  if (user) {
+    user.status = 'approved';
+    user.approvedAt = new Date().toISOString();
+    console.log(`User approved: ${user.email}`);
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, message: 'User not found' });
+  }
+});
+
+// ====================== ACTIVATE USER ======================
+app.post('/activate-user', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.json({ success: false, message: 'Email is required' });
+
+  const user = users.find(u => 
+    u.email === email.toLowerCase() && u.status === 'approved'
+  );
+
+  if (user) {
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone
+      }
+    });
+  } else {
+    res.json({ success: false, message: 'User not found or not yet approved' });
+  }
+});
+
+// ====================== ALERT ROUTES (with blocking) ======================
+app.post('/send-safe-alert', (req, res) => {
+  const { email } = req.body;
+
+  if (email && blockedEmails.has(email.toLowerCase())) {
+    return res.json({ success: false, message: 'Your account has been blocked' });
+  }
+
+  console.log('Safe alert received from:', email || 'unknown');
   res.json({ success: true });
 });
 
-// ====================== ACTIVATE (kept for compatibility) ======================
-app.post('/activate-user', (req, res) => {
-  res.json({ success: false, message: 'Activation disabled in simplified mode' });
+app.post('/send-emergency-alert', (req, res) => {
+  const { email } = req.body;
+
+  if (email && blockedEmails.has(email.toLowerCase())) {
+    return res.json({ success: false, message: 'Your account has been blocked' });
+  }
+
+  console.log('Emergency alert received from:', email || 'unknown');
+  res.json({ success: true });
+});
+
+// ====================== BLOCK / UNBLOCK ======================
+app.post('/admin/block', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.json({ success: false, message: 'Email required' });
+
+  blockedEmails.add(email.toLowerCase());
+  console.log(`Email blocked: ${email}`);
+  res.json({ success: true });
+});
+
+app.post('/admin/unblock', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.json({ success: false, message: 'Email required' });
+
+  blockedEmails.delete(email.toLowerCase());
+  console.log(`Email unblocked: ${email}`);
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;
