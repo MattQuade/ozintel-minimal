@@ -1,18 +1,52 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const axios = require('axios');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ====================== PERSISTENT DISK ======================
+const USERS_FILE = '/var/data/users.json';
+
+let users = [];
+let blockedEmails = new Set();
+
+// Load users from disk on startup
+function loadUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+      console.log(`Loaded ${users.length} users from disk`);
+    } else {
+      fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
+      console.log('Created new users.json file on disk');
+    }
+  } catch (error) {
+    console.error('Error loading users from disk:', error);
+    users = [];
+  }
+}
+
+// Save users to disk
+function saveUsers() {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    console.log('Users saved to disk successfully');
+  } catch (error) {
+    console.error('Error saving users to disk:', error);
+  }
+}
+
+// Load users when server starts
+loadUsers();
+
 // ====================== ADMIN PASSWORD ======================
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "change-this-password";
 
-// Middleware to protect admin routes
 function requireAdminPassword(req, res, next) {
   const password = req.body.password || req.query.password;
-
   if (password !== ADMIN_PASSWORD) {
     return res.status(401).json({ success: false, message: 'Invalid admin password' });
   }
@@ -50,10 +84,6 @@ async function sendSMS(message, destinationNumber) {
   }
 }
 
-// ====================== IN-MEMORY STORAGE ======================
-let users = [];
-let blockedEmails = new Set();
-
 // ====================== REGISTRATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
@@ -72,6 +102,8 @@ app.post('/request-access', async (req, res) => {
   };
 
   users.push(newUser);
+  saveUsers(); // Save to disk
+
   console.log('New registration request:', newUser);
 
   const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
@@ -80,7 +112,7 @@ app.post('/request-access', async (req, res) => {
   res.json({ success: true, message: 'Request submitted for approval' });
 });
 
-// ====================== ADMIN ROUTES (Protected) ======================
+// ====================== ADMIN ROUTES ======================
 app.get('/admin/users', requireAdminPassword, (req, res) => {
   res.json(users);
 });
@@ -92,6 +124,7 @@ app.post('/admin/approve', requireAdminPassword, (req, res) => {
   if (user) {
     user.status = 'approved';
     user.approvedAt = new Date().toISOString();
+    saveUsers(); // Save to disk
     console.log(`User approved: ${user.email}`);
     res.json({ success: true });
   } else {
