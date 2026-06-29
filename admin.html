@@ -5,145 +5,170 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OzIntel Admin</title>
   <style>
-    body {
-      font-family: system-ui;
-      background: #0f172a;
-      color: white;
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    h1 { color: #22d3ee; }
-    h2 { margin-top: 40px; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-    th, td {
-      padding: 12px;
-      border: 1px solid #334155;
-      text-align: left;
-    }
-    th { background: #1e2937; }
-    button {
-      padding: 8px 16px;
-      background: #22c55e;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.95rem;
-    }
-    button:hover { background: #16a34a; }
-    .status {
-      font-weight: bold;
-      padding: 4px 10px;
-      border-radius: 4px;
-    }
-    .pending { background: #854d0e; color: #fef08c; }
-    .approved { background: #166534; color: #bbf7d0; }
-    .refresh-btn {
-      background: #64748b;
-      margin-bottom: 20px;
-    }
+    body { font-family: system-ui; background:#0f172a; color:white; padding:20px; max-width:1200px; margin:0 auto; }
+    h1 { color:#22d3ee; }
+    table { width:100%; border-collapse: collapse; margin-top:20px; }
+    th, td { padding:12px; border:1px solid #334155; text-align:left; }
+    th { background:#1e2937; }
+    button { padding:8px 16px; margin:4px; border:none; border-radius:6px; cursor:pointer; }
+    .approve-btn { background:#22c55e; color:white; }
+    .password-box { background:#1e2937; padding:30px; border-radius:12px; max-width:400px; margin:100px auto; text-align:center; }
   </style>
 </head>
 <body>
   <h1>🛡️ OzIntel Admin Panel</h1>
 
-  <button onclick="loadUsers()" class="refresh-btn">🔄 Refresh List</button>
+  <!-- Password Entry -->
+  <div id="password-section" class="password-box" style="display:none;">
+    <h2>Admin Access</h2>
+    <input type="password" id="admin-password" placeholder="Enter Admin Password" style="padding:12px; width:80%; margin:15px 0;">
+    <br>
+    <button onclick="loginAsAdmin()" style="padding:12px 30px; background:#22c55e; color:white; border:none; border-radius:8px;">Login</button>
+  </div>
 
-  <h2>Pending Registrations</h2>
-  <table id="pending-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Registered</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <!-- Main Admin Content -->
+  <div id="admin-content" style="display:none;">
+    <button onclick="loadUsers()" style="margin-bottom:20px;">🔄 Refresh</button>
 
-  <h2>Approved Users</h2>
-  <table id="approved-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Approved On</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <h2>Pending Registrations</h2>
+    <table id="pending-table">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Phone</th><th>Registered</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h2 style="margin-top:50px;">All Users</h2>
+    <table id="all-users-table">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Registered</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 
   <script>
-    async function loadUsers() {
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/users');
-      const users = await res.json();
+    let adminPassword = localStorage.getItem("adminPassword") || "";
 
-      // Pending table
-      const pendingBody = document.querySelector('#pending-table tbody');
-      pendingBody.innerHTML = '';
-
-      const pendingUsers = users.filter(u => u.status === 'pending');
-      pendingUsers.forEach(user => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td>${new Date(user.createdAt).toLocaleString()}</td>
-          <td><button onclick="approveUser(${user.id}, this)">Approve</button></td>
-        `;
-        pendingBody.appendChild(row);
-      });
-
-      // Approved table
-      const approvedBody = document.querySelector('#approved-table tbody');
-      approvedBody.innerHTML = '';
-
-      const approvedUsers = users.filter(u => u.status === 'approved');
-      approvedUsers.forEach(user => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td>${user.approvedAt ? new Date(user.approvedAt).toLocaleString() : 'N/A'}</td>
-        `;
-        approvedBody.appendChild(row);
-      });
+    function showPasswordScreen() {
+      document.getElementById("password-section").style.display = "block";
+      document.getElementById("admin-content").style.display = "none";
     }
 
-    async function approveUser(id, button) {
-      button.disabled = true;
-      button.textContent = 'Approving...';
+    function showAdminContent() {
+      document.getElementById("password-section").style.display = "none";
+      document.getElementById("admin-content").style.display = "block";
+      loadUsers();
+    }
 
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-      });
+    async function loginAsAdmin() {
+      const input = document.getElementById("admin-password").value.trim();
+      if (!input) return alert("Please enter password");
 
-      const data = await res.json();
-
-      if (data.success) {
-        alert('User approved');
-        loadUsers();
-      } else {
-        alert('Failed to approve user');
-        button.disabled = false;
-        button.textContent = 'Approve';
+      // Test the password by calling the backend
+      try {
+        const res = await fetch("https://ozintel-backend.onrender.com/admin/users?password=" + encodeURIComponent(input));
+        if (res.ok) {
+          localStorage.setItem("adminPassword", input);
+          adminPassword = input;
+          showAdminContent();
+        } else {
+          alert("Incorrect password");
+        }
+      } catch (e) {
+        alert("Error connecting to server");
       }
     }
 
-    // Load users when page opens
-    loadUsers();
+    async function loadUsers() {
+      if (!adminPassword) {
+        showPasswordScreen();
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://ozintel-backend.onrender.com/admin/users?password=${encodeURIComponent(adminPassword)}`);
+        if (!res.ok) {
+          alert("Session expired. Please login again.");
+          localStorage.removeItem("adminPassword");
+          showPasswordScreen();
+          return;
+        }
+
+        const allUsers = await res.json();
+
+        // Pending table
+        const pendingBody = document.querySelector('#pending-table tbody');
+        pendingBody.innerHTML = '';
+        const pending = allUsers.filter(u => u.status === 'pending');
+
+        pending.forEach(user => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>${user.phone || '-'}</td>
+            <td>${new Date(user.createdAt).toLocaleString()}</td>
+            <td><button class="approve-btn" onclick="approveUser(${user.id})">Approve</button></td>
+          `;
+          pendingBody.appendChild(row);
+        });
+
+        // All users table
+        const allBody = document.querySelector('#all-users-table tbody');
+        allBody.innerHTML = '';
+
+        allUsers.forEach(user => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td>${user.phone || '-'}</td>
+            <td>${user.status}</td>
+            <td>${new Date(user.createdAt).toLocaleString()}</td>
+          `;
+          allBody.appendChild(row);
+        });
+
+      } catch (error) {
+        alert("Failed to load users");
+      }
+    }
+
+    async function approveUser(id) {
+      try {
+        const res = await fetch("https://ozintel-backend.onrender.com/admin/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, password: adminPassword })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          alert("User approved");
+          loadUsers();
+        } else {
+          alert("Failed to approve");
+        }
+      } catch (e) {
+        alert("Error approving user");
+      }
+    }
+
+    // Init
+    function init() {
+      if (adminPassword) {
+        showAdminContent();
+      } else {
+        showPasswordScreen();
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>
