@@ -13,7 +13,6 @@ const USERS_FILE = '/var/data/users.json';
 let users = [];
 let blockedEmails = new Set();
 
-// Load users from disk on startup
 function loadUsers() {
   try {
     if (fs.existsSync(USERS_FILE)) {
@@ -21,65 +20,50 @@ function loadUsers() {
       console.log(`Loaded ${users.length} users from disk`);
     } else {
       fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
-      console.log('Created new users.json file on disk');
     }
   } catch (error) {
-    console.error('Error loading users from disk:', error);
+    console.error('Error loading users:', error);
     users = [];
   }
 }
 
-// Save users to disk
 function saveUsers() {
   try {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    console.log('Users saved to disk successfully');
   } catch (error) {
-    console.error('Error saving users to disk:', error);
+    console.error('Error saving users:', error);
   }
 }
 
-// Load users when server starts
 loadUsers();
 
 // ====================== ADMIN PASSWORD ======================
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "change-this-password";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 function requireAdminPassword(req, res, next) {
   const password = req.body.password || req.query.password;
-  if (password !== ADMIN_PASSWORD) {
+  if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
     return res.status(401).json({ success: false, message: 'Invalid admin password' });
   }
   next();
 }
 
-// ====================== MESSAGEMEDIA SMS ======================
+// ====================== MESSAGEMEDIA ======================
 async function sendSMS(message, destinationNumber) {
   const apiKey = process.env.MESSAGEMEDIA_API_KEY;
   const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
 
-  if (!apiKey || !apiSecret) {
-    console.log('MessageMedia credentials missing');
-    return false;
-  }
+  if (!apiKey || !apiSecret) return false;
 
   try {
     await axios.post('https://api.messagemedia.com/v1/messages', {
-      messages: [{
-        content: message,
-        destination_number: destinationNumber,
-        format: 'SMS'
-      }]
+      messages: [{ content: message, destination_number: destinationNumber, format: 'SMS' }]
     }, {
-      auth: {
-        username: apiKey,
-        password: apiSecret
-      }
+      auth: { username: apiKey, password: apiSecret }
     });
-    console.log('SMS sent successfully');
     return true;
   } catch (error) {
-    console.error('Failed to send SMS:', error.response?.data || error.message);
+    console.error('SMS Error:', error.response?.data || error.message);
     return false;
   }
 }
@@ -87,10 +71,7 @@ async function sendSMS(message, destinationNumber) {
 // ====================== REGISTRATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
-
-  if (!name || !email) {
-    return res.json({ success: false, message: 'Name and email are required' });
-  }
+  if (!name || !email) return res.json({ success: false, message: 'Name and email required' });
 
   const newUser = {
     id: Date.now(),
@@ -102,14 +83,12 @@ app.post('/request-access', async (req, res) => {
   };
 
   users.push(newUser);
-  saveUsers(); // Save to disk
-
-  console.log('New registration request:', newUser);
+  saveUsers();
 
   const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
   await sendSMS(regMessage, '+61416619600');
 
-  res.json({ success: true, message: 'Request submitted for approval' });
+  res.json({ success: true });
 });
 
 // ====================== ADMIN ROUTES ======================
@@ -120,86 +99,64 @@ app.get('/admin/users', requireAdminPassword, (req, res) => {
 app.post('/admin/approve', requireAdminPassword, (req, res) => {
   const { id } = req.body;
   const user = users.find(u => u.id === id);
-
   if (user) {
     user.status = 'approved';
     user.approvedAt = new Date().toISOString();
-    saveUsers(); // Save to disk
-    console.log(`User approved: ${user.email}`);
+    saveUsers();
     res.json({ success: true });
   } else {
-    res.json({ success: false, message: 'User not found' });
+    res.json({ success: false });
   }
+});
+
+app.post('/admin/delete', requireAdminPassword, (req, res) => {
+  const { id } = req.body;
+  users = users.filter(u => u.id !== id);
+  saveUsers();
+  res.json({ success: true });
 });
 
 app.post('/admin/block', requireAdminPassword, (req, res) => {
   const { email } = req.body;
-  if (!email) return res.json({ success: false, message: 'Email required' });
-
-  blockedEmails.add(email.toLowerCase());
-  console.log(`Email blocked: ${email}`);
+  if (email) blockedEmails.add(email.toLowerCase());
   res.json({ success: true });
 });
 
 app.post('/admin/unblock', requireAdminPassword, (req, res) => {
   const { email } = req.body;
-  if (!email) return res.json({ success: false, message: 'Email required' });
-
-  blockedEmails.delete(email.toLowerCase());
-  console.log(`Email unblocked: ${email}`);
+  if (email) blockedEmails.delete(email.toLowerCase());
   res.json({ success: true });
 });
 
-// ====================== ACTIVATE USER ======================
+// ====================== ACTIVATE ======================
 app.post('/activate-user', (req, res) => {
   const { email } = req.body;
-  if (!email) return res.json({ success: false, message: 'Email is required' });
-
-  const user = users.find(u => 
-    u.email === email.toLowerCase() && u.status === 'approved'
-  );
-
+  const user = users.find(u => u.email === email?.toLowerCase() && u.status === 'approved');
   if (user) {
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone
-      }
-    });
+    res.json({ success: true, user });
   } else {
-    res.json({ success: false, message: 'User not found or not yet approved' });
+    res.json({ success: false, message: 'Not approved' });
   }
 });
 
-// ====================== ALERT ROUTES ======================
+// ====================== ALERTS ======================
 app.post('/send-safe-alert', async (req, res) => {
-  const { contacts, message, email } = req.body;
-
+  const { email, message } = req.body;
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Your account has been blocked' });
+    return res.json({ success: false, message: 'Blocked' });
   }
-
-  console.log('Safe alert received from:', email || 'unknown');
   const success = await sendSMS(message, '+61416619600');
   res.json({ success });
 });
 
 app.post('/send-emergency-alert', async (req, res) => {
-  const { contacts, message, email } = req.body;
-
+  const { email, message } = req.body;
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Your account has been blocked' });
+    return res.json({ success: false, message: 'Blocked' });
   }
-
-  console.log('Emergency alert received from:', email || 'unknown');
   const success = await sendSMS(message, '+61416619600');
   res.json({ success });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ OzIntel backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
