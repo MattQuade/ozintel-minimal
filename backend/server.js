@@ -41,8 +41,8 @@ async function sendSMS(message, destinationNumber) {
 let users = [];
 let blockedEmails = new Set();
 
-// ====================== REGISTRATION ======================
-app.post('/request-access', (req, res) => {
+// ====================== REGISTRATION (with SMS) ======================
+app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
 
   if (!name || !email) {
@@ -60,6 +60,10 @@ app.post('/request-access', (req, res) => {
 
   users.push(newUser);
   console.log('New registration request:', newUser);
+
+  // Send SMS notification to you
+  const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
+  await sendSMS(regMessage, '+61416619600');
 
   res.json({ success: true, message: 'Request submitted for approval' });
 });
@@ -107,7 +111,7 @@ app.post('/activate-user', (req, res) => {
   }
 });
 
-// ====================== ALERT ROUTES (with actual SMS) ======================
+// ====================== ALERT ROUTES ======================
 app.post('/send-safe-alert', async (req, res) => {
   const { contacts, message, email } = req.body;
 
@@ -157,4 +161,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ OzIntel backend running on port ${PORT}`);
 });
-
