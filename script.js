@@ -38,8 +38,6 @@ function addSafeContact() {
   safeContacts.push({ name, phone });
   localStorage.setItem("safeContacts", JSON.stringify(safeContacts));
   renderContacts();
-  document.getElementById("new-safe-phone").value = "";
-  document.getElementById("new-safe-name").value = "";
 }
 
 function addEmergencyContact() {
@@ -49,8 +47,6 @@ function addEmergencyContact() {
   emergencyContacts.push({ name, phone });
   localStorage.setItem("emergencyContacts", JSON.stringify(emergencyContacts));
   renderContacts();
-  document.getElementById("new-emergency-phone").value = "";
-  document.getElementById("new-emergency-name").value = "";
 }
 
 function removeSafe(i) {
@@ -71,7 +67,7 @@ async function sendAlert(type) {
   const status = document.getElementById("status");
 
   if (!currentUser) {
-    return alert("Please activate your account first after admin approval.");
+    return alert("Please activate your account after admin approval.");
   }
   if (contacts.length === 0) return alert("Add at least one contact");
 
@@ -82,7 +78,7 @@ async function sendAlert(type) {
   try {
     const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: false,   // High accuracy turned OFF
+        enableHighAccuracy: false,
         timeout: 10000,
         maximumAge: 0
       });
@@ -99,13 +95,10 @@ async function sendAlert(type) {
     }
   } catch (geoError) {
     console.log("Geolocation error:", geoError);
-
     if (geoError.code === 1) {
-      alert("Location access was denied. Please enable Location Services for this app.");
-    } else if (geoError.code === 2 || geoError.code === 3) {
-      alert("Could not get your location. Please turn on Location Services and try again.");
+      alert("Location access was denied. Please enable Location Services.");
     } else {
-      alert("Location is required to send an accurate alert.");
+      alert("Could not get your location. Please turn on Location Services and try again.");
     }
     status.textContent = "";
     return;
@@ -128,13 +121,11 @@ async function sendAlert(type) {
 
   try {
     const endpoint = type === 'safe' ? "/send-safe-alert" : "/send-emergency-alert";
-
     const res = await fetch("https://ozintel-backend.onrender.com" + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts, message, email: userEmail })
     });
-
     const data = await res.json();
     status.textContent = data.success ? "✅ SMS Sent!" : "❌ Failed";
   } catch (e) {
@@ -163,8 +154,46 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function sendSafeAlert() { sendAlert('safe'); }
 function sendEmergencyAlert() { sendAlert('emergency'); }
 
+// ====================== ACTIVATE PROFILE ======================
+async function activateProfile() {
+  const email = document.getElementById("activate-email").value.trim();
+  if (!email) return alert("Please enter your email");
+
+  const status = document.getElementById("status");
+  status.textContent = "Checking approval...";
+
+  try {
+    const res = await fetch("https://ozintel-backend.onrender.com/activate-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if (data.success && data.user) {
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      currentUser = data.user;
+      username = data.user.name;
+      userEmail = data.user.email;
+
+      document.getElementById("activation-section").style.display = "none";
+      status.textContent = `✅ Account activated as ${username}`;
+    } else {
+      status.textContent = "❌ " + (data.message || "Not approved yet. Please wait for admin approval.");
+    }
+  } catch (e) {
+    status.textContent = "❌ Error checking approval";
+  }
+}
+
 // ====================== INIT ======================
 function init() {
   renderContacts();
+
+  // Show activation section only if user is not activated
+  if (!currentUser) {
+    document.getElementById("activation-section").style.display = "block";
+  }
 }
+
 init();
