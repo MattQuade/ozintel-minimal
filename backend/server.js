@@ -22,7 +22,7 @@ function loadUsers() {
       fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
     }
   } catch (error) {
-    console.error('Error loading users:', error);
+    console.error('Error loading users from disk:', error);
     users = [];
   }
 }
@@ -31,7 +31,7 @@ function saveUsers() {
   try {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
   } catch (error) {
-    console.error('Error saving users:', error);
+    console.error('Error saving users to disk:', error);
   }
 }
 
@@ -42,13 +42,13 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 function requireAdminPassword(req, res, next) {
   const password = req.body.password || req.query.password;
-  if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
+  if (password !== ADMIN_PASSWORD) {
     return res.status(401).json({ success: false, message: 'Invalid admin password' });
   }
   next();
 }
 
-// ====================== MESSAGEMEDIA ======================
+// ====================== MESSAGEMEDIA SMS ======================
 async function sendSMS(message, destinationNumber) {
   const apiKey = process.env.MESSAGEMEDIA_API_KEY;
   const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
@@ -57,9 +57,16 @@ async function sendSMS(message, destinationNumber) {
 
   try {
     await axios.post('https://api.messagemedia.com/v1/messages', {
-      messages: [{ content: message, destination_number: destinationNumber, format: 'SMS' }]
+      messages: [{
+        content: message,
+        destination_number: destinationNumber,
+        format: 'SMS'
+      }]
     }, {
-      auth: { username: apiKey, password: apiSecret }
+      auth: {
+        username: apiKey,
+        password: apiSecret
+      }
     });
     return true;
   } catch (error) {
@@ -93,7 +100,11 @@ app.post('/request-access', async (req, res) => {
 
 // ====================== ADMIN ROUTES ======================
 app.get('/admin/users', requireAdminPassword, (req, res) => {
-  res.json(users);
+  const usersWithStatus = users.map(user => ({
+    ...user,
+    blocked: blockedEmails.has(user.email)
+  }));
+  res.json(usersWithStatus);
 });
 
 app.post('/admin/approve', requireAdminPassword, (req, res) => {
@@ -128,7 +139,7 @@ app.post('/admin/unblock', requireAdminPassword, (req, res) => {
   res.json({ success: true });
 });
 
-// ====================== ACTIVATE ======================
+// ====================== ACTIVATE USER ======================
 app.post('/activate-user', (req, res) => {
   const { email } = req.body;
   const user = users.find(u => u.email === email?.toLowerCase() && u.status === 'approved');
@@ -139,7 +150,7 @@ app.post('/activate-user', (req, res) => {
   }
 });
 
-// ====================== ALERTS ======================
+// ====================== ALERT ROUTES ======================
 app.post('/send-safe-alert', async (req, res) => {
   const { email, message } = req.body;
   if (email && blockedEmails.has(email.toLowerCase())) {
