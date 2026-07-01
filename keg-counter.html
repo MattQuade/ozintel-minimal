@@ -1,0 +1,124 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keg Counter</title>
+  <style>
+    body { font-family: system-ui; background:#0f172a; color:white; padding:20px; text-align:center; }
+    .balance { font-size:4rem; font-weight:bold; margin:20px 0; }
+    .totals { font-size:1.1rem; margin-bottom:30px; color:#94a3b8; }
+    button { padding:20px; font-size:1.4rem; margin:10px; border:none; border-radius:12px; width:90%; max-width:300px; }
+    .out-btn { background:#ef4444; color:white; }
+    .in-btn { background:#22c55e; color:white; }
+    table { width:100%; border-collapse: collapse; margin-top:30px; max-width:500px; margin-left:auto; margin-right:auto; }
+    th, td { padding:10px; border:1px solid #334155; }
+    th { background:#1e2937; }
+    .back-btn { background:#64748b; margin-top:40px; }
+  </style>
+</head>
+<body>
+  <h1>Keg Counter</h1>
+
+  <div class="balance" id="balance">0</div>
+  <div class="totals" id="totals">Total Out: 0 &nbsp;&nbsp; Total In: 0</div>
+
+  <button class="out-btn" onclick="showInput('out')">Kegs Out</button>
+  <button class="in-btn" onclick="showInput('in')">Kegs In</button>
+
+  <table id="keg-table">
+    <thead>
+      <tr><th>Date</th><th>Type</th><th>Amount</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button class="back-btn" onclick="window.location.href='index.html'">← Back to Home</button>
+
+  <!-- Number Input Modal -->
+  <div id="input-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8);">
+    <div style="background:#1e2937; padding:30px; border-radius:12px; max-width:300px; margin:100px auto;">
+      <h3 id="modal-title"></h3>
+      <input type="number" id="keg-amount" style="padding:15px; font-size:1.5rem; width:100%; text-align:center;">
+      <br><br>
+      <button onclick="submitKegEntry()" style="padding:12px 30px; background:#22c55e; color:white; border:none; border-radius:8px;">Enter</button>
+      <button onclick="closeModal()" style="padding:12px 30px; background:#64748b; color:white; border:none; border-radius:8px; margin-left:10px;">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
+    let currentType = "";
+
+    if (!currentUser) {
+      alert("Please activate your account first.");
+      window.location.href = "index.html";
+    }
+
+    async function loadKegData() {
+      const res = await fetch(`https://ozintel-backend.onrender.com/keg/entries?email=${currentUser.email}`);
+      const entries = await res.json();
+
+      let totalOut = 0;
+      let totalIn = 0;
+
+      entries.forEach(entry => {
+        if (entry.type === "out") totalOut += entry.amount;
+        if (entry.type === "in") totalIn += entry.amount;
+      });
+
+      const balance = totalOut - totalIn;
+
+      document.getElementById("balance").textContent = balance;
+      document.getElementById("balance").style.color = balance >= 0 ? "#22c55e" : "#ef4444";
+
+      document.getElementById("totals").innerHTML = 
+        `Total Out: <strong>${totalOut}</strong> &nbsp;&nbsp; Total In: <strong>${totalIn}</strong>`;
+
+      const tbody = document.querySelector("#keg-table tbody");
+      tbody.innerHTML = "";
+
+      entries.forEach(entry => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${entry.date}</td>
+          <td>${entry.type.toUpperCase()}</td>
+          <td>${entry.amount}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function showInput(type) {
+      currentType = type;
+      document.getElementById("modal-title").textContent = type === "out" ? "Kegs Out" : "Kegs In";
+      document.getElementById("keg-amount").value = "";
+      document.getElementById("input-modal").style.display = "block";
+      document.getElementById("keg-amount").focus();
+    }
+
+    function closeModal() {
+      document.getElementById("input-modal").style.display = "none";
+    }
+
+    async function submitKegEntry() {
+      const amount = parseInt(document.getElementById("keg-amount").value);
+      if (!amount || amount <= 0) return alert("Please enter a valid number");
+
+      await fetch("https://ozintel-backend.onrender.com/keg/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: currentUser.email,
+          type: currentType,
+          amount: amount
+        })
+      });
+
+      closeModal();
+      loadKegData();
+    }
+
+    loadKegData();
+  </script>
+</body>
+</html>
