@@ -9,20 +9,18 @@ app.use(express.json());
 
 // ====================== PERSISTENT DISK ======================
 const USERS_FILE = '/var/data/users.json';
+const KEGS_FILE = '/var/data/keg_entries.json';
 
 let users = [];
+let kegEntries = [];
 let blockedEmails = new Set();
 
 function loadUsers() {
   try {
     if (fs.existsSync(USERS_FILE)) {
       users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-      console.log(`Loaded ${users.length} users from disk`);
-    } else {
-      fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
     }
   } catch (error) {
-    console.error('Error loading users from disk:', error);
     users = [];
   }
 }
@@ -31,11 +29,32 @@ function saveUsers() {
   try {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
   } catch (error) {
-    console.error('Error saving users to disk:', error);
+    console.error('Error saving users:', error);
+  }
+}
+
+function loadKegEntries() {
+  try {
+    if (fs.existsSync(KEGS_FILE)) {
+      kegEntries = JSON.parse(fs.readFileSync(KEGS_FILE, 'utf8'));
+    } else {
+      fs.writeFileSync(KEGS_FILE, JSON.stringify([], null, 2));
+    }
+  } catch (error) {
+    kegEntries = [];
+  }
+}
+
+function saveKegEntries() {
+  try {
+    fs.writeFileSync(KEGS_FILE, JSON.stringify(kegEntries, null, 2));
+  } catch (error) {
+    console.error('Error saving keg entries:', error);
   }
 }
 
 loadUsers();
+loadKegEntries();
 
 // ====================== ADMIN PASSWORD ======================
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -48,33 +67,21 @@ function requireAdminPassword(req, res, next) {
   next();
 }
 
-// ====================== MESSAGEMEDIA SMS ======================
+// ====================== MESSAGEMEDIA ======================
 async function sendSMS(message, destinationNumber) {
   const apiKey = process.env.MESSAGEMEDIA_API_KEY;
   const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
-
-  if (!apiKey || !apiSecret) {
-    console.log('MessageMedia credentials missing');
-    return false;
-  }
+  if (!apiKey || !apiSecret) return false;
 
   try {
     await axios.post('https://api.messagemedia.com/v1/messages', {
-      messages: [{
-        content: message,
-        destination_number: destinationNumber,
-        format: 'SMS'
-      }]
+      messages: [{ content: message, destination_number: destinationNumber, format: 'SMS' }]
     }, {
-      auth: {
-        username: apiKey,
-        password: apiSecret
-      }
+      auth: { username: apiKey, password: apiSecret }
     });
-    console.log('SMS sent successfully to', destinationNumber);
     return true;
   } catch (error) {
-    console.error('Failed to send SMS:', error.response?.data || error.message);
+    console.error('SMS Error');
     return false;
   }
 }
@@ -82,10 +89,7 @@ async function sendSMS(message, destinationNumber) {
 // ====================== REGISTRATION ======================
 app.post('/request-access', async (req, res) => {
   const { name, email, phone } = req.body;
-
-  if (!name || !email) {
-    return res.json({ success: false, message: 'Name and email are required' });
-  }
+  if (!name || !email) return res.json({ success: false, message: 'Name and email required' });
 
   const newUser = {
     id: Date.now(),
@@ -99,12 +103,43 @@ app.post('/request-access', async (req, res) => {
   users.push(newUser);
   saveUsers();
 
-  console.log('New registration request:', newUser);
-
   const regMessage = `New OzIntel Signup\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone || 'N/A'}`;
   await sendSMS(regMessage, '+61416619600');
 
-  res.json({ success: true, message: 'Request submitted for approval' });
+  res.json({ success: true });
+});
+
+// ====================== KEG COUNTER ======================
+app.post('/keg/add', (req, res) => {
+  const { email, type, amount } = req.body; // type = "in" or "out"
+
+  if (!email || !type || !amount) {
+    return res.json({ success: false, message: 'Missing data' });
+  }
+
+  const entry = {
+    id: Date.now(),
+    email: email.toLowerCase(),
+    type: type,                    // "in" or "out"
+    amount: parseInt(amount),
+    date: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+  };
+
+  kegEntries.push(entry);
+  saveKegEntries();
+
+  res.json({ success: true });
+});
+
+app.get('/keg/entries', (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.json([]);
+
+  const userEntries = kegEntries
+    .filter(e => e.email === email.toLowerCase())
+    .sort((a, b) => b.id - a.id); // newest first
+
+  res.json(userEntries);
 });
 
 // ====================== ADMIN ROUTES ======================
@@ -159,44 +194,30 @@ app.post('/activate-user', (req, res) => {
   }
 });
 
-// ====================== ALERT ROUTES (SENDS TO USER'S CONTACTS) ======================
+// ====================== ALERT ROUTES ======================
 app.post('/send-safe-alert', async (req, res) => {
   const { contacts, message, email } = req.body;
-
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Your account has been blocked' });
+    return res.json({ success: false, message: 'Blocked' });
   }
-
-  console.log('Safe alert received from:', email || 'unknown');
-
   let successCount = 0;
   for (const contact of contacts) {
-    const sent = await sendSMS(message, contact.phone);
-    if (sent) successCount++;
+    if (await sendSMS(message, contact.phone)) successCount++;
   }
-
   res.json({ success: successCount > 0 });
 });
 
 app.post('/send-emergency-alert', async (req, res) => {
   const { contacts, message, email } = req.body;
-
   if (email && blockedEmails.has(email.toLowerCase())) {
-    return res.json({ success: false, message: 'Your account has been blocked' });
+    return res.json({ success: false, message: 'Blocked' });
   }
-
-  console.log('Emergency alert received from:', email || 'unknown');
-
   let successCount = 0;
   for (const contact of contacts) {
-    const sent = await sendSMS(message, contact.phone);
-    if (sent) successCount++;
+    if (await sendSMS(message, contact.phone)) successCount++;
   }
-
   res.json({ success: successCount > 0 });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ OzIntel backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
