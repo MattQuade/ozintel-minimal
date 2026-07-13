@@ -1,68 +1,129 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grok Pub Accounting</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <style>
-        body { font-family: 'Segoe UI', system-ui, sans-serif; }
-        .pub-header { background: linear-gradient(to right, #451a03, #78350f); }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel</title>
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#22d3ee">
+  <link rel="icon" href="icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-512.png">
+  
+  <style>
+    body { font-family: system-ui; background:#0f172a; color:white; text-align:center; padding:20px; }
+    h1 { color:#22d3ee; }
+    button { padding:20px; font-size:1.3rem; margin:15px; border:none; border-radius:12px; width:90%; max-width:400px; }
+    .safe { background:#22c55e; }
+    .emergency { background:#ef4444; }
+    .accounting { background:#3b82f6; color:white; }
+    .register-btn { background:#64748b; padding:12px 30px; font-size:1rem; width:auto; max-width:300px; }
+    .section { margin:30px 0; border-top:1px solid #334155; padding-top:20px; }
+    .contact-item { background:#334155; padding:12px; margin:10px auto; border-radius:8px; max-width:400px; text-align:left; }
+    .sms-counter {
+      background: #1e2937;
+      padding: 12px 20px;
+      border-radius: 10px;
+      margin: 15px auto;
+      max-width: 300px;
+      font-size: 1.1rem;
+      color: #cbd5e1;
+    }
+    .sms-counter strong { color: #22c55e; font-size: 1.3rem; }
+    .activation-box { background:#1e2937; padding:20px; border-radius:12px; margin:20px auto; max-width:400px; }
+    .status { margin:20px; font-size:1.1rem; min-height:40px; color:#22c55e; }
+
+    input, textarea {
+      width: 90%;
+      max-width: 400px;
+      padding: 16px 14px;
+      margin: 12px 0;
+      font-size: 1.25rem;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #1e2937;
+      color: white;
+      box-sizing: border-box;
+    }
+    .add-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    @media (min-width: 600px) {
+      .add-row { flex-direction: row; gap: 12px; }
+    }
+  </style>
 </head>
-<body class="bg-amber-950 text-amber-100">
+<body>
+  <h1>🛡️ OzIntel</h1>
+  <p>Alert System</p>
 
-    <!-- TOP NAV BAR -->
-    <header class="pub-header border-b border-amber-800 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-6">
-            <div class="h-16 flex items-center justify-between">
-                
-                <!-- LEFT SIDE - GROK PUB ONLY -->
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-amber-800 rounded-2xl flex items-center justify-center text-4xl shadow-inner border border-amber-700">
-                        🍺
-                    </div>
-                    <div>
-                        <span class="font-bold text-3xl tracking-tighter text-white">Grok Pub</span>
-                    </div>
-                </div>
+  <!-- Activation Section -->
+  <div id="activation-section" class="activation-box" style="display:none;">
+    <h3>Activate Your Profile</h3>
+    <p>Enter the email you used to register.</p>
+    <input type="email" id="activate-email" placeholder="Your registered email">
+    <button onclick="activateProfile()" class="small-btn">Activate Profile</button>
+  </div>
 
-                <!-- CENTER TABS -->
-                <div class="flex items-center gap-8 text-sm font-medium">
-                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white border-b-2 border-amber-400">Dashboard</a>
-                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Sales</a>
-                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Stock</a>
-                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Expenses</a>
-                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Reports</a>
-                </div>
+  <!-- Big Alert Buttons -->
+  <button class="safe" onclick="sendSafeAlert()">✅ SAFE ARRIVAL</button>
+  <button class="emergency" onclick="sendEmergencyAlert()">🚨 SEND HELP</button>
 
-                <!-- RIGHT SIDE -->
-                <div class="flex items-center gap-4">
-                    <div class="text-xs bg-amber-900 px-3 py-2 rounded-xl border border-amber-700 flex items-center gap-2">
-                        <i class="fas fa-map-marker-alt"></i>
-                        Wagga Wagga, NSW
-                    </div>
-                    <button onclick="alert('Settings &amp; Account menu coming soon')" 
-                            class="w-9 h-9 bg-amber-900 hover:bg-amber-800 rounded-2xl flex items-center justify-center text-lg transition-colors">
-                        👤
-                    </button>
-                </div>
+  <!-- Sign Up -->
+  <button onclick="window.location.href='signup.html'" class="register-btn">
+    Sign Up
+  </button>
 
-            </div>
-        </div>
-    </header>
+  <!-- Status -->
+  <p id="status" class="status"></p>
 
-    <!-- MAIN CONTENT -->
-    <main class="max-w-7xl mx-auto px-6 py-8">
-        <h1 class="text-4xl font-bold text-amber-100 mb-2">Welcome back to Grok Pub</h1>
-        <p class="text-amber-400">Sunday 7 June 2026 • Trading nicely</p>
+  <!-- SMS Counter -->
+  <div class="sms-counter" id="sms-counter" style="display:none;">
+    SMS Sent this month: <strong id="sms-count">0</strong>
+  </div>
 
-        <!-- Dashboard will go here in future steps -->
-        <div class="mt-12 text-center text-amber-500 py-20 border border-dashed border-amber-800 rounded-3xl">
-            <p class="text-xl">Dashboard content area ready for next steps...</p>
-        </div>
-    </main>
+  <!-- Safe Arrival Contacts -->
+  <div class="section">
+    <h2>Safe Arrival Contacts</h2>
+    <div id="safe-contacts-list"></div>
+    <div class="add-row">
+      <input type="tel" id="new-safe-phone" placeholder="+61412345678">
+      <input type="text" id="new-safe-name" placeholder="Name">
+      <button onclick="addSafeContact()" class="small-btn">Add Safe</button>
+    </div>
+  </div>
 
+  <!-- Emergency Contacts -->
+  <div class="section">
+    <h2>Emergency Contacts</h2>
+    <div id="emergency-contacts-list"></div>
+    <div class="add-row">
+      <input type="tel" id="new-emergency-phone" placeholder="+61412345678">
+      <input type="text" id="new-emergency-name" placeholder="Name">
+      <button onclick="addEmergencyContact()" class="small-btn">Add Emergency</button>
+    </div>
+  </div>
+
+  <!-- Accounting -->
+  <button class="accounting" onclick="window.open('https://ozintel-accounting.onrender.com', '_blank')">
+    📊 Accounting
+  </button>
+
+  <button onclick="window.location.href='ops.html'" style="background:#f97316; color:white;">
+    Ops
+  </button>
+
+  <script src="script.js"></script>
+  
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
 </body>
 </html>
