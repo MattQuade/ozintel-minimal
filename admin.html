@@ -3,172 +3,171 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OzIntel Admin</title>
+  <title>OzIntel - Keg Counter</title>
   <style>
-    body { font-family: system-ui; background:#0f172a; color:white; padding:20px; max-width:1200px; margin:0 auto; }
-    h1 { color:#22d3ee; }
-    h2 { margin-top:40px; }
-    table { width:100%; border-collapse: collapse; margin-top:15px; }
-    th, td { padding:12px; border:1px solid #334155; text-align:left; }
-    th { background:#1e2937; }
-    button { padding:8px 16px; background:#22c55e; color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.95rem; margin:2px; }
-    .refresh-btn { background:#64748b; margin-bottom:20px; }
-    .edit-btn { background:#3b82f6; }
-    .delete-btn { background:#ef4444; }
-    .block-btn { background:#f59e0b; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+    h1 { text-align: center; color: #1a3c5e; }
+    .keg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      max-width: 1600px;
+      margin: 20px auto;
+    }
+    .keg-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    .keg-name {
+      font-size: 1.35rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .rename-btn { font-size: 0.85rem; padding: 4px 10px; background: #e9ecef; border: none; border-radius: 4px; cursor: pointer; }
+    .count-display {
+      font-size: 3.5rem;
+      font-weight: bold;
+      text-align: center;
+      color: #1a3c5e;
+      margin: 20px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-row { display: flex; gap: 12px; justify-content: center; margin: 12px 0; }
+    button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .btn-minus { background: #dc3545; color: white; }
+    .btn-plus  { background: #28a745; color: white; }
+    .info { font-size: 0.95rem; text-align: center; color: #666; margin-top: 8px; }
+    .modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75); align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-content {
+      background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 380px; text-align: center;
+    }
+    input[type="number"] { font-size: 2.2rem; width: 100%; text-align: center; padding: 10px; }
   </style>
 </head>
 <body>
-  <h1>🛡️ OzIntel Admin Panel</h1>
 
-  <button onclick="loadUsers()" class="refresh-btn">🔄 Refresh List</button>
+  <h1>Keg Counter — 6 Independent Fields</h1>
+  <div class="keg-grid" id="kegGrid"></div>
 
-  <h2>Pending Registrations</h2>
-  <table id="pending-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Registered</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <h2>All Users</h2>
-  <table id="all-users-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>SMS Sent</th>
-        <th>Ops Access</th>
-        <th>Status</th>
-        <th>Registered</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <div class="modal" id="numberModal">
+    <div class="modal-content">
+      <h2 id="modalTitle">Update Count</h2>
+      <input type="number" id="modalInput" min="0" value="0">
+      <div style="margin-top:24px;">
+        <button onclick="saveModal()" style="background:#007bff;color:white;padding:14px 28px;">Save</button>
+        <button onclick="closeModal()" style="background:#6c757d;color:white;padding:14px 28px;margin-left:12px;">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    let adminPassword = localStorage.getItem("adminPassword") || prompt("Enter admin password:");
+    let kegs = [
+      { id: 1, name: "Keg 1 - Lager", count: 12 },
+      { id: 2, name: "Keg 2 - Pale Ale", count: 8 },
+      { id: 3, name: "Keg 3 - Stout", count: 5 },
+      { id: 4, name: "Keg 4 - IPA", count: 15 },
+      { id: 5, name: "Keg 5 - Cider", count: 7 },
+      { id: 6, name: "Keg 6 - Guest", count: 3 }
+    ];
 
-    if (adminPassword) localStorage.setItem("adminPassword", adminPassword);
+    const grid = document.getElementById('kegGrid');
+    let currentEditId = null;
 
-    async function loadUsers() {
-      const res = await fetch(`https://ozintel-backend.onrender.com/admin/users?password=${encodeURIComponent(adminPassword)}`);
-      if (!res.ok) {
-        alert("Session expired. Please login again.");
-        localStorage.removeItem("adminPassword");
-        location.reload();
-        return;
-      }
+    // Force Australian Eastern Time (Sydney)
+    function getAESTDate() {
+      const now = new Date();
+      const options = { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' };
+      const auDate = now.toLocaleDateString('en-AU', options); // dd/mm/yyyy
+      const time = now.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
+      return { date: auDate, time: time };
+    }
 
-      const allUsers = await res.json();
+    function renderKegs() {
+      grid.innerHTML = '';
+      const { date: auDate, time } = getAESTDate();
 
-      const pendingBody = document.querySelector('#pending-table tbody');
-      pendingBody.innerHTML = '';
-      const pendingUsers = allUsers.filter(u => u.status === 'pending');
-      pendingUsers.forEach(user => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td>${new Date(user.createdAt).toLocaleString()}</td>
-          <td><button onclick="approveUser(${user.id}, this)">Approve</button></td>
+      kegs.forEach(keg => {
+        const card = document.createElement('div');
+        card.className = 'keg-card';
+        card.innerHTML = `
+          <div class="keg-name">
+            <span>${keg.name}</span>
+            <button class="rename-btn" onclick="renameKeg(${keg.id})">✎ Rename</button>
+          </div>
+          <div class="count-display" onclick="openModal(${keg.id})">${keg.count}</div>
+          <div class="btn-row">
+            <button class="btn-minus" onclick="changeCount(${keg.id}, -1)">−1</button>
+            <button class="btn-plus" onclick="changeCount(${keg.id}, 1)">+1</button>
+          </div>
+          <div class="info">
+            <small>Updated: <strong>${auDate}</strong> at ${time} (AEST)</small>
+          </div>
         `;
-        pendingBody.appendChild(row);
-      });
-
-      const allBody = document.querySelector('#all-users-table tbody');
-      allBody.innerHTML = '';
-      allUsers.forEach(user => {
-        const opsAccessDisplay = Array.isArray(user.opsAccess) ? user.opsAccess.join(', ') : (user.opsAccess || '');
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${user.name}</td>
-          <td>${user.email}</td>
-          <td>${user.phone || '-'}</td>
-          <td><strong>${user.smsSent || 0}</strong></td>
-          <td>${opsAccessDisplay || '-'}</td>
-          <td>${user.status}</td>
-          <td>${new Date(user.createdAt).toLocaleString()}</td>
-          <td>
-            <button class="edit-btn" onclick="editOpsAccess(${user.id}, '${opsAccessDisplay}')">Edit Access</button>
-            <button class="block-btn" onclick="toggleBlock(${user.id})">${user.status === 'blocked' ? 'Unblock' : 'Block'}</button>
-            <button class="delete-btn" onclick="deleteUser(${user.id})">Delete</button>
-          </td>
-        `;
-        allBody.appendChild(row);
+        grid.appendChild(card);
       });
     }
 
-    async function approveUser(id, button) {
-      button.disabled = true;
-      button.textContent = 'Approving...';
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('User approved');
-        loadUsers();
-      } else {
-        alert('Failed');
-        button.disabled = false;
-        button.textContent = 'Approve';
+    function changeCount(id, delta) {
+      const keg = kegs.find(k => k.id === id);
+      if (keg) {
+        keg.count = Math.max(0, keg.count + delta);
+        renderKegs();
+        saveData();
       }
     }
 
-    async function editOpsAccess(id, currentAccess) {
-      const newAccess = prompt("Enter Ops Access (comma separated, e.g. pub,forestry,accounting):", currentAccess);
-      if (newAccess === null) return;
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/update-ops-access', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, opsAccess: newAccess, password: adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('Updated');
-        loadUsers();
-      } else {
-        alert('Failed');
+    function openModal(id) {
+      currentEditId = id;
+      const keg = kegs.find(k => k.id === id);
+      document.getElementById('modalTitle').textContent = `Update ${keg.name}`;
+      document.getElementById('modalInput').value = keg.count;
+      document.getElementById('numberModal').style.display = 'flex';
+    }
+
+    function saveModal() {
+      const keg = kegs.find(k => k.id === currentEditId);
+      if (keg) {
+        keg.count = parseInt(document.getElementById('modalInput').value) || 0;
+        renderKegs();
+        saveData();
+      }
+      closeModal();
+    }
+
+    function closeModal() {
+      document.getElementById('numberModal').style.display = 'none';
+    }
+
+    function renameKeg(id) {
+      const keg = kegs.find(k => k.id === id);
+      const newName = prompt("Enter new keg name:", keg.name);
+      if (newName && newName.trim() !== '') {
+        keg.name = newName.trim();
+        renderKegs();
+        saveData();
       }
     }
 
-    async function toggleBlock(id) {
-      if (!confirm("Toggle block?")) return;
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/toggle-block', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) loadUsers();
-      else alert('Failed');
+    function saveData() {
+      localStorage.setItem('ozintel_kegs_v2', JSON.stringify(kegs));
     }
 
-    async function deleteUser(id) {
-      if (!confirm("Delete user?")) return;
-      const res = await fetch('https://ozintel-backend.onrender.com/admin/delete-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, password: adminPassword })
-      });
-      const data = await res.json();
-      if (data.success) loadUsers();
-      else alert('Failed');
+    function loadData() {
+      const saved = localStorage.getItem('ozintel_kegs_v2');
+      if (saved) kegs = JSON.parse(saved);
     }
 
-    loadUsers();
+    // Init
+    loadData();
+    renderKegs();
   </script>
 </body>
 </html>
