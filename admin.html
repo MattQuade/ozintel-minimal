@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel Admin</title>
+  <style>
+    body { font-family: system-ui; background:#0f172a; color:white; padding:20px; max-width:1200px; margin:0 auto; }
+    h1 { color:#22d3ee; }
+    h2 { margin-top:40px; }
+    table { width:100%; border-collapse: collapse; margin-top:15px; }
+    th, td { padding:12px; border:1px solid #334155; text-align:left; }
+    th { background:#1e2937; }
+    button { padding:8px 16px; background:#22c55e; color:white; border:none; border-radius:6px; cursor:pointer; font-size:0.95rem; margin:2px; }
+    .refresh-btn { background:#64748b; margin-bottom:20px; }
+    .edit-btn { background:#3b82f6; }
+    .delete-btn { background:#ef4444; }
+    .block-btn { background:#f59e0b; }
+  </style>
+</head>
+<body>
+  <h1>🛡️ OzIntel Admin Panel</h1>
+
+  <button onclick="loadUsers()" class="refresh-btn">🔄 Refresh List</button>
+
+  <h2>Pending Registrations</h2>
+  <table id="pending-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Registered</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>All Users</h2>
+  <table id="all-users-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>SMS Sent</th>
+        <th>Ops Access</th>
+        <th>Status</th>
+        <th>Registered</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    let adminPassword = localStorage.getItem("adminPassword") || "";
+
+    async function loadUsers() {
+      const res = await fetch(`https://ozintel-backend.onrender.com/admin/users?password=${encodeURIComponent(adminPassword)}`);
+      if (!res.ok) {
+        alert("Session expired. Please login again.");
+        localStorage.removeItem("adminPassword");
+        location.reload();
+        return;
+      }
+
+      const allUsers = await res.json();
+
+      // Pending
+      const pendingBody = document.querySelector('#pending-table tbody');
+      pendingBody.innerHTML = '';
+      const pendingUsers = allUsers.filter(u => u.status === 'pending');
+      pendingUsers.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td>${new Date(user.createdAt).toLocaleString()}</td>
+          <td><button onclick="approveUser(${user.id}, this)">Approve</button></td>
+        `;
+        pendingBody.appendChild(row);
+      });
+
+      // All Users
+      const allBody = document.querySelector('#all-users-table tbody');
+      allBody.innerHTML = '';
+      allUsers.forEach(user => {
+        const opsAccessDisplay = Array.isArray(user.opsAccess) ? user.opsAccess.join(', ') : (user.opsAccess || '');
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.name}</td>
+          <td>${user.email}</td>
+          <td>${user.phone || '-'}</td>
+          <td><strong>${user.smsSent || 0}</strong></td>
+          <td>${opsAccessDisplay || '-'}</td>
+          <td>${user.status}</td>
+          <td>${new Date(user.createdAt).toLocaleString()}</td>
+          <td>
+            <button class="edit-btn" onclick="editOpsAccess(${user.id}, '${opsAccessDisplay}')">Edit Access</button>
+            <button class="block-btn" onclick="toggleBlock(${user.id})">${user.status === 'blocked' ? 'Unblock' : 'Block'}</button>
+            <button class="delete-btn" onclick="deleteUser(${user.id})">Delete</button>
+          </td>
+        `;
+        allBody.appendChild(row);
+      });
+    }
+
+    // Add your other admin functions (approveUser, editOpsAccess, toggleBlock, deleteUser) here
+    // (use the previous full admin.html code I gave you)
+
+    if (adminPassword) loadUsers();
+  </script>
+</body>
+</html>
