@@ -55,7 +55,9 @@
   </table>
 
   <script>
-    let adminPassword = localStorage.getItem("adminPassword") || "";
+    let adminPassword = localStorage.getItem("adminPassword") || prompt("Enter admin password:");
+
+    if (adminPassword) localStorage.setItem("adminPassword", adminPassword);
 
     async function loadUsers() {
       const res = await fetch(`https://ozintel-backend.onrender.com/admin/users?password=${encodeURIComponent(adminPassword)}`);
@@ -68,7 +70,6 @@
 
       const allUsers = await res.json();
 
-      // Pending
       const pendingBody = document.querySelector('#pending-table tbody');
       pendingBody.innerHTML = '';
       const pendingUsers = allUsers.filter(u => u.status === 'pending');
@@ -84,7 +85,6 @@
         pendingBody.appendChild(row);
       });
 
-      // All Users
       const allBody = document.querySelector('#all-users-table tbody');
       allBody.innerHTML = '';
       allUsers.forEach(user => {
@@ -108,10 +108,67 @@
       });
     }
 
-    // Add your other admin functions (approveUser, editOpsAccess, toggleBlock, deleteUser) here
-    // (use the previous full admin.html code I gave you)
+    async function approveUser(id, button) {
+      button.disabled = true;
+      button.textContent = 'Approving...';
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password: adminPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('User approved');
+        loadUsers();
+      } else {
+        alert('Failed');
+        button.disabled = false;
+        button.textContent = 'Approve';
+      }
+    }
 
-    if (adminPassword) loadUsers();
+    async function editOpsAccess(id, currentAccess) {
+      const newAccess = prompt("Enter Ops Access (comma separated, e.g. pub,forestry,accounting):", currentAccess);
+      if (newAccess === null) return;
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/update-ops-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, opsAccess: newAccess, password: adminPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Updated');
+        loadUsers();
+      } else {
+        alert('Failed');
+      }
+    }
+
+    async function toggleBlock(id) {
+      if (!confirm("Toggle block?")) return;
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/toggle-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password: adminPassword })
+      });
+      const data = await res.json();
+      if (data.success) loadUsers();
+      else alert('Failed');
+    }
+
+    async function deleteUser(id) {
+      if (!confirm("Delete user?")) return;
+      const res = await fetch('https://ozintel-backend.onrender.com/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, password: adminPassword })
+      });
+      const data = await res.json();
+      if (data.success) loadUsers();
+      else alert('Failed');
+    }
+
+    loadUsers();
   </script>
 </body>
 </html>
