@@ -20,21 +20,8 @@
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       padding: 20px;
     }
-    .keg-name {
-      font-size: 1.35rem;
-      font-weight: bold;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .rename-btn {
-      font-size: 0.85rem;
-      padding: 4px 10px;
-      background: #e9ecef;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
+    .keg-name { font-size: 1.35rem; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .rename-btn { font-size: 0.85rem; padding: 4px 10px; background: #e9ecef; border: none; border-radius: 4px; cursor: pointer; }
     .count-display {
       font-size: 3.5rem;
       font-weight: bold;
@@ -48,7 +35,7 @@
     button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
     .btn-minus { background: #dc3545; color: white; }
     .btn-plus  { background: #28a745; color: white; }
-    .info { font-size: 0.95rem; text-align: center; color: #666; margin-top: 8px; }
+    .info { font-size: 0.95rem; text-align: center; color: #333; margin-top: 8px; font-weight: 500; }
     .modal {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,0.75); align-items: center; justify-content: center; z-index: 1000;
@@ -64,7 +51,6 @@
   <h1>Keg Counter — 6 Independent Fields</h1>
   <div class="keg-grid" id="kegGrid"></div>
 
-  <!-- Modal -->
   <div class="modal" id="numberModal">
     <div class="modal-content">
       <h2 id="modalTitle">Update Count</h2>
@@ -89,23 +75,34 @@
     const grid = document.getElementById('kegGrid');
     let currentEditId = null;
 
-    function getAustralianDate() {
+    function getSydneyDateTime() {
       const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-
-    function getMonthKey() {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const options = { 
+        timeZone: 'Australia/Sydney',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      };
+      const formatter = new Intl.DateTimeFormat('en-AU', options);
+      const parts = formatter.formatToParts(now);
+      const day = parts.find(p => p.type === 'day').value;
+      const month = parts.find(p => p.type === 'month').value;
+      const year = parts.find(p => p.type === 'year').value;
+      const hour = parts.find(p => p.type === 'hour').value;
+      const minute = parts.find(p => p.type === 'minute').value;
+      
+      return {
+        date: `${day}/${month}/${year}`,
+        time: `${hour}:${minute}`
+      };
     }
 
     function renderKegs() {
       grid.innerHTML = '';
-      const auDate = getAustralianDate();
-      const monthKey = getMonthKey();
+      const { date, time } = getSydneyDateTime();
 
       kegs.forEach(keg => {
         const card = document.createElement('div');
@@ -121,13 +118,14 @@
             <button class="btn-plus" onclick="changeCount(${keg.id}, 1)">+1</button>
           </div>
           <div class="info">
-            <small>Updated: <strong>${auDate}</strong> • Month: ${monthKey}</small>
+            Updated: <strong>${date}</strong> at ${time} AEST
           </div>
         `;
         grid.appendChild(card);
       });
     }
 
+    // Rest of the functions (unchanged)
     function changeCount(id, delta) {
       const keg = kegs.find(k => k.id === id);
       if (keg) {
@@ -178,7 +176,7 @@
       if (saved) kegs = JSON.parse(saved);
     }
 
-    // Initialize
+    // Init
     loadData();
     renderKegs();
   </script>
