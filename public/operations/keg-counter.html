@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OzIntel - Keg Counter</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f8f9fa; }
+    h1 { text-align: center; color: #1a3c5e; }
+    .keg-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+      max-width: 1600px;
+      margin: 20px auto;
+    }
+    .keg-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    .keg-name {
+      font-size: 1.35rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .rename-btn {
+      font-size: 0.85rem;
+      padding: 4px 10px;
+      background: #e9ecef;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .count-display {
+      font-size: 3.5rem;
+      font-weight: bold;
+      text-align: center;
+      color: #1a3c5e;
+      margin: 20px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-row { display: flex; gap: 12px; justify-content: center; margin: 12px 0; }
+    button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .btn-minus { background: #dc3545; color: white; }
+    .btn-plus  { background: #28a745; color: white; }
+    .info { font-size: 0.95rem; text-align: center; color: #666; margin-top: 8px; }
+    .modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75); align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-content {
+      background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 380px; text-align: center;
+    }
+    input[type="number"] { font-size: 2.2rem; width: 100%; text-align: center; padding: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>Keg Counter — 6 Independent Fields</h1>
+  <div class="keg-grid" id="kegGrid"></div>
+
+  <!-- Modal -->
+  <div class="modal" id="numberModal">
+    <div class="modal-content">
+      <h2 id="modalTitle">Update Count</h2>
+      <input type="number" id="modalInput" min="0" value="0">
+      <div style="margin-top:24px;">
+        <button onclick="saveModal()" style="background:#007bff;color:white;padding:14px 28px;">Save</button>
+        <button onclick="closeModal()" style="background:#6c757d;color:white;padding:14px 28px;margin-left:12px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let kegs = [
+      { id: 1, name: "Keg 1 - Lager", count: 12 },
+      { id: 2, name: "Keg 2 - Pale Ale", count: 8 },
+      { id: 3, name: "Keg 3 - Stout", count: 5 },
+      { id: 4, name: "Keg 4 - IPA", count: 15 },
+      { id: 5, name: "Keg 5 - Cider", count: 7 },
+      { id: 6, name: "Keg 6 - Guest", count: 3 }
+    ];
+
+    const grid = document.getElementById('kegGrid');
+    let currentEditId = null;
+
+    function getAustralianDate() {
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+
+    function getMonthKey() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    }
+
+    function renderKegs() {
+      grid.innerHTML = '';
+      const auDate = getAustralianDate();
+      const monthKey = getMonthKey();
+
+      kegs.forEach(keg => {
+        const card = document.createElement('div');
+        card.className = 'keg-card';
+        card.innerHTML = `
+          <div class="keg-name">
+            <span>${keg.name}</span>
+            <button class="rename-btn" onclick="renameKeg(${keg.id})">✎ Rename</button>
+          </div>
+          <div class="count-display" onclick="openModal(${keg.id})">${keg.count}</div>
+          <div class="btn-row">
+            <button class="btn-minus" onclick="changeCount(${keg.id}, -1)">−1</button>
+            <button class="btn-plus" onclick="changeCount(${keg.id}, 1)">+1</button>
+          </div>
+          <div class="info">
+            <small>Updated: <strong>${auDate}</strong> • Month: ${monthKey}</small>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function changeCount(id, delta) {
+      const keg = kegs.find(k => k.id === id);
+      if (keg) {
+        keg.count = Math.max(0, keg.count + delta);
+        renderKegs();
+        saveData();
+      }
+    }
+
+    function openModal(id) {
+      currentEditId = id;
+      const keg = kegs.find(k => k.id === id);
+      document.getElementById('modalTitle').textContent = `Update ${keg.name}`;
+      document.getElementById('modalInput').value = keg.count;
+      document.getElementById('numberModal').style.display = 'flex';
+    }
+
+    function saveModal() {
+      const keg = kegs.find(k => k.id === currentEditId);
+      if (keg) {
+        keg.count = parseInt(document.getElementById('modalInput').value) || 0;
+        renderKegs();
+        saveData();
+      }
+      closeModal();
+    }
+
+    function closeModal() {
+      document.getElementById('numberModal').style.display = 'none';
+    }
+
+    function renameKeg(id) {
+      const keg = kegs.find(k => k.id === id);
+      const newName = prompt("Enter new keg name:", keg.name);
+      if (newName && newName.trim() !== '') {
+        keg.name = newName.trim();
+        renderKegs();
+        saveData();
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem('ozintel_kegs_v2', JSON.stringify(kegs));
+    }
+
+    function loadData() {
+      const saved = localStorage.getItem('ozintel_kegs_v2');
+      if (saved) kegs = JSON.parse(saved);
+    }
+
+    // Initialize
+    loadData();
+    renderKegs();
+  </script>
+</body>
+</html>
