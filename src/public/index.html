@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grok Pub Accounting</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <div class="w-72 bg-gray-900 text-white p-6 fixed h-full overflow-auto">
+      <h1 class="text-2xl font-bold mb-10 flex items-center gap-3">
+        🍺 Grok Pub Accounting
+      </h1>
+      <nav class="space-y-1">
+        <a href="#" onclick="switchTab('transactions')" class="block py-3 px-4 hover:bg-gray-800 rounded-xl">📋 Transactions</a>
+        <a href="#" onclick="switchTab('coa')" class="block py-3 px-4 hover:bg-gray-800 rounded-xl">📊 Chart of Accounts</a>
+        <a href="#" onclick="switchTab('rules')" class="block py-3 px-4 hover:bg-gray-800 rounded-xl">⚙️ Bank Rules</a>
+        <a href="#" onclick="switchTab('reports')" class="block py-3 px-4 hover:bg-gray-800 rounded-xl">📈 Reports</a>
+      </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 ml-72 p-10" id="main-content"></div>
+  </div>
+
+  <script>
+    let allTransactions = [];
+
+    async function switchTab(tab) {
+      const content = document.getElementById('main-content');
+
+      if (tab === 'transactions') {
+        content.innerHTML = `
+          <div class="flex justify-between items-center mb-6">
+            <h1 class="text-4xl font-bold">Transactions</h1>
+            <div class="flex gap-4">
+              <button onclick="showImportModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl">📥 Import Bank CSV</button>
+              <button onclick="clearAllTransactions()" class="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl">🗑️ Clear All</button>
+            </div>
+          </div>
+          <div id="transactions-table" class="bg-white rounded-3xl shadow overflow-hidden"></div>
+        `;
+        loadTransactions();
+      } 
+      else if (tab === 'coa') {
+        content.innerHTML = `
+          <h1 class="text-4xl font-bold mb-8">Chart of Accounts</h1>
+          <div class="bg-white rounded-3xl shadow overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-4 text-left">Code</th>
+                  <th class="p-4 text-left">Account Name</th>
+                  <th class="p-4 text-left">Group</th>
+                </tr>
+              </thead>
+              <tbody id="coa-body" class="divide-y"></tbody>
+            </table>
+          </div>
+        `;
+        loadCOA();
+      } 
+      else if (tab === 'rules') {
+        content.innerHTML = `
+          <h1 class="text-4xl font-bold mb-8">Bank Rules</h1>
+          <div class="bg-white rounded-3xl shadow overflow-hidden">
+            <table class="w-full">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-4 text-left">Rule Name</th>
+                  <th class="p-4 text-left">Contains</th>
+                  <th class="p-4 text-left">Account</th>
+                </tr>
+              </thead>
+              <tbody id="rules-body" class="divide-y"></tbody>
+            </table>
+          </div>
+        `;
+        loadBankRules();
+      } 
+      else if (tab === 'reports') {
+        content.innerHTML = `<h1 class="text-4xl font-bold mb-8">Financial Reports</h1><div id="reports-content"></div>`;
+        loadDynamicReports();
+      }
+    }
+
+    // Transactions
+    async function loadTransactions() {
+      try {
+        const res = await fetch('/reports/ledger');
+        allTransactions = await res.json();
+        renderTransactions();
+      } catch (e) {}
+    }
+
+    function renderTransactions() {
+      const container = document.getElementById('transactions-table');
+      let html = `<table class="w-full"><thead class="bg-gray-100"><tr>
+        <th class="p-4 text-left">Date</th>
+        <th class="p-4 text-left">Description</th>
+        <th class="p-4 text-left">Account</th>
+        <th class="p-4 text-right">Amount</th>
+      </tr></thead><tbody class="divide-y">`;
+
+      const seen = new Set();
+      allTransactions.forEach(tx => {
+        let amount = tx.credit || tx.amount || 0;
+        if (tx.debit) amount = -tx.debit;
+        if (Math.abs(amount) < 0.01) return;
+
+        const desc = (tx.description || '').trim();
+        const key = `${tx.date}-${desc}-${Math.abs(amount)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        const amtClass = amount > 0 ? 'text-green-600' : 'text-red-600';
+        html += `<tr class="hover:bg-gray-50">
+          <td class="p-4">${tx.date || ''}</td>
+          <td class="p-4">${desc}</td>
+          <td class="p-4">${tx.account || ''}</td>
+          <td class="p-4 text-right font-medium ${amtClass}">$${Math.abs(amount).toFixed(2)}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
+
+    function showImportModal() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv';
+      input.onchange = async () => {
+        const formData = new FormData();
+        formData.append('csvFile', input.files[0]);
+        await fetch('/import/csv', { method: 'POST', body: formData });
+        alert("✅ Import successful!");
+        loadTransactions();
+      };
+      input.click();
+    }
+
+    async function clearAllTransactions() {
+      if (!confirm("Delete ALL transactions?")) return;
+      try {
+        await fetch('/clear-all', { method: 'POST' });
+        alert("✅ All transactions cleared!");
+        loadTransactions();
+      } catch (e) {
+        alert("Clear failed.");
+      }
+    }
+
+    // COA Placeholder
+    function loadCOA() {
+      const tbody = document.getElementById('coa-body');
+      tbody.innerHTML = `
+        <tr><td colspan="3" class="p-8 text-center text-gray-500">COA Editor coming soon - you can build this manually now</td></tr>
+      `;
+    }
+
+    // Bank Rules Placeholder
+    function loadBankRules() {
+      const tbody = document.getElementById('rules-body');
+      tbody.innerHTML = `
+        <tr><td colspan="3" class="p-8 text-center text-gray-500">Bank Rules Manager coming soon</td></tr>
+      `;
+    }
+
+    // Reports
+    async function loadDynamicReports() {
+      try {
+        const res = await fetch('/reports/profit-loss');
+        const r = await res.json();
+
+        document.getElementById('reports-content').innerHTML = `
+          <div class="bg-white rounded-3xl shadow p-8">
+            <h2 class="text-2xl font-bold mb-6">Profit & Loss</h2>
+            <div class="space-y-6 text-lg">
+              <div class="flex justify-between"><span>Total Income</span><span class="font-medium">$${r.totalIncome.toFixed(2)}</span></div>
+              <div class="flex justify-between"><span>Total Expenses</span><span class="text-red-600">$${r.totalExpenses.toFixed(2)}</span></div>
+              <hr>
+              <div class="flex justify-between text-3xl font-bold pt-4">
+                <span>Net Profit</span>
+                <span class="${r.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}">$${r.netProfit.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>`;
+      } catch (e) {
+        document.getElementById('reports-content').innerHTML = `<p class="text-red-600">Could not load reports.</p>`;
+      }
+    }
+
+    window.onload = () => switchTab('transactions');
+  </script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grok Pub Accounting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; }
+        .pub-header { background: linear-gradient(to right, #451a03, #78350f); }
+    </style>
+</head>
+<body class="bg-amber-950 text-amber-100">
+
+    <!-- TOP NAV BAR -->
+    <header class="pub-header border-b border-amber-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="h-16 flex items-center justify-between">
+                
+                <!-- LEFT SIDE - GROK PUB ONLY -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-amber-800 rounded-2xl flex items-center justify-center text-4xl shadow-inner border border-amber-700">
+                        🍺
+                    </div>
+                    <div>
+                        <span class="font-bold text-3xl tracking-tighter text-white">Grok Pub</span>
+                    </div>
+                </div>
+
+                <!-- CENTER TABS -->
+                <div class="flex items-center gap-8 text-sm font-medium">
+                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white border-b-2 border-amber-400">Dashboard</a>
+                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Sales</a>
+                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Stock</a>
+                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Expenses</a>
+                    <a href="#" class="px-4 py-2 text-amber-300 hover:text-white hover:border-b-2 border-amber-400 transition-colors">Reports</a>
+                </div>
+
+                <!-- RIGHT SIDE -->
+                <div class="flex items-center gap-4">
+                    <div class="text-xs bg-amber-900 px-3 py-2 rounded-xl border border-amber-700 flex items-center gap-2">
+                        <i class="fas fa-map-marker-alt"></i>
+                        Wagga Wagga, NSW
+                    </div>
+                    <button onclick="alert('Settings &amp; Account menu coming soon')" 
+                            class="w-9 h-9 bg-amber-900 hover:bg-amber-800 rounded-2xl flex items-center justify-center text-lg transition-colors">
+                        👤
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <h1 class="text-4xl font-bold text-amber-100 mb-2">Welcome back to Grok Pub</h1>
+        <p class="text-amber-400">Sunday 7 June 2026 • Trading nicely</p>
+
+        <!-- Dashboard will go here in future steps -->
+        <div class="mt-12 text-center text-amber-500 py-20 border border-dashed border-amber-800 rounded-3xl">
+            <p class="text-xl">Dashboard content area ready for next steps...</p>
+        </div>
+    </main>
+
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "banks": {
+    "ANZ": {
+      "name": "Australia and New Zealand Banking Group",
+      "patterns": [
+        { "keyword": "TYRO", "account": "4100", "gst": "collected", "description": "Card Sales" },
+        { "keyword": "WORLDLINE", "account": "4100", "gst": "collected", "description": "Card Sales" },
+        { "keyword": "CUB", "account": "5000", "gst": "paid", "description": "Beer Purchases" },
+        { "keyword": "DAN MURPHY", "account": "5000", "gst": "paid", "description": "Alcohol Purchases" },
+        { "keyword": "WOOLWORTHS", "account": "5000", "gst": "paid", "description": "Supermarket" },
+        { "keyword": "Matt Aurelie Quade", "account": "6000", "gst": "none", "description": "Owner Drawings" }
+      ]
+    },
+    "NAB": {
+      "name": "National Australia Bank",
+      "patterns": [
+        { "keyword": "CASH", "account": "4100", "gst": "collected", "description": "Cash Sales" },
+        { "keyword": "DEPOSIT", "account": "4100", "gst": "collected", "description": "Bank Deposit" },
+        { "keyword": "DAN MURPHY", "account": "5000", "gst": "paid", "description": "Alcohol" }
+      ]
+    }
+  },
+  "defaultAccount": "9999",
+  "defaultGst": "none"
+}
+
+Save it, then reply with "rules.json done"After that, I'll give you the csvImporter.ts (the smart multi-bank importer). One file at a time — you're doing great.
+
+Explore JSON schema validation
+
+Learn about CSV parsing libraries
+
