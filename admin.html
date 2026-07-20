@@ -7,25 +7,28 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; }
     h1 { text-align: center; color: #1a3c5e; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    th, td { padding: 14px; text-align: left; border-bottom: 1px solid #ddd; }
     th { background: #1a3c5e; color: white; }
-    button { padding: 6px 12px; margin: 2px; border: none; border-radius: 4px; cursor: pointer; }
+    tr:hover { background: #f8f9fa; }
+    button { padding: 8px 14px; margin: 3px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
     .approve { background: #28a745; color: white; }
     .block { background: #dc3545; color: white; }
     .delete { background: #6c757d; color: white; }
-    .select { padding: 6px; }
+    .info { text-align: center; margin: 15px 0; color: #555; }
   </style>
 </head>
 <body>
 
   <h1>Admin Panel - User Management</h1>
-  <p style="text-align:center;">Only visible to authorized admins</p>
+  <p class="info">Only visible to authorized admins</p>
 
-  <table id="userTable">
+  <table>
     <thead>
       <tr>
         <th>Email</th>
+        <th>Name</th>
+        <th>Phone</th>
         <th>Status</th>
         <th>Permissions</th>
         <th>Actions</th>
@@ -35,24 +38,31 @@
   </table>
 
   <script>
-    // TODO: Connect to your real backend / data source here
     let users = [
-      { email: "you@yourdomain.com", status: "approved", permissions: ["accounting", "pub", "forestry"] },
-      // Add more users as they register
+      {
+        email: "mqtallimba@gmail.com",
+        name: "John Quade",
+        phone: "+61439033847",
+        status: "approved",
+        permissions: ["accounting", "pub", "forestry"]
+      }
     ];
 
     function renderUsers() {
       const tbody = document.getElementById('userList');
       tbody.innerHTML = '';
+      
       users.forEach((user, index) => {
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${user.email}</td>
-          <td>${user.status}</td>
+          <td>${user.name}</td>
+          <td>${user.phone}</td>
+          <td><strong>${user.status}</strong></td>
           <td>${user.permissions.join(', ')}</td>
           <td>
-            <button class="approve" onclick="approveUser(${index})">Approve</button>
-            <button class="block" onclick="blockUser(${index})">Block</button>
+            <button class="approve" onclick="updateStatus(${index}, 'approved')">Approve</button>
+            <button class="block" onclick="updateStatus(${index}, 'blocked')">Block</button>
             <button class="delete" onclick="deleteUser(${index})">Delete</button>
           </td>
         `;
@@ -60,11 +70,21 @@
       });
     }
 
-    // Placeholder functions - connect to your real logic
-    function approveUser(i) { alert("User approved (connect to backend)"); }
-    function blockUser(i) { alert("User blocked (connect to backend)"); }
-    function deleteUser(i) { alert("User deleted (connect to backend)"); }
+    function updateStatus(index, newStatus) {
+      users[index].status = newStatus;
+      renderUsers();
+      alert(`User status updated to ${newStatus}`);
+    }
 
+    function deleteUser(index) {
+      if (confirm("Delete this user?")) {
+        users.splice(index, 1);
+        renderUsers();
+        alert("User deleted");
+      }
+    }
+
+    // Initialize
     renderUsers();
   </script>
 </body>
