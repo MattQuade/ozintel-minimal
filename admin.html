@@ -8,84 +8,105 @@
     body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; }
     h1 { text-align: center; color: #1a3c5e; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    th, td { padding: 14px; text-align: left; border-bottom: 1px solid #ddd; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
     th { background: #1a3c5e; color: white; }
     tr:hover { background: #f8f9fa; }
-    button { padding: 8px 14px; margin: 3px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    button { padding: 8px 12px; margin: 3px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
     .approve { background: #28a745; color: white; }
     .block { background: #dc3545; color: white; }
     .delete { background: #6c757d; color: white; }
-    .info { text-align: center; margin: 15px 0; color: #555; }
+    .sms { font-weight: bold; color: #d32f2f; }
+    .access-denied { text-align: center; color: red; font-size: 1.3rem; margin-top: 100px; }
   </style>
 </head>
 <body>
 
-  <h1>Admin Panel - User Management</h1>
-  <p class="info">Only visible to authorized admins</p>
+  <div id="adminContent" style="display:none;">
+    <h1>Admin Panel - User Management</h1>
+    <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month</p>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Email</th>
-        <th>Name</th>
-        <th>Phone</th>
-        <th>Status</th>
-        <th>Permissions</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="userList"></tbody>
-  </table>
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th>Permissions</th>
+          <th>SMS This Month</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userList"></tbody>
+    </table>
+  </div>
+
+  <div id="denied" class="access-denied" style="display:none;">
+    <h2>Access Denied</h2>
+    <p>This panel is restricted to the main administrator only.</p>
+  </div>
 
   <script>
-    let users = [
-      {
-        email: "mqtallimba@gmail.com",
-        name: "John Quade",
-        phone: "+61439033847",
-        status: "approved",
-        permissions: ["accounting", "pub", "forestry"]
+    const ADMIN_EMAIL = "mattquade2000@gmail.com";
+
+    async function checkAccess() {
+      const inputEmail = prompt("Enter admin email:") || "";
+      if (inputEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        document.getElementById('adminContent').style.display = 'block';
+        await loadUsers();
+      } else {
+        document.getElementById('denied').style.display = 'block';
       }
-    ];
+    }
+
+    let users = [];
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/data/users.json');
+        if (res.ok) users = await res.json();
+      } catch(e) {}
+      if (users.length === 0) {
+        users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
+      }
+      renderUsers();
+    }
+
+    function saveUsers() {
+      localStorage.setItem('ozintel_users', JSON.stringify(users));
+      alert("✅ Changes saved (local). Later we'll sync to data/users.json");
+      renderUsers();
+    }
 
     function renderUsers() {
       const tbody = document.getElementById('userList');
       tbody.innerHTML = '';
-      
-      users.forEach((user, index) => {
+      users.forEach((user, i) => {
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${user.email}</td>
           <td>${user.name}</td>
           <td>${user.phone}</td>
           <td><strong>${user.status}</strong></td>
-          <td>${user.permissions.join(', ')}</td>
+          <td>${user.permissions.join(', ') || 'None'}</td>
+          <td class="sms">${user.smsThisMonth || 0}</td>
           <td>
-            <button class="approve" onclick="updateStatus(${index}, 'approved')">Approve</button>
-            <button class="block" onclick="updateStatus(${index}, 'blocked')">Block</button>
-            <button class="delete" onclick="deleteUser(${index})">Delete</button>
+            <button class="approve" onclick="approveUser(${i})">Approve</button>
+            <button class="block" onclick="blockUser(${i})">Block</button>
+            <button class="delete" onclick="deleteUser(${i})">Delete</button>
           </td>
         `;
         tbody.appendChild(row);
       });
     }
 
-    function updateStatus(index, newStatus) {
-      users[index].status = newStatus;
-      renderUsers();
-      alert(`User status updated to ${newStatus}`);
+    function approveUser(i) { users[i].status = "approved"; users[i].permissions = ["accounting","pub","forestry"]; saveUsers(); }
+    function blockUser(i) { users[i].status = "blocked"; saveUsers(); }
+    function deleteUser(i) {
+      if (confirm(`Delete ${users[i].name}?`)) { users.splice(i,1); saveUsers(); }
     }
 
-    function deleteUser(index) {
-      if (confirm("Delete this user?")) {
-        users.splice(index, 1);
-        renderUsers();
-        alert("User deleted");
-      }
-    }
-
-    // Initialize
-    renderUsers();
+    checkAccess();
   </script>
 </body>
 </html>
