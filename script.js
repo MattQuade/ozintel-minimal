@@ -2,11 +2,11 @@
 // OZINTEL - MAIN SCRIPT (Alerts & Contacts)
 // ==========================================
 
-// State Management
+// State Management for Contacts
 let safeContacts = JSON.parse(localStorage.getItem('ozintel_safe_contacts')) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem('ozintel_emergency_contacts')) || [];
 
-// Initialize on Load
+// Initialize on Page Load
 document.addEventListener('DOMContentLoaded', () => {
     renderContacts();
 });
@@ -77,7 +77,7 @@ function saveContacts() {
 }
 
 function renderContacts() {
-    // Render Safe Contacts
+    // Render Safe Contacts List
     const safeList = document.getElementById('safeContactsList');
     if (safeList) {
         safeList.innerHTML = '';
@@ -88,7 +88,7 @@ function renderContacts() {
         });
     }
 
-    // Render Emergency Contacts
+    // Render Emergency Contacts List
     const emergencyList = document.getElementById('emergencyContactsList');
     if (emergencyList) {
         emergencyList.innerHTML = '';
@@ -101,7 +101,7 @@ function renderContacts() {
 }
 
 // ==========================================
-// 2. SMS COUNTER HELPER (Tied to Admin Data)
+// 2. AUTOMATIC SMS COUNTER INCREMENT
 // ==========================================
 
 async function incrementSMSCount(userEmail) {
@@ -109,6 +109,7 @@ async function incrementSMSCount(userEmail) {
     try {
         let users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
         let user = users.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
+        
         if (user) {
             user.smsThisMonth = (user.smsThisMonth || 0) + 1;
             localStorage.setItem('ozintel_users', JSON.stringify(users));
@@ -119,12 +120,10 @@ async function incrementSMSCount(userEmail) {
 }
 
 // ==========================================
-// 3. MESSAGEMEDIA SMS ALERT SENDING
+// 3. MESSAGEMEDIA SMS DISPATCH
 // ==========================================
 
 async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
-    // Note: In production, route this through your backend endpoint (e.g. /api/send-sms) 
-    // to protect your MessageMedia API credentials.
     try {
         const response = await fetch('/api/send-sms', {
             method: 'POST',
@@ -132,12 +131,7 @@ async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
             body: JSON.stringify({ phone: recipientPhone, message: messageBody })
         });
         
-        if (response.ok) {
-            return true;
-        } else {
-            console.error("MessageMedia gateway error");
-            return false;
-        }
+        return response.ok;
     } catch (error) {
         console.error("Network error sending SMS:", error);
         return false;
@@ -172,16 +166,13 @@ async function sendEmergencyAlert(currentUserEmail) {
         return;
     }
 
-    // Try to get geolocation if available
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const lat = position.coords.latitude;
             const lon = position.coords.longitude;
             const message = `EMERGENCY ALERT from OzIntel! I need assistance. Location: https://maps.google.com/?q=${lat},${lon}`;
-            
             await dispatchEmergency(message, currentUserEmail);
         }, async () => {
-            // Fallback if location denied/unavailable
             const message = "EMERGENCY ALERT from OzIntel! I need immediate assistance.";
             await dispatchEmergency(message, currentUserEmail);
         });
