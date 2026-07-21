@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up - OzIntel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 40px; background: #0f172a; color: white; text-align: center; }
+    h1 { color: #22d3ee; }
+    .price { color: #4ade80; font-size: 1.8rem; margin: 10px 0; }
+    input { padding: 12px; margin: 10px; width: 280px; border-radius: 6px; border: none; font-size: 1rem; }
+    button { padding: 14px 32px; margin: 15px; font-size: 1.1rem; border: none; border-radius: 8px; cursor: pointer; }
+    .send-btn { background: #22c55e; color: white; }
+    .back-btn { background: #64748b; color: white; }
+  </style>
+</head>
+<body>
+
+  <h1>Safe/Emergency Location Alerts</h1>
+  <div class="price">$AUD11 / month</div>
+
+  <input type="text" id="fullName" placeholder="Full Name" required><br>
+  <input type="email" id="email" placeholder="Email Address" required><br>
+  <input type="tel" id="phone" placeholder="Phone Number (+614...)" required><br>
+
+  <button class="send-btn" onclick="sendRequest()">Send Request</button>
+  <button class="back-btn" onclick="window.location.href='index.html'">← Back to Home</button>
+
+  <script>
+    function sendRequest() {
+      const name = document.getElementById('fullName').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+
+      if (!name || !email || !phone) {
+        alert("Please fill in all fields.");
+        return;
+      }
+
+      let users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
+
+      if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+        alert("You have already sent a request.");
+        return;
+      }
+
+      users.push({
+        email: email,
+        name: name,
+        phone: phone,
+        status: "pending",
+        permissions: [],
+        smsThisMonth: 1
+      });
+
+      localStorage.setItem('ozintel_users', JSON.stringify(users));
+
+      alert("✅ Request sent successfully!\n\nYou will be notified once approved.");
+      
+      // Optional: clear form
+      document.getElementById('fullName').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('phone').value = '';
+    }
+  </script>
+</body>
+</html>
