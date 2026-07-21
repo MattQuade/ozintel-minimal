@@ -22,8 +22,8 @@
 <body>
 
   <div id="adminContent" style="display:none;">
-    <h1>Admin Panel - User Management</h1>
-    <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month • Only main admin can access</p>
+    <h1>Admin Panel - User Management (Matt Quade)</h1>
+    <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month</p>
 
     <table>
       <thead>
@@ -43,17 +43,17 @@
 
   <div id="denied" class="access-denied" style="display:none;">
     <h2>Access Denied</h2>
-    <p>This panel is restricted to mattquade2000@gmail.com only.</p>
+    <p>Incorrect password.</p>
   </div>
 
   <script>
-    const ADMIN_EMAIL = "mattquade2000@gmail.com";
+    const ADMIN_PASSWORD = "Woodlands2050!";
 
-    async function checkAccess() {
-      const inputEmail = prompt("Enter your admin email:") || "";
-      if (inputEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    function checkAccess() {
+      const inputPass = prompt("Enter Admin Password:") || "";
+      if (inputPass === ADMIN_PASSWORD) {
         document.getElementById('adminContent').style.display = 'block';
-        await loadUsers();
+        loadUsers();
       } else {
         document.getElementById('denied').style.display = 'block';
       }
@@ -74,7 +74,7 @@
 
     function saveUsers() {
       localStorage.setItem('ozintel_users', JSON.stringify(users));
-      alert("✅ Changes saved locally (JSON sync coming soon)");
+      alert("✅ Changes saved");
       renderUsers();
     }
 
