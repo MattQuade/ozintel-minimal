@@ -22,7 +22,7 @@
 <body>
 
   <div id="adminContent" style="display:none;">
-    <h1>Admin Panel - User Management</h1>
+    <h1>Admin Panel - User Management (Matt Quade)</h1>
     <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month</p>
 
     <table>
@@ -46,13 +46,13 @@
   </div>
 
   <script>
-    const ADMIN_EMAIL = "mqtallimba@gmail.com";
+    const ADMIN_PASSWORD = "Woodlands2050!";
 
-    async function checkAccess() {
-      const inputEmail = prompt("Enter admin email:") || "";
-      if (inputEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+    function checkAccess() {
+      const inputPass = prompt("Enter Admin Password:") || "";
+      if (inputPass === ADMIN_PASSWORD) {
         document.getElementById('adminContent').style.display = 'block';
-        await loadUsers();
+        loadUsers();
       } else {
         document.getElementById('denied').style.display = 'block';
       }
