@@ -17,6 +17,7 @@
     .delete { background: #6c757d; color: white; }
     .sms { font-weight: bold; color: #d32f2f; }
     .access-denied { text-align: center; color: red; font-size: 1.4rem; margin-top: 120px; }
+    .add-section { margin-top: 30px; padding: 15px; background: white; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -39,6 +40,15 @@
       </thead>
       <tbody id="userList"></tbody>
     </table>
+
+    <!-- Add New User Section -->
+    <div class="add-section">
+      <h3>Add New User Manually</h3>
+      <input type="text" id="newEmail" placeholder="Email" style="width:220px;padding:8px;">
+      <input type="text" id="newName" placeholder="Name" style="width:180px;padding:8px;">
+      <input type="text" id="newPhone" placeholder="Phone" style="width:150px;padding:8px;">
+      <button onclick="addNewUser()" style="background:#007bff;color:white;">Add User</button>
+    </div>
   </div>
 
   <div id="denied" class="access-denied" style="display:none;">
@@ -111,6 +121,37 @@
       }
     }
 
+    function addNewUser() {
+      const email = document.getElementById('newEmail').value.trim();
+      const name = document.getElementById('newName').value.trim() || "New User";
+      const phone = document.getElementById('newPhone').value.trim() || "Unknown";
+
+      if (!email) {
+        alert("Email is required");
+        return;
+      }
+
+      if (users.find(u => u.email === email)) {
+        alert("User already exists");
+        return;
+      }
+
+      users.push({
+        email: email,
+        name: name,
+        phone: phone,
+        status: "pending",
+        permissions: [],
+        smsThisMonth: 0
+      });
+
+      saveUsers();
+      document.getElementById('newEmail').value = '';
+      document.getElementById('newName').value = '';
+      document.getElementById('newPhone').value = '';
+    }
+
+    // Start
     checkAccess();
   </script>
 </body>
