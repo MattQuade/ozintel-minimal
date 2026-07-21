@@ -1,0 +1,34 @@
+[
+  {
+    "email": "mqtallimba@gmail.com",
+    "name": "John Quade",
+    "phone": "+61439033847",
+    "status": "approved",
+    "permissions": ["accounting", "pub", "forestry"],
+    "smsThisMonth": 12
+  },
+  {
+    "email": "leoquade75@gmail.com",
+    "name": "Leo Quade",
+    "phone": "+61491787228",
+    "status": "pending",
+    "permissions": [],
+    "smsThisMonth": 3
+  },
+  {
+    "email": "cevennesq@gmail.com",
+    "name": "Cevennes Quade",
+    "phone": "No phone yet",
+    "status": "pending",
+    "permissions": [],
+    "smsThisMonth": 0
+  },
+  {
+    "email": "automnequade1234@gmail.com",
+    "name": "Automne Quade",
+    "phone": "+61493456384",
+    "status": "pending",
+    "permissions": [],
+    "smsThisMonth": 1
+  }
+]
