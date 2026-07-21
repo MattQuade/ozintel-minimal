@@ -2,19 +2,14 @@
 // OZINTEL - MAIN SCRIPT (Alerts & Contacts)
 // ==========================================
 
-// State Management for Contacts
 let safeContacts = JSON.parse(localStorage.getItem('ozintel_safe_contacts')) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem('ozintel_emergency_contacts')) || [];
 
-// Initialize on Page Load
 document.addEventListener('DOMContentLoaded', () => {
     renderContacts();
 });
 
-// ==========================================
-// 1. CONTACT MANAGEMENT (Safe & Emergency)
-// ==========================================
-
+// 1. Contact Management
 function addSafeContact() {
     const nameInput = document.getElementById('safeContactName');
     const phoneInput = document.getElementById('safeContactPhone');
@@ -77,122 +72,25 @@ function saveContacts() {
 }
 
 function renderContacts() {
-    // Render Safe Contacts List
     const safeList = document.getElementById('safeContactsList');
     if (safeList) {
         safeList.innerHTML = '';
         safeContacts.forEach((contact, index) => {
-            const li = document.createElement('li');
-            li.innerHTML = `<span>${contact.name} (${contact.phone})</span> <button onclick="removeSafeContact(${index})">Remove</button>`;
-            safeList.appendChild(li);
+            const div = document.createElement('div');
+            div.className = 'contact-item';
+            div.innerHTML = `<span>${contact.name} (${contact.phone})</span> <button onclick="removeSafeContact(${index})">Remove</button>`;
+            safeList.appendChild(div);
         });
     }
 
-    // Render Emergency Contacts List
     const emergencyList = document.getElementById('emergencyContactsList');
     if (emergencyList) {
         emergencyList.innerHTML = '';
         emergencyContacts.forEach((contact, index) => {
-            const li = document.createElement('li');
-            li.innerHTML = `<span>${contact.name} (${contact.phone})</span> <button onclick="removeEmergencyContact(${index})">Remove</button>`;
-            emergencyList.appendChild(li);
+            const div = document.createElement('div');
+            div.className = 'contact-item';
+            div.innerHTML = `<span>${contact.name} (${contact.phone})</span> <button onclick="removeEmergencyContact(${index})">Remove</button>`;
+            emergencyList.appendChild(div);
         });
-    }
-}
-
-// ==========================================
-// 2. AUTOMATIC SMS COUNTER INCREMENT
-// ==========================================
-
-async function incrementSMSCount(userEmail) {
-    if (!userEmail) return;
-    try {
-        let users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
-        let user = users.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
-        
-        if (user) {
-            user.smsThisMonth = (user.smsThisMonth || 0) + 1;
-            localStorage.setItem('ozintel_users', JSON.stringify(users));
-        }
-    } catch (err) {
-        console.warn("Could not update SMS count:", err);
-    }
-}
-
-// ==========================================
-// 3. MESSAGEMEDIA SMS DISPATCH
-// ==========================================
-
-async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
-    try {
-        const response = await fetch('/api/send-sms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: recipientPhone, message: messageBody })
-        });
-        
-        return response.ok;
-    } catch (error) {
-        console.error("Network error sending SMS:", error);
-        return false;
-    }
-}
-
-async function sendSafeArrival(currentUserEmail) {
-    if (safeContacts.length === 0) {
-        alert("No safe arrival contacts configured.");
-        return;
-    }
-
-    const message = "OzIntel Alert: I have arrived safely.";
-    let successCount = 0;
-
-    for (const contact of safeContacts) {
-        const sent = await sendSMSViaMessageMedia(contact.phone, message);
-        if (sent) successCount++;
-    }
-
-    if (successCount > 0) {
-        await incrementSMSCount(currentUserEmail);
-        alert(`Safe arrival alert sent to ${successCount} contact(s).`);
-    } else {
-        alert("Failed to send alerts. Check network or API configuration.");
-    }
-}
-
-async function sendEmergencyAlert(currentUserEmail) {
-    if (emergencyContacts.length === 0) {
-        alert("No emergency contacts configured.");
-        return;
-    }
-
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            const message = `EMERGENCY ALERT from OzIntel! I need assistance. Location: https://maps.google.com/?q=${lat},${lon}`;
-            await dispatchEmergency(message, currentUserEmail);
-        }, async () => {
-            const message = "EMERGENCY ALERT from OzIntel! I need immediate assistance.";
-            await dispatchEmergency(message, currentUserEmail);
-        });
-    } else {
-        const message = "EMERGENCY ALERT from OzIntel! I need immediate assistance.";
-        await dispatchEmergency(message, currentUserEmail);
-    }
-}
-
-async function dispatchEmergency(message, currentUserEmail) {
-    let successCount = 0;
-    for (const contact of emergencyContacts) {
-        const sent = await sendSMSViaMessageMedia(contact.phone, message);
-        if (sent) successCount++;
-    }
-
-    if (successCount > 0) {
-        await incrementSMSCount(currentUserEmail);
-        alert(`🚨 EMERGENCY ALERT sent to ${successCount} contact(s)!`);
-    } else {
-        alert("Failed to dispatch emergency SMS.");
     }
 }
