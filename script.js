@@ -1,34 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Script</title>
-</head>
-<body>
-
-<script>
-// ====================== SMS COUNTER HELPER (Automatic) ======================
+// ====================== AUTOMATIC SMS COUNTER ======================
 async function incrementSMSCount(userEmail) {
-  if (!userEmail) return false;
-
+  if (!userEmail) return;
   try {
     let users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
-
     const userIndex = users.findIndex(u => u.email.toLowerCase() === userEmail.toLowerCase());
     if (userIndex !== -1) {
       users[userIndex].smsThisMonth = (users[userIndex].smsThisMonth || 0) + 1;
       localStorage.setItem('ozintel_users', JSON.stringify(users));
-      console.log(`✅ SMS count updated for ${users[userIndex].name} → ${users[userIndex].smsThisMonth}`);
-      return true;
+      console.log(`SMS count +1 for ${users[userIndex].name}`);
     }
-  } catch (err) {
-    console.warn("SMS counter update failed:", err);
+  } catch (e) {
+    console.warn("SMS counter update failed", e);
   }
-  return false;
 }
 
-// ====================== YOUR EXISTING CODE (unchanged) ======================
+// ====================== YOUR ORIGINAL CODE (kept intact) ======================
 // ==================== USER DETAILS ====================
 let currentUser = JSON.parse(localStorage.getItem("currentUser")) || null;
 let username = currentUser ? currentUser.name : "";
@@ -52,27 +38,24 @@ function renderContacts() {
     safelist.appendChild(div);
   });
 
+  // Add your emergency contacts rendering here as before
   const emlist = document.getElementById("emergency-contacts-list");
-  // ... (continue with your existing render logic for emergency contacts)
+  // ... your original emergency list code ...
 }
 
-// Add your existing functions below (sendSafeArrival, sendEmergency, etc.)
-// Example integration:
-async function sendSafeArrival() {
-  // ... your existing code to send SMS via MessageMedia ...
+// ==================== YOUR EXISTING FUNCTIONS ====================
+// Add await incrementSMSCount(userEmail); after every successful SMS send
 
-  const success = true; // replace with your actual success check
+// Example:
+async function sendSafeArrival() {
+  // ... your existing MessageMedia send code ...
+  const success = true; // replace with your actual success flag
 
   if (success) {
-    await incrementSMSCount(userEmail);   // ← Automatic SMS counter
-    // ... rest of your code
+    await incrementSMSCount(userEmail);   // Automatic counter
   }
 }
 
-// Same for emergency alerts, etc.
+// Do the same in your emergency alert function, etc.
 
 console.log("OzIntel Script loaded with SMS counter");
-</script>
-
-</body>
-</html>
