@@ -60,14 +60,8 @@
 
     let users = [];
 
-    async function loadUsers() {
-      try {
-        const res = await fetch('/data/users.json');
-        if (res.ok) users = await res.json();
-      } catch(e) {}
-      if (users.length === 0) {
-        users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
-      }
+    function loadUsers() {
+      users = JSON.parse(localStorage.getItem('ozintel_users')) || [];
       renderUsers();
     }
 
@@ -117,7 +111,6 @@
       }
     }
 
-    // Start
     checkAccess();
   </script>
 </body>
