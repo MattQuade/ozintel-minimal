@@ -23,7 +23,7 @@
 
   <div id="adminContent" style="display:none;">
     <h1>Admin Panel - User Management</h1>
-    <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month</p>
+    <p style="text-align:center;color:#555;">SMS usage resets on the 1st of each month • Only main admin can access</p>
 
     <table>
       <thead>
@@ -43,14 +43,14 @@
 
   <div id="denied" class="access-denied" style="display:none;">
     <h2>Access Denied</h2>
-    <p>This panel is restricted to the main administrator only.</p>
+    <p>This panel is restricted to mattquade2000@gmail.com only.</p>
   </div>
 
   <script>
     const ADMIN_EMAIL = "mattquade2000@gmail.com";
 
     async function checkAccess() {
-      const inputEmail = prompt("Enter admin email:") || "";
+      const inputEmail = prompt("Enter your admin email:") || "";
       if (inputEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         document.getElementById('adminContent').style.display = 'block';
         await loadUsers();
@@ -74,7 +74,7 @@
 
     function saveUsers() {
       localStorage.setItem('ozintel_users', JSON.stringify(users));
-      alert("✅ Changes saved (local). Later we'll sync to data/users.json");
+      alert("✅ Changes saved locally (JSON sync coming soon)");
       renderUsers();
     }
 
@@ -100,12 +100,25 @@
       });
     }
 
-    function approveUser(i) { users[i].status = "approved"; users[i].permissions = ["accounting","pub","forestry"]; saveUsers(); }
-    function blockUser(i) { users[i].status = "blocked"; saveUsers(); }
-    function deleteUser(i) {
-      if (confirm(`Delete ${users[i].name}?`)) { users.splice(i,1); saveUsers(); }
+    function approveUser(i) {
+      users[i].status = "approved";
+      users[i].permissions = ["accounting", "pub", "forestry"];
+      saveUsers();
     }
 
+    function blockUser(i) {
+      users[i].status = "blocked";
+      saveUsers();
+    }
+
+    function deleteUser(i) {
+      if (confirm(`Delete ${users[i].name}?`)) {
+        users.splice(i, 1);
+        saveUsers();
+      }
+    }
+
+    // Start
     checkAccess();
   </script>
 </body>
