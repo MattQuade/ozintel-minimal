@@ -11,26 +11,34 @@ export default function HomePage() {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
   const [emergencyContacts, setEmergencyContacts] = useState<Contact[]>([]);
   
-  const [safePhone, setSafePhone] = useState('');
-  const [safeName, setSafeName] = useState('');
-  const [emergencyPhone, setEmergencyPhone] = useState('');
-  const [emergencyName, setEmergencyName] = useState('');
+  const [safePhone, setSafePhone] = useState<string>('');
+  const [safeName, setSafeName] = useState<string>('');
+  const [emergencyPhone, setEmergencyPhone] = useState<string>('');
+  const [emergencyName, setEmergencyName] = useState<string>('');
   
-  const [status, setStatus] = useState('');
-  const [smsCount, setSmsCount] = useState(0);
+  const [status, setStatus] = useState<string>('');
+  const [smsCount, setSmsCount] = useState<number>(0);
 
   useEffect(() => {
-    const loadedSafe = JSON.parse(localStorage.getItem('ozintel_safe_contacts') || '[]');
-    const loadedEmergency = JSON.parse(localStorage.getItem('ozintel_emergency_contacts') || '[]');
-    setSafeContacts(loadedSafe);
-    setEmergencyContacts(loadedEmergency);
+    try {
+      const loadedSafe = JSON.parse(localStorage.getItem('ozintel_safe_contacts') || '[]');
+      const loadedEmergency = JSON.parse(localStorage.getItem('ozintel_emergency_contacts') || '[]');
+      setSafeContacts(loadedSafe);
+      setEmergencyContacts(loadedEmergency);
+    } catch (e) {
+      console.error("Error loading contacts from storage", e);
+    }
   }, []);
 
   function saveContacts(safe: Contact[], emergency: Contact[]) {
     setSafeContacts(safe);
     setEmergencyContacts(emergency);
-    localStorage.setItem('ozintel_safe_contacts', JSON.stringify(safe));
-    localStorage.setItem('ozintel_emergency_contacts', JSON.stringify(emergency));
+    try {
+      localStorage.setItem('ozintel_safe_contacts', JSON.stringify(safe));
+      localStorage.setItem('ozintel_emergency_contacts', JSON.stringify(emergency));
+    } catch (e) {
+      console.error("Error saving contacts to storage", e);
+    }
   }
 
   function addSafeContact() {
@@ -69,7 +77,7 @@ export default function HomePage() {
     saveContacts(safeContacts, updated);
   }
 
-  async function sendSMSViaMessageMedia(recipientPhone: string, messageBody: string) {
+  async function sendSMSViaMessageMedia(recipientPhone: string, messageBody: string): Promise<boolean> {
     try {
       const response = await fetch('/api/send-sms', {
         method: 'POST',
@@ -116,7 +124,7 @@ export default function HomePage() {
 
     setStatus("Dispatching Emergency alert...");
 
-    if (navigator.geolocation) {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
