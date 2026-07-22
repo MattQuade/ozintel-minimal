@@ -12,13 +12,14 @@ export async function POST(request) {
     const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
 
     if (!apiKey || !apiSecret) {
-      return NextResponse.json({ error: 'MessageMedia credentials not configured on server' }, { status: 500 });
+      console.error('MessageMedia credentials missing from environment variables');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    // Basic Auth header for MessageMedia
+    // Generate Basic Authorization header
     const credentials = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
-    // MessageMedia REST API payload structure
+    // MessageMedia endpoint payload
     const payload = {
       messages: [
         {
@@ -29,7 +30,7 @@ export async function POST(request) {
       ]
     };
 
-    const response = await httpsRequest('https://api.messagemedia.com/v1/messages', {
+    const mmResponse = await fetch('https://api.messagemedia.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -38,27 +39,17 @@ export async function POST(request) {
       body: JSON.stringify(payload)
     });
 
-    if (response.status >= 200 && response.status < 300) {
-      return NextResponse.json({ success: true });
+    const responseData = await mmResponse.json().catch(() => ({}));
+
+    if (mmResponse.ok) {
+      return NextResponse.json({ success: true, data: responseData });
     } else {
-      console.error('MessageMedia API Error:', response.data);
-      return NextResponse.json({ error: 'Failed to send via MessageMedia', details: response.data }, { status: 500 });
+      console.error('MessageMedia Gateway Error:', responseData);
+      return NextResponse.json({ error: 'Failed to send via MessageMedia', details: responseData }, { status: mmResponse.status });
     }
 
   } catch (error) {
-    console.error('Server error handling SMS dispatch:', error);
+    console.error('Server error dispatching SMS:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
-
-// Helper for native fetch to MessageMedia endpoint
-async function httpsRequest(url, options) {
-  const res = await fetch(url, options);
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    data = await res.text();
-  }
-  return { status: res.status, data };
 }
