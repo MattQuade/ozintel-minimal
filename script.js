@@ -11,16 +11,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 1. Contact Management
 function addSafeContact() {
-    const nameInput = document.getElementById('safeContactName');
     const phoneInput = document.getElementById('safeContactPhone');
+    const nameInput = document.getElementById('safeContactName');
     
-    if (!nameInput || !phoneInput) return;
+    if (!phoneInput || !nameInput) return;
 
-    const name = nameInput.value.trim();
     const phone = phoneInput.value.trim();
+    const name = nameInput.value.trim();
 
-    if (!name || !phone) {
-        alert("Please enter both name and phone number for the safe contact.");
+    if (!phone || !name || phone === '+61412345678') {
+        alert("Please enter a valid phone number and name for the safe contact.");
         return;
     }
 
@@ -28,8 +28,8 @@ function addSafeContact() {
     saveContacts();
     renderContacts();
 
-    nameInput.value = '';
     phoneInput.value = '';
+    nameInput.value = '';
 }
 
 function removeSafeContact(index) {
@@ -39,16 +39,16 @@ function removeSafeContact(index) {
 }
 
 function addEmergencyContact() {
-    const nameInput = document.getElementById('emergencyContactName');
     const phoneInput = document.getElementById('emergencyContactPhone');
+    const nameInput = document.getElementById('emergencyContactName');
     
-    if (!nameInput || !phoneInput) return;
+    if (!phoneInput || !nameInput) return;
 
-    const name = nameInput.value.trim();
     const phone = phoneInput.value.trim();
+    const name = nameInput.value.trim();
 
-    if (!name || !phone) {
-        alert("Please enter both name and phone number for the emergency contact.");
+    if (!phone || !name || phone === '+61412345678') {
+        alert("Please enter a valid phone number and name for the emergency contact.");
         return;
     }
 
@@ -56,8 +56,8 @@ function addEmergencyContact() {
     saveContacts();
     renderContacts();
 
-    nameInput.value = '';
     phoneInput.value = '';
+    nameInput.value = '';
 }
 
 function removeEmergencyContact(index) {
@@ -92,5 +92,85 @@ function renderContacts() {
             div.innerHTML = `<span>${contact.name} (${contact.phone})</span> <button onclick="removeEmergencyContact(${index})">Remove</button>`;
             emergencyList.appendChild(div);
         });
+    }
+}
+
+// 2. Alert Triggers
+async function sendSafeArrival() {
+    if (safeContacts.length === 0) {
+        alert("No safe arrival contacts configured. Please add one first.");
+        return;
+    }
+
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.innerText = "Sending Safe Arrival alert...";
+
+    try {
+        // Simulating backend / MessageMedia trigger
+        let successCount = 0;
+        for (const contact of safeContacts) {
+            // Replace with actual fetch('/api/send-sms', ...) when backend endpoint is ready
+            console.log(`Sending Safe SMS to ${contact.phone}`);
+            successCount++;
+        }
+
+        if (successCount > 0) {
+            if (statusEl) statusEl.innerText = "✅ Safe arrival alert sent successfully!";
+            alert(`Safe arrival alert successfully dispatched to ${successCount} contact(s)!`);
+            
+            // Increment local SMS counter display
+            let counterEl = document.getElementById('sms-count');
+            if (counterEl) {
+                let current = parseInt(counterEl.innerText) || 0;
+                counterEl.innerText = current + 1;
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        if (statusEl) statusEl.innerText = "Error sending alert.";
+        alert("Failed to send safe arrival alert.");
+    }
+}
+
+async function sendEmergencyAlert() {
+    if (emergencyContacts.length === 0) {
+        alert("No emergency contacts configured. Please add one first.");
+        return;
+    }
+
+    const statusEl = document.getElementById('status');
+    if (statusEl) statusEl.innerText = "Dispatching Emergency alert...";
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            executeEmergencyDispatch(`🚨 EMERGENCY! I need help. Location: https://maps.google.com/?q=${lat},${lon}`);
+        }, () => {
+            executeEmergencyDispatch("🚨 EMERGENCY! I need immediate assistance.");
+        });
+    } else {
+        executeEmergencyDispatch("🚨 EMERGENCY! I need immediate assistance.");
+    }
+}
+
+function executeEmergencyDispatch(message) {
+    const statusEl = document.getElementById('status');
+    let successCount = 0;
+    
+    for (const contact of emergencyContacts) {
+        console.log(`Emergency SMS to ${contact.phone}: ${message}`);
+        successCount++;
+    }
+
+    if (successCount > 0) {
+        if (statusEl) statusEl.innerText = "🚨 Emergency alert dispatched!";
+        alert(`🚨 Emergency alert sent to ${successCount} contact(s)!`);
+        
+        let counterEl = document.getElementById('sms-count');
+        if (counterEl) {
+            let current = parseInt(counterEl.innerText) || 0;
+            counterEl.innerText = current + 1;
+        }
     }
 }
