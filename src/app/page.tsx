@@ -7,7 +7,7 @@ type Contact = {
   phone: string;
 };
 
-// Always point directly to the live Render backend API
+// Direct target pointing to the live Render backend API
 const API_BASE = "https://ozintel-backend.onrender.com";
 
 export default function HomePage() {
@@ -81,26 +81,33 @@ export default function HomePage() {
   }
 
   async function sendSMSViaMessageMedia(recipientPhone: string, messageBody: string): Promise<boolean> {
-    console.log("Dispatching SMS to backend:", `${API_BASE}/api/send-sms`);
-    console.log("Payload:", { phone: recipientPhone, message: messageBody });
+    const targetUrl = `${API_BASE}/api/send-sms`;
+    console.log(">>> Initiating fetch request to:", targetUrl);
+    console.log(">>> Payload data:", { phone: recipientPhone, message: messageBody });
 
     try {
-      const response = await fetch(`${API_BASE}/api/send-sms`, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ phone: recipientPhone, message: messageBody })
       });
 
-      console.log("Response status:", response.status);
+      console.log(">>> Response status code:", response.status);
+      
+      const responseText = await response.text();
+      console.log(">>> Response body raw text:", responseText);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Backend error response:", errorText);
+        console.error(">>> Server rejected request. Status:", response.status, responseText);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error("Network error connecting to SMS API:", error);
+      console.error(">>> Network exception thrown during fetch:", error);
       return false;
     }
   }
