@@ -3,7 +3,7 @@
 // ==========================================
 
 // Always call the correct backend
-const API_BASE = "https://ozintel-accounting.onrender.com";
+const API_BASE = "https://ozintel-backend.onrender.com";
 
 let safeContacts = JSON.parse(localStorage.getItem('ozintel_safe_contacts')) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem('ozintel_emergency_contacts')) || [];
