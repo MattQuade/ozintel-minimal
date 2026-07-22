@@ -2,6 +2,9 @@
 // OZINTEL - MAIN SCRIPT (Alerts & Contacts)
 // ==========================================
 
+// Always call the correct backend
+const API_BASE = "https://ozintel-accounting.onrender.com";
+
 let safeContacts = JSON.parse(localStorage.getItem('ozintel_safe_contacts')) || [];
 let emergencyContacts = JSON.parse(localStorage.getItem('ozintel_emergency_contacts')) || [];
 
@@ -98,13 +101,18 @@ function renderContacts() {
 // 2. Live MessageMedia Dispatch Function
 async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
     try {
-        const response = await fetch('/api/send-sms', {
+        const response = await fetch(`${API_BASE}/api/send-sms`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: recipientPhone, message: messageBody })
         });
-        
-        return response.ok;
+
+        if (!response.ok) {
+            console.error("Backend returned non-OK:", await response.text());
+            return false;
+        }
+
+        return true;
     } catch (error) {
         console.error("Network error connecting to SMS API:", error);
         return false;
