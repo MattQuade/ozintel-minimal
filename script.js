@@ -127,6 +127,8 @@ async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
 
 // 3. Alert Triggers
 async function sendSafeArrival() {
+    console.log("sendSafeArrival triggered!");
+    
     if (safeContacts.length === 0) {
         alert("No safe arrival contacts configured. Please add one first.");
         return;
@@ -159,6 +161,8 @@ async function sendSafeArrival() {
 }
 
 async function sendEmergencyAlert() {
+    console.log("sendEmergencyAlert triggered!");
+
     if (emergencyContacts.length === 0) {
         alert("No emergency contacts configured. Please add one first.");
         return;
