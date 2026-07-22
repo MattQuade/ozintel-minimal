@@ -7,7 +7,6 @@ type Contact = {
   phone: string;
 };
 
-// Direct target pointing to the live Render backend API
 const API_BASE = "https://ozintel-backend.onrender.com";
 
 export default function HomePage() {
@@ -24,156 +23,134 @@ export default function HomePage() {
 
   useEffect(() => {
     try {
-      const loadedSafe = JSON.parse(localStorage.getItem('ozintel_safe_contacts') || '[]');
-      const loadedEmergency = JSON.parse(localStorage.getItem('ozintel_emergency_contacts') || '[]');
-      setSafeContacts(loadedSafe);
-      setEmergencyContacts(loadedEmergency);
+      const storedSafe = localStorage.getItem('ozintel_safe_contacts');
+      const storedEmergency = localStorage.getItem('ozintel_emergency_contacts');
+      if (storedSafe) setSafeContacts(JSON.parse(storedSafe));
+      if (storedEmergency) setEmergencyContacts(JSON.parse(storedEmergency));
     } catch (e) {
-      console.error("Error loading contacts from storage", e);
+      console.error("Storage load error:", e);
     }
   }, []);
 
-  function saveContacts(safe: Contact[], emergency: Contact[]) {
-    setSafeContacts(safe);
-    setEmergencyContacts(emergency);
+  const saveContacts = (updatedSafe: Contact[], updatedEmergency: Contact[]) => {
+    setSafeContacts(updatedSafe);
+    setEmergencyContacts(updatedEmergency);
     try {
-      localStorage.setItem('ozintel_safe_contacts', JSON.stringify(safe));
-      localStorage.setItem('ozintel_emergency_contacts', JSON.stringify(emergency));
+      localStorage.setItem('ozintel_safe_contacts', JSON.stringify(updatedSafe));
+      localStorage.setItem('ozintel_emergency_contacts', JSON.stringify(updatedEmergency));
     } catch (e) {
-      console.error("Error saving contacts to storage", e);
+      console.error("Storage save error:", e);
     }
-  }
+  };
 
-  function addSafeContact() {
-    const phone = safePhone.trim();
-    const name = safeName.trim();
-    if (!phone || !name || phone === '+61412345678') {
-      alert("Please enter a valid phone number and name for the safe contact.");
-      return;
-    }
-    const updated = [...safeContacts, { name, phone }];
+  const addSafeContact = () => {
+    if (!safePhone.trim() || !safeName.trim()) return;
+    const updated = [...safeContacts, { name: safeName.trim(), phone: safePhone.trim() }];
     saveContacts(updated, emergencyContacts);
     setSafePhone('');
     setSafeName('');
-  }
+  };
 
-  function removeSafeContact(index: number) {
+  const removeSafeContact = (index: number) => {
     const updated = safeContacts.filter((_, i) => i !== index);
     saveContacts(updated, emergencyContacts);
-  }
+  };
 
-  function addEmergencyContact() {
-    const phone = emergencyPhone.trim();
-    const name = emergencyName.trim();
-    if (!phone || !name || phone === '+61412345678') {
-      alert("Please enter a valid phone number and name for the emergency contact.");
-      return;
-    }
-    const updated = [...emergencyContacts, { name, phone }];
+  const addEmergencyContact = () => {
+    if (!emergencyPhone.trim() || !emergencyName.trim()) return;
+    const updated = [...emergencyContacts, { name: emergencyName.trim(), phone: emergencyPhone.trim() }];
     saveContacts(safeContacts, updated);
     setEmergencyPhone('');
     setEmergencyName('');
-  }
+  };
 
-  function removeEmergencyContact(index: number) {
+  const removeEmergencyContact = (index: number) => {
     const updated = emergencyContacts.filter((_, i) => i !== index);
     saveContacts(safeContacts, updated);
-  }
+  };
 
-  async function sendSMSViaMessageMedia(recipientPhone: string, messageBody: string): Promise<boolean> {
-    const targetUrl = `${API_BASE}/api/send-sms`;
-    console.log(">>> Initiating fetch request to:", targetUrl);
-    console.log(">>> Payload data:", { phone: recipientPhone, message: messageBody });
-
+  const sendSMSViaMessageMedia = async (recipientPhone: string, messageBody: string): Promise<boolean> => {
+    console.log("-> Attempting to send SMS to:", recipientPhone);
     try {
-      const response = await fetch(targetUrl, {
+      const res = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: recipientPhone, message: messageBody })
       });
-
-      console.log(">>> Response status code:", response.status);
       
-      const responseText = await response.text();
-      console.log(">>> Response body raw text:", responseText);
-
-      if (!response.ok) {
-        console.error(">>> Server rejected request. Status:", response.status, responseText);
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      console.error(">>> Network exception thrown during fetch:", error);
+      const data = await res.text();
+      console.log("-> Server response:", res.status, data);
+      return res.ok;
+    } catch (err) {
+      console.error("-> Fetch exception caught:", err);
       return false;
     }
-  }
+  };
 
-  async function sendSafeArrival() {
+  const sendSafeArrival = async () => {
+    console.log("-> Safe Arrival button clicked.");
     if (safeContacts.length === 0) {
-      alert("No safe arrival contacts configured. Please add one first.");
+      alert("No safe arrival contacts configured.");
       return;
     }
 
-    setStatus("Sending Safe Arrival alert via MessageMedia...");
-    let successCount = 0;
-    const message = "OzIntel Alert: I have arrived safely.";
+    setStatus("Sending Safe Arrival alert...");
+    let sentCount = 0;
 
     for (const contact of safeContacts) {
-      const sent = await sendSMSViaMessageMedia(contact.phone, message);
-      if (sent) successCount++;
+      const success = await sendSMSViaMessageMedia(contact.phone, "OzIntel Alert: I have arrived safely.");
+      if (success) sentCount++;
     }
 
-    if (successCount > 0) {
+    if (sentCount > 0) {
       setStatus("✅ Safe arrival alert sent successfully!");
-      alert(`Safe arrival alert successfully dispatched to ${successCount} contact(s)!`);
       setSmsCount(prev => prev + 1);
     } else {
       setStatus("Failed to send SMS.");
-      alert("Failed to send SMS through the server backend. Check your MessageMedia configuration.");
+      alert("Failed to send SMS through the server backend. Check your configuration.");
     }
-  }
+  };
 
-  async function sendEmergencyAlert() {
+  const sendEmergencyAlert = async () => {
+    console.log("-> Emergency button clicked.");
     if (emergencyContacts.length === 0) {
-      alert("No emergency contacts configured. Please add one first.");
+      alert("No emergency contacts configured.");
       return;
     }
 
     setStatus("Dispatching Emergency alert...");
 
     if (typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        executeEmergencyDispatch(`🚨 EMERGENCY! I need help. Location: https://maps.google.com/?q=${lat},${lon}`);
-      }, () => {
-        executeEmergencyDispatch("🚨 EMERGENCY! I need immediate assistance.");
-      });
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const mapLink = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+          executeEmergencyDispatch(`🚨 EMERGENCY! I need help. Location: ${mapLink}`);
+        },
+        () => {
+          executeEmergencyDispatch("🚨 EMERGENCY! I need immediate assistance.");
+        },
+        { timeout: 10000 }
+      );
     } else {
       executeEmergencyDispatch("🚨 EMERGENCY! I need immediate assistance.");
     }
-  }
+  };
 
-  async function executeEmergencyDispatch(message: string) {
-    let successCount = 0;
+  const executeEmergencyDispatch = async (message: string) => {
+    let sentCount = 0;
     for (const contact of emergencyContacts) {
-      const sent = await sendSMSViaMessageMedia(contact.phone, message);
-      if (sent) successCount++;
+      const success = await sendSMSViaMessageMedia(contact.phone, message);
+      if (success) sentCount++;
     }
 
-    if (successCount > 0) {
+    if (sentCount > 0) {
       setStatus("🚨 Emergency alert dispatched!");
-      alert(`🚨 Emergency alert sent to ${successCount} contact(s)!`);
       setSmsCount(prev => prev + 1);
     } else {
       setStatus("Failed to dispatch emergency SMS.");
       alert("Failed to dispatch emergency SMS through the server backend.");
     }
-  }
+  };
 
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
