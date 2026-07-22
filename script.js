@@ -98,8 +98,12 @@ function renderContacts() {
     }
 }
 
-// 2. Live MessageMedia Dispatch Function
+// 2. Live MessageMedia Dispatch Function with Enhanced Diagnostics
 async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
+    console.log("API_BASE:", API_BASE);
+    console.log("Dispatching SMS to backend:", API_BASE);
+    console.log("Payload:", { phone: recipientPhone, message: messageBody });
+
     try {
         const response = await fetch(`${API_BASE}/api/send-sms`, {
             method: 'POST',
@@ -107,14 +111,16 @@ async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
             body: JSON.stringify({ phone: recipientPhone, message: messageBody })
         });
 
+        console.log("Response:", response);
+
         if (!response.ok) {
             console.error("Backend returned non-OK:", await response.text());
             return false;
         }
 
         return true;
-    } catch (error) {
-        console.error("Network error connecting to SMS API:", error);
+    } catch (err) {
+        console.error("Fetch error:", err);
         return false;
     }
 }
