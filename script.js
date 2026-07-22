@@ -95,7 +95,23 @@ function renderContacts() {
     }
 }
 
-// 2. Alert Triggers
+// 2. Live MessageMedia Dispatch Function
+async function sendSMSViaMessageMedia(recipientPhone, messageBody) {
+    try {
+        const response = await fetch('/api/send-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: recipientPhone, message: messageBody })
+        });
+        
+        return response.ok;
+    } catch (error) {
+        console.error("Network error connecting to SMS API:", error);
+        return false;
+    }
+}
+
+// 3. Alert Triggers
 async function sendSafeArrival() {
     if (safeContacts.length === 0) {
         alert("No safe arrival contacts configured. Please add one first.");
@@ -103,32 +119,28 @@ async function sendSafeArrival() {
     }
 
     const statusEl = document.getElementById('status');
-    if (statusEl) statusEl.innerText = "Sending Safe Arrival alert...";
+    if (statusEl) statusEl.innerText = "Sending Safe Arrival alert via MessageMedia...";
 
-    try {
-        // Simulating backend / MessageMedia trigger
-        let successCount = 0;
-        for (const contact of safeContacts) {
-            // Replace with actual fetch('/api/send-sms', ...) when backend endpoint is ready
-            console.log(`Sending Safe SMS to ${contact.phone}`);
-            successCount++;
-        }
+    let successCount = 0;
+    const message = "OzIntel Alert: I have arrived safely.";
 
-        if (successCount > 0) {
-            if (statusEl) statusEl.innerText = "✅ Safe arrival alert sent successfully!";
-            alert(`Safe arrival alert successfully dispatched to ${successCount} contact(s)!`);
-            
-            // Increment local SMS counter display
-            let counterEl = document.getElementById('sms-count');
-            if (counterEl) {
-                let current = parseInt(counterEl.innerText) || 0;
-                counterEl.innerText = current + 1;
-            }
+    for (const contact of safeContacts) {
+        const sent = await sendSMSViaMessageMedia(contact.phone, message);
+        if (sent) successCount++;
+    }
+
+    if (successCount > 0) {
+        if (statusEl) statusEl.innerText = "✅ Safe arrival alert sent successfully!";
+        alert(`Safe arrival alert successfully dispatched to ${successCount} contact(s)!`);
+        
+        let counterEl = document.getElementById('sms-count');
+        if (counterEl) {
+            let current = parseInt(counterEl.innerText) || 0;
+            counterEl.innerText = current + 1;
         }
-    } catch (err) {
-        console.error(err);
-        if (statusEl) statusEl.innerText = "Error sending alert.";
-        alert("Failed to send safe arrival alert.");
+    } else {
+        if (statusEl) statusEl.innerText = "Failed to send SMS.";
+        alert("Failed to send SMS through the server backend. Check your MessageMedia configuration.");
     }
 }
 
@@ -154,13 +166,13 @@ async function sendEmergencyAlert() {
     }
 }
 
-function executeEmergencyDispatch(message) {
+async function executeEmergencyDispatch(message) {
     const statusEl = document.getElementById('status');
     let successCount = 0;
     
     for (const contact of emergencyContacts) {
-        console.log(`Emergency SMS to ${contact.phone}: ${message}`);
-        successCount++;
+        const sent = await sendSMSViaMessageMedia(contact.phone, message);
+        if (sent) successCount++;
     }
 
     if (successCount > 0) {
@@ -172,5 +184,8 @@ function executeEmergencyDispatch(message) {
             let current = parseInt(counterEl.innerText) || 0;
             counterEl.innerText = current + 1;
         }
+    } else {
+        if (statusEl) statusEl.innerText = "Failed to dispatch emergency SMS.";
+        alert("Failed to dispatch emergency SMS through the server backend.");
     }
 }
