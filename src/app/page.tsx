@@ -7,6 +7,9 @@ type Contact = {
   phone: string;
 };
 
+// Always point directly to the live Render backend API
+const API_BASE = "https://ozintel-backend.onrender.com";
+
 export default function HomePage() {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
   const [emergencyContacts, setEmergencyContacts] = useState<Contact[]>([]);
@@ -78,13 +81,24 @@ export default function HomePage() {
   }
 
   async function sendSMSViaMessageMedia(recipientPhone: string, messageBody: string): Promise<boolean> {
+    console.log("Dispatching SMS to backend:", `${API_BASE}/api/send-sms`);
+    console.log("Payload:", { phone: recipientPhone, message: messageBody });
+
     try {
-      const response = await fetch('/api/send-sms', {
+      const response = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: recipientPhone, message: messageBody })
       });
-      return response.ok;
+
+      console.log("Response status:", response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Backend error response:", errorText);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.error("Network error connecting to SMS API:", error);
       return false;
