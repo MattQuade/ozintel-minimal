@@ -328,8 +328,8 @@ export default function HomePage() {
         </button>
       </div>
 
-      <h1 style={{ color: '#22d3ee', fontSize: '2.5rem', margin: '10px 0' }}>🛡️ OzIntel</h1>
-      <p style={{ fontSize: '1.2rem', color: '#94a3b8' }}>Alert System</p>
+      <h1 style={{ color: '#22d3ee', margin: '5px 0' }}>🛡️ OzIntel</h1>
+      <p style={{ color: '#94a3b8', marginTop: 0 }}>Alert System</p>
 
       {/* Admin Login Modal / Section */}
       {showAdminLogin && !isAdminAuthenticated && (
@@ -397,13 +397,13 @@ export default function HomePage() {
                   <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
                     <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
                     <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting Component
+                      <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting
                     </label>
                     <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.pubOps} onChange={e => updatePermissions(u.email, 'pubOps', e.target.checked)} /> Pub Ops Component
+                      <input type="checkbox" checked={u.permissions.pubOps} onChange={e => updatePermissions(u.email, 'pubOps', e.target.checked)} /> Pub Ops
                     </label>
                     <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops Component
+                      <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops
                     </label>
                   </div>
                 )}
@@ -508,6 +508,22 @@ export default function HomePage() {
           <input type="text" placeholder="Name" value={emergencyName} onChange={e => setEmergencyName(e.target.value)} style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
           <button onClick={addEmergencyContact} style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Add Emergency</button>
         </div>
+      </div>
+
+      {/* Operational Buttons below Emergency Contacts (Same size as Safe Arrival & Send Help) */}
+      <div style={{ margin: '40px 0 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+        <button 
+          onClick={() => alert("Accounting Panel: Pending Approval")} 
+          style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold' }}
+        >
+          Accounting - Pending Approval
+        </button>
+        <button 
+          onClick={() => alert("OPS Panel: Pending Approval")} 
+          style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}
+        >
+          OPS - Pending Approval
+        </button>
       </div>
     </div>
   );
