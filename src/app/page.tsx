@@ -9,14 +9,13 @@ export default function HomePage() {
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', padding: '24px', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         
-        {/* Locked Header Container */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '10px 0 20px 0' }}>
-          <div style={{ fontSize: '3rem', lineHeight: '1', marginBottom: '8px' }}>🛡️</div>
-          <h1 style={{ color: '#22d3ee', fontSize: '2rem', fontWeight: 'bold', margin: '0 0 4px 0', lineHeight: '1.2' }}>OzIntel</h1>
-          <p style={{ color: '#94a3b8', fontSize: '1rem', margin: '0', fontWeight: '500' }}>Alert System</p>
+        {/* Header Section */}
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <h1 style={{ color: '#22d3ee', fontSize: '2.5rem', fontWeight: 'bold', margin: '5px 0' }}>🛡️ OzIntel</h1>
+          <p style={{ color: '#94a3b8', fontSize: '1.1rem', margin: '0' }}>Alert System</p>
         </div>
 
-        {/* Navigation / Role Buttons */}
+        {/* Navigation Buttons */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '32px', flexWrap: 'wrap' }}>
           <button 
             onClick={() => setCurrentView('dashboard')}
