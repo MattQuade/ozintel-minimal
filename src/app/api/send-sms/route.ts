@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 
+// In-memory or global store to remember the last alert position per user/phone & type for same-day tracking
+// Structure: { [key: string]: { lat: number, lon: number, timestamp: string } }
+declare global {
+  var alertHistoryStore: Record<string, { lat: number; lon: number; timestamp: string }> | undefined;
+}
+
+const alertHistory = global.alertHistoryStore || (global.alertHistoryStore = {});
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { phone, message, location } = body;
+    const { phone, message, location, userName, alertType } = body;
 
     if (!phone) {
       return NextResponse.json(
@@ -12,31 +20,78 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get current time formatted cleanly
-    const currentTime = new Date().toLocaleString('en-AU', {
+    const now = new Date();
+    const currentTimeStr = now.toLocaleTimeString('en-AU', {
+      timeZone: 'Australia/Sydney',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    
+    const currentDateStr = now.toLocaleDateString('en-AU', {
+      timeZone: 'Australia/Sydney',
+    });
+
+    const currentDateTimeFull = now.toLocaleString('en-AU', {
       timeZone: 'Australia/Sydney',
       dateStyle: 'medium',
       timeStyle: 'medium',
     });
 
-    // Build the enhanced message containing time, location, and distance metrics
-    let finalMessage = message || 'Safe Arrival Alert Triggered.';
-    finalMessage += `\nTime: ${currentTime}`;
+    // Determine type (Safe or Emergency)
+    const typeLabel = alertType || (message?.toLowerCase().includes('emergency') ? 'EMERGENCY' : 'SAFE ARRIVAL');
+    const tickIcon = typeLabel === 'EMERGENCY' ? '🚨' : '✅';
+    const senderName = userName || 'User';
+
+    // Build unique tracking key for same-day same-type calculations
+    const historyKey = `${phone}_${typeLabel}_${currentDateStr}`;
+    let timeDiffDisplay = '0h 0m (First alert today)';
+    let distanceDisplay = 'N/A (First alert today)';
+
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+      const lastRecord = alertHistory[historyKey];
+
+      if (lastRecord) {
+        // Calculate distance from previous alert using Haversine formula
+        const distKm = calculateDistance(
+          lastRecord.lat,
+          lastRecord.lon,
+          location.latitude,
+          location.longitude
+        );
+        distanceDisplay = `${distKm.toFixed(2)} km`;
+
+        // Calculate time difference on the same day
+        const [lastH, lastM] = lastRecord.timestamp.split(':').map(Number);
+        const [currH, currM] = currentTimeStr.split(':').map(Number);
+        const diffMinutesTotal = (currH * 60 + currM) - (lastH * 60 + lastM);
+
+        if (diffMinutesTotal > 0) {
+          const diffHours = Math.floor(diffMinutesTotal / 60);
+          const diffMins = diffMinutesTotal % 60;
+          timeDiffDisplay = `${diffHours}h ${diffMins}m`;
+        } else {
+          timeDiffDisplay = `0h 0m`;
+        }
+      }
+
+      // Update history store with current coordinates and time
+      alertHistory[historyKey] = {
+        lat: location.latitude,
+        lon: location.longitude,
+        timestamp: currentTimeStr,
+      };
+    }
+
+    // Construct the formatted message matching the attachment layout requirement
+    let finalMessage = `${tickIcon} ${typeLabel} - ${senderName}\n`;
+    finalMessage += `Time: ${currentDateTimeFull}\n`;
+    finalMessage += `Time since last ${typeLabel}: ${timeDiffDisplay}\n`;
 
     if (location && location.latitude && location.longitude) {
       const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
-      finalMessage += `\nHigh-Accuracy Location: ${mapsLink}`;
-
-      // Optional straight-line distance calculation if a destination/home coordinate is provided
-      if (location.destLat && location.destLon) {
-        const distanceKm = calculateDistance(
-          location.latitude,
-          location.longitude,
-          location.destLat,
-          location.destLon
-        );
-        finalMessage += `\nStraight-line Distance to Destination: ${distanceKm.toFixed(2)} km`;
-      }
+      finalMessage += `Location: ${mapsLink}\n`;
+      finalMessage += `Distance from previous alert: ${distanceDisplay}`;
     }
 
     // MessageMedia REST API Endpoint
@@ -81,7 +136,7 @@ export async function POST(request: Request) {
   }
 }
 
-// Helper function to calculate straight-line distance using the Haversine formula (in kilometers)
+// Helper function to calculate straight-line distance using the Haversine formula (accurate to 0.01 km / 10 metres)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
