@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 
-// Interfaces for user state and data
 interface User {
   name: string;
   email: string;
@@ -21,25 +20,21 @@ interface SafeContact {
 }
 
 export default function HomePage() {
-  // Application State
   const [currentView, setCurrentView] = useState<'dashboard' | 'accounting' | 'pubOps' | 'forestryOps'>('dashboard');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   
-  // Registration Form State
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('');
+  const [regPhone, setRegPhone] = useState('+614');
   const [regRole, setRegRole] = useState('Staff');
   const [regPassword, setRegPassword] = useState('');
 
-  // Safe Contacts / Emergency State
   const [safeContacts, setSafeContacts] = useState<SafeContact[]>([]);
   const [safeName, setSafeName] = useState('');
-  const [safePhone, setSafePhone] = useState('');
+  const [safePhone, setSafePhone] = useState('+614');
 
-  // Initial load from local storage
   useEffect(() => {
     const savedUsers = localStorage.getItem('ozintel_all_users');
     if (savedUsers) {
@@ -83,10 +78,9 @@ export default function HomePage() {
     setCurrentUser(newUser);
     localStorage.setItem('ozintel_current_user', JSON.stringify(newUser));
 
-    // Reset Form
     setRegName('');
     setRegEmail('');
-    setRegPhone('');
+    setRegPhone('+614');
     setRegPassword('');
     setShowRegisterModal(false);
   };
@@ -127,7 +121,7 @@ export default function HomePage() {
     const updated = [...safeContacts, { name: safeName.trim(), phone: safePhone.trim() }];
     setSafeContacts(updated);
     setSafeName('');
-    setSafePhone('');
+    setSafePhone('+614');
   };
 
   return (
