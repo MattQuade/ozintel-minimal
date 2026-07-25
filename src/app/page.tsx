@@ -20,7 +20,7 @@ type UserProfile = {
   };
 };
 
-const API_BASE = "https://ozintel-backend.onrender.com";
+const API_BASE = "";
 
 export default function HomePage() {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
