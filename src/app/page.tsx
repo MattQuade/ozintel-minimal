@@ -135,14 +135,15 @@ export default function HomePage() {
       console.error("Error saving user profile:", err);
     }
 
-    // Send SMS notification to Admin
+    // Send SMS notification to Admin (clearly marked as SIGNUP)
     try {
       await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: '+61416619600',
-          message: `OzIntel: New signup request from ${newUser.name} (${newUser.email} / ${newUser.phone}). Please approve in Admin Panel.`
+          message: `ADMIN ALERT: New user signup request\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone}\nPlease approve in the Admin Panel.`,
+          alertType: "SIGNUP_REQUEST"
         })
       });
     } catch (err) {
@@ -530,7 +531,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Operational Buttons below Emergency Contacts (Same size as Safe Arrival & Send Help) */}
+      {/* Operational Buttons below Emergency Contacts */}
       <div style={{ margin: '40px 0 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
         <button 
           onClick={() => alert("Accounting Panel: Pending Approval")} 
