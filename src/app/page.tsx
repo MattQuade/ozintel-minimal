@@ -20,7 +20,7 @@ type UserProfile = {
   };
 };
 
-const API_BASE = "";
+const API_BASE = "https://ozintel-backend.onrender.com";
 
 export default function HomePage() {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
@@ -104,7 +104,7 @@ export default function HomePage() {
     }
   };
 
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signUpName.trim() || !signUpEmail.trim() || !signUpPhone.trim()) {
       alert("Please fill in all sign-up fields.");
@@ -120,7 +120,7 @@ export default function HomePage() {
       permissions: { accounting: false, pubOps: false, forestryOps: false }
     };
 
-    // FIX: Merge with existing allUsers array instead of overwriting, and save properly
+    // Merge with existing users
     const existingUsers = allUsers.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())
       ? allUsers.map(u => u.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : u)
       : [...allUsers, newUser];
@@ -133,6 +133,20 @@ export default function HomePage() {
       localStorage.setItem('ozintel_all_users', JSON.stringify(existingUsers));
     } catch (err) {
       console.error("Error saving user profile:", err);
+    }
+
+    // Send SMS notification to Admin
+    try {
+      await fetch(`${API_BASE}/api/send-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: '+61416619600',
+          message: `OzIntel: New signup request from ${newUser.name} (${newUser.email} / ${newUser.phone}). Please approve in Admin Panel.`
+        })
+      });
+    } catch (err) {
+      console.error("Failed to send admin SMS:", err);
     }
 
     setShowSignUp(false);
