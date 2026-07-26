@@ -117,9 +117,17 @@ export default function HomePage() {
       permissions: { accounting: false, pubOps: false, forestryOps: false }
     };
 
-    const existingUsers = allUsers.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())
-      ? allUsers.map(u => u.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : u)
-      : [...allUsers, newUser];
+    let currentStoredUsers: UserProfile[] = [];
+    try {
+      const stored = localStorage.getItem('ozintel_all_users');
+      if (stored) currentStoredUsers = JSON.parse(stored);
+    } catch (err) {
+      console.error("Error reading stored users:", err);
+    }
+
+    const existingUsers = currentStoredUsers.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())
+      ? currentStoredUsers.map(u => u.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : u)
+      : [...currentStoredUsers, newUser];
 
     setAllUsers(existingUsers);
     setCurrentUser(newUser);
@@ -131,7 +139,6 @@ export default function HomePage() {
       console.error("Error saving user profile:", err);
     }
 
-    // Force the name into the message so it cannot be stripped
     try {
       await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
@@ -139,6 +146,7 @@ export default function HomePage() {
         body: JSON.stringify({
           phone: '+61416619600',
           message: `ADMIN ALERT - NEW SIGNUP\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone}\nPlease approve in Admin Panel.`,
+          userName: newUser.name,
           alertType: "SIGNUP_REQUEST"
         })
       });
