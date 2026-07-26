@@ -47,6 +47,12 @@ export default function HomePage() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [selectedEditUser, setSelectedEditUser] = useState<UserProfile | null>(null);
 
+  // Manual Add User states
+  const [manualName, setManualName] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualPhone, setManualPhone] = useState('+614');
+  const [manualApproved, setManualApproved] = useState(true);
+
   useEffect(() => {
     try {
       const storedSafe = localStorage.getItem('ozintel_safe_contacts');
@@ -64,6 +70,30 @@ export default function HomePage() {
 
     fetchUsers();
   }, []);
+
+  // Sync current user status from server every 5 seconds
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users`);
+        const data = await res.json();
+        if (data.success) {
+          const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
+          if (latest && latest.status !== currentUser.status) {
+            setCurrentUser(latest);
+            localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
+            setStatus(latest.status === 'approved' ? "✅ Your account has been approved!" : "Status updated");
+          }
+        }
+      } catch (err) {
+        console.error("Status sync error:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   const fetchUsers = async () => {
     try {
@@ -134,6 +164,52 @@ export default function HomePage() {
     } catch (err) {
       console.error(err);
       alert("Signup failed. Please try again.");
+    }
+  };
+
+  const handleManualAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualName.trim() || !manualEmail.trim() || !manualPhone.trim()) {
+      alert("Please fill in all fields.");
+      return;
+    }
+
+    try {
+      // First create as pending
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: manualName.trim(),
+          email: manualEmail.trim(),
+          phone: manualPhone.trim()
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // If we want them approved immediately
+        if (manualApproved) {
+          await fetch(`${API_BASE}/api/users`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: manualEmail.trim(), status: 'approved' })
+          });
+        }
+
+        fetchUsers();
+        setManualName('');
+        setManualEmail('');
+        setManualPhone('+614');
+        setManualApproved(true);
+        setStatus("✅ User added successfully.");
+      } else {
+        alert("Failed to add user: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to add user.");
     }
   };
 
@@ -282,7 +358,6 @@ export default function HomePage() {
     }
   };
 
-  // ========== LOCKED ALERT FUNCTIONS ==========
   const sendSafeArrival = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
       alert("You must be an approved user to send alerts.\nPlease sign up and wait for admin approval.");
@@ -368,6 +443,23 @@ export default function HomePage() {
         <div style={{ background: '#1e2937', border: '2px solid #f59e0b', padding: '20px', borderRadius: '12px', margin: '20px auto', maxWidth: '600px', textAlign: 'left' }}>
           <h2 style={{ color: '#f59e0b', marginTop: 0 }}>🛡️ Admin Control Panel</h2>
           
+          {/* Manual Add User */}
+          <div style={{ marginBottom: '25px', padding: '15px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
+            <h3 style={{ margin: '0 0 12px 0', color: '#38bdf8' }}>Manually Add User</h3>
+            <form onSubmit={handleManualAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <input type="text" placeholder="Full Name" value={manualName} onChange={e => setManualName(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <input type="email" placeholder="Email" value={manualEmail} onChange={e => setManualEmail(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <input type="tel" placeholder="Phone" value={manualPhone} onChange={e => setManualPhone(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                <input type="checkbox" checked={manualApproved} onChange={e => setManualApproved(e.target.checked)} />
+                Approve immediately
+              </label>
+              <button type="submit" style={{ padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+                Add User
+              </button>
+            </form>
+          </div>
+
           <div style={{ marginBottom: '20px' }}>
             <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '6px' }}>Pending Approval ({pendingUsers.length})</h3>
             {pendingUsers.length === 0 ? <p style={{ color: '#94a3b8' }}>No pending user sign-ups.</p> : pendingUsers.map((u, i) => (
