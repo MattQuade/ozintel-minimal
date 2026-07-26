@@ -47,8 +47,6 @@ export default function HomePage() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [selectedEditUser, setSelectedEditUser] = useState<UserProfile | null>(null);
 
-  // Load contacts + current user from localStorage
-  // Load all users from the SERVER
   useEffect(() => {
     try {
       const storedSafe = localStorage.getItem('ozintel_safe_contacts');
@@ -64,7 +62,6 @@ export default function HomePage() {
       console.error("Storage load error:", e);
     }
 
-    // Load users from server
     fetchUsers();
   }, []);
 
@@ -99,7 +96,6 @@ export default function HomePage() {
     }
 
     try {
-      // Save to SERVER
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,7 +113,6 @@ export default function HomePage() {
         setCurrentUser(data.user);
         localStorage.setItem('ozintel_current_user', JSON.stringify(data.user));
 
-        // Send SMS to admin
         await fetch(`${API_BASE}/api/send-sms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -149,7 +144,7 @@ export default function HomePage() {
       localStorage.setItem('ozintel_admin_auth', 'true');
       setShowAdminLogin(false);
       setStatus("🔓 Admin panel unlocked successfully.");
-      fetchUsers(); // refresh list
+      fetchUsers();
     } else {
       alert("Invalid admin credentials.");
     }
@@ -249,27 +244,25 @@ export default function HomePage() {
   const sendSMSViaMessageMedia = async (recipientPhone: string, messageBody: string, alertType: string): Promise<boolean> => {
     try {
       let locationLink = "";
-      try {
-        const pos = await new Promise<GeolocationPosition | null>((resolve) => {
-          if (typeof window !== 'undefined' && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-              (p) => resolve(p),
-              () => resolve(null),
-              { enableHighAccuracy: true, timeout: 8000 }
-            );
-          } else {
-            resolve(null);
-          }
-        });
 
-        if (pos) {
+      if (typeof window !== 'undefined' && navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
+            });
+          });
+
           locationLink = `\n📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}&z=18`;
+        } catch (geoErr) {
+          console.warn("Geolocation failed:", geoErr);
+          locationLink = "\n📍 Location unavailable";
         }
-      } catch (geoErr) {
-        console.warn("Geolocation failed:", geoErr);
       }
 
-      const finalMessage = messageBody + locationLink;
+      const finalMessage = `${messageBody}${locationLink}`;
 
       const res = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
@@ -289,7 +282,13 @@ export default function HomePage() {
     }
   };
 
+  // ========== LOCKED ALERT FUNCTIONS ==========
   const sendSafeArrival = async () => {
+    if (!currentUser || currentUser.status !== 'approved') {
+      alert("You must be an approved user to send alerts.\nPlease sign up and wait for admin approval.");
+      return;
+    }
+
     if (safeContacts.length === 0) {
       alert("No safe arrival contacts configured.");
       return;
@@ -305,8 +304,7 @@ export default function HomePage() {
 
     if (sentCount > 0) {
       setStatus("✅ Safe arrival alert sent successfully!");
-      const newCount = smsCount + 1;
-      setSmsCount(newCount);
+      setSmsCount(prev => prev + 1);
     } else {
       setStatus("Failed to send SMS.");
       alert("Failed to send SMS through server backend.");
@@ -314,6 +312,11 @@ export default function HomePage() {
   };
 
   const sendEmergencyAlert = async () => {
+    if (!currentUser || currentUser.status !== 'approved') {
+      alert("You must be an approved user to send alerts.\nPlease sign up and wait for admin approval.");
+      return;
+    }
+
     if (emergencyContacts.length === 0) {
       alert("No emergency contacts configured.");
       return;
@@ -329,8 +332,7 @@ export default function HomePage() {
 
     if (sentCount > 0) {
       setStatus("🚨 Emergency alert dispatched!");
-      const newCount = smsCount + 1;
-      setSmsCount(newCount);
+      setSmsCount(prev => prev + 1);
     } else {
       setStatus("Failed to dispatch emergency SMS.");
       alert("Failed to dispatch emergency SMS.");
