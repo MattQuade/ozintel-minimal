@@ -47,48 +47,38 @@ export default function HomePage() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [selectedEditUser, setSelectedEditUser] = useState<UserProfile | null>(null);
 
+  // Load contacts + current user from localStorage
+  // Load all users from the SERVER
   useEffect(() => {
     try {
       const storedSafe = localStorage.getItem('ozintel_safe_contacts');
       const storedEmergency = localStorage.getItem('ozintel_emergency_contacts');
       const storedUser = localStorage.getItem('ozintel_current_user');
-      const storedAllUsers = localStorage.getItem('ozintel_all_users');
       const adminAuth = localStorage.getItem('ozintel_admin_auth');
 
       if (storedSafe) setSafeContacts(JSON.parse(storedSafe));
       if (storedEmergency) setEmergencyContacts(JSON.parse(storedEmergency));
       if (storedUser) setCurrentUser(JSON.parse(storedUser));
-      if (storedAllUsers) setAllUsers(JSON.parse(storedAllUsers));
       if (adminAuth === 'true') setIsAdminAuthenticated(true);
     } catch (e) {
       console.error("Storage load error:", e);
     }
+
+    // Load users from server
+    fetchUsers();
   }, []);
 
-  useEffect(() => {
-    const syncInterval = setInterval(() => {
-      try {
-        const storedAllUsers = localStorage.getItem('ozintel_all_users');
-        const storedUser = localStorage.getItem('ozintel_current_user');
-        
-        if (storedAllUsers && storedUser) {
-          const parsedAll: UserProfile[] = JSON.parse(storedAllUsers);
-          const activeUser: UserProfile = JSON.parse(storedUser);
-          
-          const matched = parsedAll.find(u => u.email === activeUser.email);
-          if (matched && matched.status !== activeUser.status) {
-            setCurrentUser(matched);
-            localStorage.setItem('ozintel_current_user', JSON.stringify(matched));
-            setStatus("✅ Your account has been approved by admin!");
-          }
-        }
-      } catch (err) {
-        console.error("Sync error:", err);
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/users`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        setAllUsers(data.users);
       }
-    }, 3000);
-
-    return () => clearInterval(syncInterval);
-  }, []);
+    } catch (err) {
+      console.error("Failed to load users from server:", err);
+    }
+  };
 
   const saveContacts = (updatedSafe: Contact[], updatedEmergency: Contact[]) => {
     setSafeContacts(updatedSafe);
@@ -108,57 +98,48 @@ export default function HomePage() {
       return;
     }
 
-    const newUser: UserProfile = {
-      name: signUpName.trim(),
-      email: signUpEmail.trim(),
-      phone: signUpPhone.trim(),
-      status: 'pending',
-      smsCount: 0,
-      permissions: { accounting: false, pubOps: false, forestryOps: false }
-    };
-
-    let currentStoredUsers: UserProfile[] = [];
     try {
-      const stored = localStorage.getItem('ozintel_all_users');
-      if (stored) currentStoredUsers = JSON.parse(stored);
-    } catch (err) {
-      console.error("Error reading stored users:", err);
-    }
-
-    const existingUsers = currentStoredUsers.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())
-      ? currentStoredUsers.map(u => u.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : u)
-      : [...currentStoredUsers, newUser];
-
-    setAllUsers(existingUsers);
-    setCurrentUser(newUser);
-
-    try {
-      localStorage.setItem('ozintel_current_user', JSON.stringify(newUser));
-      localStorage.setItem('ozintel_all_users', JSON.stringify(existingUsers));
-    } catch (err) {
-      console.error("Error saving user profile:", err);
-    }
-
-    try {
-      await fetch(`${API_BASE}/api/send-sms`, {
+      // Save to SERVER
+      const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: '+61416619600',
-          message: `ADMIN ALERT - NEW SIGNUP\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone}\nPlease approve in Admin Panel.`,
-          userName: newUser.name,
-          alertType: "SIGNUP_REQUEST"
+          name: signUpName.trim(),
+          email: signUpEmail.trim(),
+          phone: signUpPhone.trim()
         })
       });
-    } catch (err) {
-      console.error("Failed to send admin SMS:", err);
-    }
 
-    setShowSignUp(false);
-    setSignUpName('');
-    setSignUpEmail('');
-    setSignUpPhone('');
-    setStatus("✅ Registration submitted! Pending admin approval.");
+      const data = await res.json();
+
+      if (data.success) {
+        setAllUsers(data.users);
+        setCurrentUser(data.user);
+        localStorage.setItem('ozintel_current_user', JSON.stringify(data.user));
+
+        // Send SMS to admin
+        await fetch(`${API_BASE}/api/send-sms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: '+61416619600',
+            message: `ADMIN ALERT - NEW SIGNUP\nName: ${data.user.name}\nEmail: ${data.user.email}\nPhone: ${data.user.phone}\nPlease approve in Admin Panel.`,
+            alertType: "SIGNUP_REQUEST"
+          })
+        });
+
+        setShowSignUp(false);
+        setSignUpName('');
+        setSignUpEmail('');
+        setSignUpPhone('');
+        setStatus("✅ Registration submitted! Pending admin approval.");
+      } else {
+        alert("Signup failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Signup failed. Please try again.");
+    }
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -168,45 +149,74 @@ export default function HomePage() {
       localStorage.setItem('ozintel_admin_auth', 'true');
       setShowAdminLogin(false);
       setStatus("🔓 Admin panel unlocked successfully.");
+      fetchUsers(); // refresh list
     } else {
       alert("Invalid admin credentials.");
     }
   };
 
-  const approveUser = (email: string) => {
-    const updated = allUsers.map(u => u.email === email ? { ...u, status: 'approved' as const } : u);
-    setAllUsers(updated);
-    localStorage.setItem('ozintel_all_users', JSON.stringify(updated));
-    if (currentUser && currentUser.email === email) {
-      const updatedCurrent = { ...currentUser, status: 'approved' as const };
-      setCurrentUser(updatedCurrent);
-      localStorage.setItem('ozintel_current_user', JSON.stringify(updatedCurrent));
-    }
-  };
-
-  const deleteUser = (email: string) => {
-    const updated = allUsers.filter(u => u.email !== email);
-    setAllUsers(updated);
-    localStorage.setItem('ozintel_all_users', JSON.stringify(updated));
-    if (currentUser && currentUser.email === email) {
-      setCurrentUser(null);
-      localStorage.removeItem('ozintel_current_user');
-    }
-  };
-
-  const updatePermissions = (email: string, key: 'accounting' | 'pubOps' | 'forestryOps', val: boolean) => {
-    const updated = allUsers.map(u => {
-      if (u.email === email) {
-        return { ...u, permissions: { ...u.permissions, [key]: val } };
+  const approveUser = async (email: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, status: 'approved' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllUsers(data.users);
+        if (currentUser && currentUser.email === email) {
+          const updated = { ...currentUser, status: 'approved' as const };
+          setCurrentUser(updated);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(updated));
+        }
       }
-      return u;
-    });
-    setAllUsers(updated);
-    localStorage.setItem('ozintel_all_users', JSON.stringify(updated));
-    if (currentUser && currentUser.email === email) {
-      const updatedCurrent = { ...currentUser, permissions: { ...currentUser.permissions, [key]: val } };
-      setCurrentUser(updatedCurrent);
-      localStorage.setItem('ozintel_current_user', JSON.stringify(updatedCurrent));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteUser = async (email: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/users?email=${encodeURIComponent(email)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllUsers(data.users);
+        if (currentUser && currentUser.email === email) {
+          setCurrentUser(null);
+          localStorage.removeItem('ozintel_current_user');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const updatePermissions = async (email: string, key: 'accounting' | 'pubOps' | 'forestryOps', val: boolean) => {
+    const user = allUsers.find(u => u.email === email);
+    if (!user) return;
+
+    const newPermissions = { ...user.permissions, [key]: val };
+
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, permissions: newPermissions })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllUsers(data.users);
+        if (currentUser && currentUser.email === email) {
+          const updated = { ...currentUser, permissions: newPermissions };
+          setCurrentUser(updated);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(updated));
+        }
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -297,16 +307,6 @@ export default function HomePage() {
       setStatus("✅ Safe arrival alert sent successfully!");
       const newCount = smsCount + 1;
       setSmsCount(newCount);
-      localStorage.setItem('ozintel_sms_count', newCount.toString());
-
-      if (currentUser) {
-        const updatedUser = { ...currentUser, smsCount: currentUser.smsCount + 1 };
-        setCurrentUser(updatedUser);
-        localStorage.setItem('ozintel_current_user', JSON.stringify(updatedUser));
-        const updatedAll = allUsers.map(u => u.email === updatedUser.email ? updatedUser : u);
-        setAllUsers(updatedAll);
-        localStorage.setItem('ozintel_all_users', JSON.stringify(updatedAll));
-      }
     } else {
       setStatus("Failed to send SMS.");
       alert("Failed to send SMS through server backend.");
@@ -331,16 +331,6 @@ export default function HomePage() {
       setStatus("🚨 Emergency alert dispatched!");
       const newCount = smsCount + 1;
       setSmsCount(newCount);
-      localStorage.setItem('ozintel_sms_count', newCount.toString());
-
-      if (currentUser) {
-        const updatedUser = { ...currentUser, smsCount: currentUser.smsCount + 1 };
-        setCurrentUser(updatedUser);
-        localStorage.setItem('ozintel_current_user', JSON.stringify(updatedUser));
-        const updatedAll = allUsers.map(u => u.email === updatedUser.email ? updatedUser : u);
-        setAllUsers(updatedAll);
-        localStorage.setItem('ozintel_all_users', JSON.stringify(updatedAll));
-      }
     } else {
       setStatus("Failed to dispatch emergency SMS.");
       alert("Failed to dispatch emergency SMS.");
