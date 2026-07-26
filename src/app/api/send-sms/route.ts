@@ -20,7 +20,6 @@ export async function POST(request: Request) {
 
     // ========== SPECIAL CASE: SIGNUP REQUEST ==========
     if (alertType === "SIGNUP_REQUEST") {
-      // Just send the message the frontend already prepared
       const payload = {
         messages: [
           {
@@ -115,9 +114,9 @@ export async function POST(request: Request) {
       const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}&z=18`;
       finalMessage += `Location: ${mapsLink}\n`;
       finalMessage += `Distance from previous alert: ${distanceDisplay}`;
-    } else if (message && message.includes('maps.google.com')) {
-      // Fallback: if frontend already put the link in the message
-      finalMessage += message;
+    } else if (message) {
+      // Always include the original message from frontend (contains location link)
+      finalMessage += `\n${message}`;
     }
 
     const payload = {
