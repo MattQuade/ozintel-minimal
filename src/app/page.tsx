@@ -34,14 +34,12 @@ export default function HomePage() {
   const [status, setStatus] = useState<string>('');
   const [smsCount, setSmsCount] = useState<number>(0);
 
-  // Sign-Up & User Profile States
   const [showSignUp, setShowSignUp] = useState<boolean>(false);
   const [signUpName, setSignUpName] = useState<string>('');
   const [signUpEmail, setSignUpEmail] = useState<string>('');
   const [signUpPhone, setSignUpPhone] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
-  // Admin Panel States
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [adminEmailInput, setAdminEmailInput] = useState<string>('');
   const [adminPassInput, setAdminPassInput] = useState<string>('');
@@ -67,7 +65,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // Real-time synchronization interval so users auto-update when approved without refreshing
   useEffect(() => {
     const syncInterval = setInterval(() => {
       try {
@@ -120,7 +117,6 @@ export default function HomePage() {
       permissions: { accounting: false, pubOps: false, forestryOps: false }
     };
 
-    // Merge with existing users
     const existingUsers = allUsers.some(u => u.email.toLowerCase() === newUser.email.toLowerCase())
       ? allUsers.map(u => u.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : u)
       : [...allUsers, newUser];
@@ -135,14 +131,14 @@ export default function HomePage() {
       console.error("Error saving user profile:", err);
     }
 
-    // Send SMS notification to Admin (clearly marked as SIGNUP)
+    // Force the name into the message so it cannot be stripped
     try {
       await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: '+61416619600',
-          message: `ADMIN ALERT: New user signup request\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone}\nPlease approve in the Admin Panel.`,
+          message: `ADMIN ALERT - NEW SIGNUP\nName: ${newUser.name}\nEmail: ${newUser.email}\nPhone: ${newUser.phone}\nPlease approve in Admin Panel.`,
           alertType: "SIGNUP_REQUEST"
         })
       });
@@ -234,12 +230,12 @@ export default function HomePage() {
 
   const sendSMSViaMessageMedia = async (recipientPhone: string, messageBody: string, alertType: string): Promise<boolean> => {
     try {
-      let locationData = null;
+      let locationLink = "";
       try {
-        locationData = await new Promise((resolve) => {
+        const pos = await new Promise<GeolocationPosition | null>((resolve) => {
           if (typeof window !== 'undefined' && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
-              (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+              (p) => resolve(p),
               () => resolve(null),
               { enableHighAccuracy: true, timeout: 8000 }
             );
@@ -247,25 +243,30 @@ export default function HomePage() {
             resolve(null);
           }
         });
+
+        if (pos) {
+          locationLink = `\n📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}&z=18`;
+        }
       } catch (geoErr) {
-        console.warn("Geolocation fetch failed:", geoErr);
+        console.warn("Geolocation failed:", geoErr);
       }
+
+      const finalMessage = messageBody + locationLink;
 
       const res = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: recipientPhone,
-          message: messageBody,
+          message: finalMessage,
           userName: currentUser ? currentUser.name : 'Unknown User',
-          alertType: alertType,
-          location: locationData
+          alertType: alertType
         })
       });
       
       return res.ok;
     } catch (err) {
-      console.error("-> Fetch exception caught:", err);
+      console.error("Fetch exception:", err);
       return false;
     }
   };
@@ -352,33 +353,17 @@ export default function HomePage() {
       <h1 style={{ color: '#22d3ee', margin: '5px 0' }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0 }}>Alert System</p>
 
-      {/* Admin Login Modal / Section */}
       {showAdminLogin && !isAdminAuthenticated && (
         <form onSubmit={handleAdminLogin} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '15px auto', maxWidth: '400px', border: '1px solid #334155' }}>
           <h3 style={{ margin: '0 0 12px 0', color: '#f59e0b' }}>Admin Authentication</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input 
-              type="email" 
-              placeholder="Admin Email" 
-              value={adminEmailInput} 
-              onChange={e => setAdminEmailInput(e.target.value)} 
-              style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} 
-            />
-            <input 
-              type="password" 
-              placeholder="Admin Password" 
-              value={adminPassInput} 
-              onChange={e => setAdminPassInput(e.target.value)} 
-              style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} 
-            />
-            <button type="submit" style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
-              Login as Admin
-            </button>
+            <input type="email" placeholder="Admin Email" value={adminEmailInput} onChange={e => setAdminEmailInput(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <input type="password" placeholder="Admin Password" value={adminPassInput} onChange={e => setAdminPassInput(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <button type="submit" style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>Login as Admin</button>
           </div>
         </form>
       )}
 
-      {/* Admin Dashboard Panel */}
       {isAdminAuthenticated && (
         <div style={{ background: '#1e2937', border: '2px solid #f59e0b', padding: '20px', borderRadius: '12px', margin: '20px auto', maxWidth: '600px', textAlign: 'left' }}>
           <h2 style={{ color: '#f59e0b', marginTop: 0 }}>🛡️ Admin Control Panel</h2>
@@ -413,7 +398,6 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {/* Edit Permissions Drawer */}
                 {selectedEditUser?.email === u.email && (
                   <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
                     <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
@@ -434,7 +418,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Main Alert Action Buttons */}
       <button onClick={sendSafeArrival} style={{ padding: '20px', fontSize: '1.3rem', margin: '15px', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#22c55e', color: 'white', fontWeight: 'bold' }}>
         ✅ SAFE ARRIVAL
       </button>
@@ -444,37 +427,17 @@ export default function HomePage() {
       </button>
       <br />
       
-      {/* Sign-Up Button underneath SEND HELP */}
       <button onClick={() => setShowSignUp(!showSignUp)} style={{ padding: '16px', fontSize: '1.1rem', margin: '10px 15px 25px 15px', border: '2px solid #0ea5e9', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#0ea5e9', fontWeight: 'bold' }}>
         {showSignUp ? 'Close Sign Up' : 'Sign Up'}
       </button>
 
-      {/* Sign-Up Form Modal / Section */}
       {showSignUp && (
         <form onSubmit={handleSignUpSubmit} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#38bdf8' }}>New User Registration</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-            <input 
-              type="text" 
-              placeholder="Full Name" 
-              value={signUpName} 
-              onChange={e => setSignUpName(e.target.value)} 
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} 
-            />
-            <input 
-              type="email" 
-              placeholder="Email Address" 
-              value={signUpEmail} 
-              onChange={e => setSignUpEmail(e.target.value)} 
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} 
-            />
-            <input 
-              type="tel" 
-              placeholder="+61412345678" 
-              value={signUpPhone} 
-              onChange={e => setSignUpPhone(e.target.value)} 
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} 
-            />
+            <input type="text" placeholder="Full Name" value={signUpName} onChange={e => setSignUpName(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <input type="email" placeholder="Email Address" value={signUpEmail} onChange={e => setSignUpEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <input type="tel" placeholder="+61412345678" value={signUpPhone} onChange={e => setSignUpPhone(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
             <button type="submit" style={{ padding: '12px 20px', width: '100%', fontSize: '1rem', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
               Submit Registration
             </button>
@@ -482,7 +445,6 @@ export default function HomePage() {
         </form>
       )}
 
-      {/* Approval Status Notification on Home Screen */}
       {currentUser && (
         <div style={{ background: currentUser.status === 'approved' ? '#14532d' : '#78350f', border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : '#f59e0b'}`, padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '400px' }}>
           <p style={{ margin: 0, fontSize: '1rem' }}>
@@ -496,7 +458,6 @@ export default function HomePage() {
 
       <p style={{ margin: '15px', fontSize: '1.1rem', minHeight: '30px', color: '#22c55e' }}>{status}</p>
 
-      {/* SMS Counter */}
       <div style={{ background: '#1e2937', padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '300px', fontSize: '1.1rem', color: '#cbd5e1' }}>
         SMS Sent this month: <strong style={{ color: '#22c55e', fontSize: '1.3rem' }}>{currentUser ? currentUser.smsCount : smsCount}</strong>
       </div>
@@ -531,18 +492,11 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Operational Buttons below Emergency Contacts */}
       <div style={{ margin: '40px 0 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
-        <button 
-          onClick={() => alert("Accounting Panel: Pending Approval")} 
-          style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold' }}
-        >
+        <button onClick={() => alert("Accounting Panel: Pending Approval")} style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold' }}>
           Accounting - Pending Approval
         </button>
-        <button 
-          onClick={() => alert("OPS Panel: Pending Approval")} 
-          style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}
-        >
+        <button onClick={() => alert("OPS Panel: Pending Approval")} style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
           OPS - Pending Approval
         </button>
       </div>
