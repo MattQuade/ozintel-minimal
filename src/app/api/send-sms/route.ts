@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// In-memory or global store to remember the last alert position per user/phone & type for same-day tracking
-// Structure: { [key: string]: { lat: number, lon: number, timestamp: string } }
 declare global {
   var alertHistoryStore: Record<string, { lat: number; lon: number; timestamp: string }> | undefined;
 }
@@ -20,6 +18,36 @@ export async function POST(request: Request) {
       );
     }
 
+    // ========== SPECIAL CASE: SIGNUP REQUEST ==========
+    if (alertType === "SIGNUP_REQUEST") {
+      // Just send the message the frontend already prepared
+      const payload = {
+        messages: [
+          {
+            content: message || "New user signup request",
+            destination_number: phone,
+            format: 'SMS',
+          },
+        ],
+      };
+
+      const response = await fetch('https://api.messagemedia.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic dGtieXJBQnJ6NldaT3N5bmdJdG86dmphSWRnUGpjOVZzbmRYRUxRSE9DTWlURUhQWTY3',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return NextResponse.json({ success: false, error: data.message || 'Failed' }, { status: response.status });
+      }
+      return NextResponse.json({ success: true, data });
+    }
+
+    // ========== NORMAL ALERTS (SAFE ARRIVAL / EMERGENCY) ==========
     const now = new Date();
     const currentTimeStr = now.toLocaleTimeString('en-AU', {
       timeZone: 'Australia/Sydney',
@@ -38,12 +66,10 @@ export async function POST(request: Request) {
       timeStyle: 'medium',
     });
 
-    // Determine type (Safe or Emergency)
     const typeLabel = alertType || (message?.toLowerCase().includes('emergency') ? 'EMERGENCY' : 'SAFE ARRIVAL');
     const tickIcon = typeLabel === 'EMERGENCY' ? '🚨' : '✅';
     const senderName = userName || 'User';
 
-    // Build unique tracking key for same-day same-type calculations
     const historyKey = `${phone}_${typeLabel}_${currentDateStr}`;
     let timeDiffDisplay = '0h 0m (First alert today)';
     let distanceDisplay = 'N/A (First alert today)';
@@ -52,7 +78,6 @@ export async function POST(request: Request) {
       const lastRecord = alertHistory[historyKey];
 
       if (lastRecord) {
-        // Calculate distance from previous alert using Haversine formula
         const distKm = calculateDistance(
           lastRecord.lat,
           lastRecord.lon,
@@ -61,7 +86,6 @@ export async function POST(request: Request) {
         );
         distanceDisplay = `${distKm.toFixed(2)} km`;
 
-        // Calculate time difference on the same day
         const [lastH, lastM] = lastRecord.timestamp.split(':').map(Number);
         const [currH, currM] = currentTimeStr.split(':').map(Number);
         const diffMinutesTotal = (currH * 60 + currM) - (lastH * 60 + lastM);
@@ -75,7 +99,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Update history store with current coordinates and time
       alertHistory[historyKey] = {
         lat: location.latitude,
         lon: location.longitude,
@@ -83,19 +106,19 @@ export async function POST(request: Request) {
       };
     }
 
-    // Construct the formatted message matching the attachment layout requirement
+    // Build the message
     let finalMessage = `${tickIcon} ${typeLabel} - ${senderName}\n`;
     finalMessage += `Time: ${currentDateTimeFull}\n`;
     finalMessage += `Time since last ${typeLabel}: ${timeDiffDisplay}\n`;
 
     if (location && location.latitude && location.longitude) {
-      const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
+      const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}&z=18`;
       finalMessage += `Location: ${mapsLink}\n`;
       finalMessage += `Distance from previous alert: ${distanceDisplay}`;
+    } else if (message && message.includes('maps.google.com')) {
+      // Fallback: if frontend already put the link in the message
+      finalMessage += message;
     }
-
-    // MessageMedia REST API Endpoint
-    const url = 'https://api.messagemedia.com/v1/messages';
 
     const payload = {
       messages: [
@@ -107,7 +130,7 @@ export async function POST(request: Request) {
       ],
     };
 
-    const response = await fetch(url, {
+    const response = await fetch('https://api.messagemedia.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -136,9 +159,8 @@ export async function POST(request: Request) {
   }
 }
 
-// Helper function to calculate straight-line distance using the Haversine formula (accurate to 0.01 km / 10 metres)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
