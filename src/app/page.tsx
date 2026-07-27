@@ -11,7 +11,7 @@ type UserProfile = {
   name: string;
   email: string;
   phone: string;
-  status: 'pending' | 'approved';
+  status: 'pending' | 'approved' | 'blocked';
   smsCount: number;
   permissions: {
     accounting: boolean;
@@ -21,6 +21,26 @@ type UserProfile = {
 };
 
 const API_BASE = "";
+
+// ---------- Cookie helpers ----------
+const COOKIE_NAME = 'ozintel_user_email';
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+
+function setUserCookie(email: string) {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; max-age=${COOKIE_MAX_AGE}; path=/; SameSite=Lax`;
+}
+
+function getUserCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+function clearUserCookie() {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${COOKIE_NAME}=; max-age=0; path=/; SameSite=Lax`;
+}
 
 export default function HomePage() {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
@@ -53,6 +73,49 @@ export default function HomePage() {
   const [manualPhone, setManualPhone] = useState('+614');
   const [manualApproved, setManualApproved] = useState(true);
 
+  // Restore Account
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreEmail, setRestoreEmail] = useState('');
+
+  // ---------- Auto-restore from cookie ----------
+  const restoreFromServer = async (email: string, silent = false) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/users`);
+      const data = await res.json();
+      if (data.success) {
+        const found = data.users.find((u: UserProfile) => 
+          u.email.toLowerCase() === email.toLowerCase()
+        );
+        if (found) {
+          setCurrentUser(found);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(found));
+          setUserCookie(found.email); // refresh cookie
+          if (!silent) {
+            if (found.status === 'approved') {
+              setStatus("✅ Account restored – you are approved and ready to send alerts.");
+            } else if (found.status === 'blocked') {
+              setStatus("🚫 Account restored but it is currently blocked.");
+            } else {
+              setStatus("⏳ Account restored – still pending admin approval.");
+            }
+          }
+          return true;
+        } else {
+          // User no longer exists on server
+          clearUserCookie();
+          localStorage.removeItem('ozintel_current_user');
+          setCurrentUser(null);
+          if (!silent) alert("No account found with that email.");
+          return false;
+        }
+      }
+    } catch (err) {
+      console.error("Restore error:", err);
+      if (!silent) alert("Could not restore account. Please try again.");
+    }
+    return false;
+  };
+
   useEffect(() => {
     try {
       const storedSafe = localStorage.getItem('ozintel_safe_contacts');
@@ -69,6 +132,13 @@ export default function HomePage() {
     }
 
     fetchUsers();
+
+    // Auto-restore from cookie if needed
+    const cookieEmail = getUserCookie();
+    if (cookieEmail) {
+      // Always sync from server using the cookie (even if localStorage exists)
+      restoreFromServer(cookieEmail, true);
+    }
   }, []);
 
   // Sync current user status from server every 5 seconds
@@ -81,10 +151,24 @@ export default function HomePage() {
         const data = await res.json();
         if (data.success) {
           const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
-          if (latest && latest.status !== currentUser.status) {
-            setCurrentUser(latest);
-            localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
-            setStatus(latest.status === 'approved' ? "✅ Your account has been approved!" : "Status updated");
+          if (latest) {
+            if (JSON.stringify(latest) !== JSON.stringify(currentUser)) {
+              setCurrentUser(latest);
+              localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
+              if (latest.status === 'approved') {
+                setStatus("✅ Your account is approved and active.");
+              } else if (latest.status === 'blocked') {
+                setStatus("🚫 Your account has been temporarily blocked.");
+              } else {
+                setStatus("⏳ Your account is pending approval.");
+              }
+            }
+          } else {
+            // User was deleted on server
+            clearUserCookie();
+            localStorage.removeItem('ozintel_current_user');
+            setCurrentUser(null);
+            setStatus("Your account no longer exists.");
           }
         }
       } catch (err) {
@@ -142,6 +226,7 @@ export default function HomePage() {
         setAllUsers(data.users);
         setCurrentUser(data.user);
         localStorage.setItem('ozintel_current_user', JSON.stringify(data.user));
+        setUserCookie(data.user.email); // ← permanent cookie
 
         await fetch(`${API_BASE}/api/send-sms`, {
           method: 'POST',
@@ -167,6 +252,19 @@ export default function HomePage() {
     }
   };
 
+  const handleRestoreAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restoreEmail.trim()) {
+      alert("Please enter your email address.");
+      return;
+    }
+    const success = await restoreFromServer(restoreEmail.trim());
+    if (success) {
+      setShowRestore(false);
+      setRestoreEmail('');
+    }
+  };
+
   const handleManualAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualName.trim() || !manualEmail.trim() || !manualPhone.trim()) {
@@ -175,7 +273,6 @@ export default function HomePage() {
     }
 
     try {
-      // First create as pending
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,7 +286,6 @@ export default function HomePage() {
       const data = await res.json();
 
       if (data.success) {
-        // If we want them approved immediately
         if (manualApproved) {
           await fetch(`${API_BASE}/api/users`, {
             method: 'PUT',
@@ -247,7 +343,29 @@ export default function HomePage() {
     }
   };
 
+  const blockUser = async (email: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, status: 'blocked' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllUsers(data.users);
+        if (currentUser && currentUser.email === email) {
+          const updated = { ...currentUser, status: 'blocked' as const };
+          setCurrentUser(updated);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(updated));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const deleteUser = async (email: string) => {
+    if (!confirm(`Permanently delete user ${email}? This cannot be undone.`)) return;
     try {
       const res = await fetch(`${API_BASE}/api/users?email=${encodeURIComponent(email)}`, {
         method: 'DELETE'
@@ -258,6 +376,7 @@ export default function HomePage() {
         if (currentUser && currentUser.email === email) {
           setCurrentUser(null);
           localStorage.removeItem('ozintel_current_user');
+          clearUserCookie();
         }
       }
     } catch (err) {
@@ -360,7 +479,7 @@ export default function HomePage() {
 
   const sendSafeArrival = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
-      alert("You must be an approved user to send alerts.\nPlease sign up and wait for admin approval.");
+      alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }
 
@@ -388,7 +507,7 @@ export default function HomePage() {
 
   const sendEmergencyAlert = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
-      alert("You must be an approved user to send alerts.\nPlease sign up and wait for admin approval.");
+      alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }
 
@@ -416,6 +535,7 @@ export default function HomePage() {
 
   const pendingUsers = allUsers.filter(u => u.status === 'pending');
   const approvedUsersList = allUsers.filter(u => u.status === 'approved');
+  const blockedUsersList = allUsers.filter(u => u.status === 'blocked');
 
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
@@ -471,7 +591,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div>
+          <div style={{ marginBottom: '20px' }}>
             <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '6px' }}>Approved Users ({approvedUsersList.length})</h3>
             {approvedUsersList.length === 0 ? (
               <p style={{ color: '#94a3b8' }}>No approved users yet.</p>
@@ -479,14 +599,22 @@ export default function HomePage() {
               <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
                 {approvedUsersList.map((u, i) => (
                   <div key={i} style={{ background: '#334155', padding: '10px', borderRadius: '6px', margin: '8px 0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
                         <strong>{u.name}</strong> ({u.email})<br />
                         <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | <strong>SMS Sent this month: {u.smsCount}</strong></span>
                       </div>
-                      <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
-                        {selectedEditUser?.email === u.email ? 'Close Edit' : 'Edit'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          {selectedEditUser?.email === u.email ? 'Close Edit' : 'Edit'}
+                        </button>
+                        <button onClick={() => blockUser(u.email)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          Block
+                        </button>
+                        <button onClick={() => deleteUser(u.email)} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          Delete
+                        </button>
+                      </div>
                     </div>
 
                     {selectedEditUser?.email === u.email && (
@@ -508,6 +636,34 @@ export default function HomePage() {
               </div>
             )}
           </div>
+
+          <div>
+            <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '6px' }}>Blocked Users ({blockedUsersList.length})</h3>
+            {blockedUsersList.length === 0 ? (
+              <p style={{ color: '#94a3b8' }}>No blocked users.</p>
+            ) : (
+              <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '6px' }}>
+                {blockedUsersList.map((u, i) => (
+                  <div key={i} style={{ background: '#450a0a', padding: '10px', borderRadius: '6px', margin: '8px 0', border: '1px solid #7f1d1d' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <strong>{u.name}</strong> ({u.email})<br />
+                        <span style={{ fontSize: '0.85rem', color: '#fca5a5' }}>{u.phone} | SMS Sent: {u.smsCount}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => approveUser(u.email)} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          Unblock
+                        </button>
+                        <button onClick={() => deleteUser(u.email)} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -520,8 +676,12 @@ export default function HomePage() {
       </button>
       <br />
       
-      <button onClick={() => setShowSignUp(!showSignUp)} style={{ padding: '16px', fontSize: '1.1rem', margin: '10px 15px 25px 15px', border: '2px solid #0ea5e9', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#0ea5e9', fontWeight: 'bold' }}>
+      <button onClick={() => { setShowSignUp(!showSignUp); setShowRestore(false); }} style={{ padding: '16px', fontSize: '1.1rem', margin: '10px 15px 10px 15px', border: '2px solid #0ea5e9', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#0ea5e9', fontWeight: 'bold' }}>
         {showSignUp ? 'Close Sign Up' : 'Sign Up - $11.00/month'}
+      </button>
+
+      <button onClick={() => { setShowRestore(!showRestore); setShowSignUp(false); }} style={{ padding: '12px', fontSize: '1rem', margin: '0 15px 25px 15px', border: '2px solid #94a3b8', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#94a3b8', fontWeight: 'bold' }}>
+        {showRestore ? 'Close Restore' : 'Restore My Account'}
       </button>
 
       {showSignUp && (
@@ -538,12 +698,36 @@ export default function HomePage() {
         </form>
       )}
 
+      {showRestore && (
+        <form onSubmit={handleRestoreAccount} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#94a3b8' }}>Restore Existing Account</h3>
+          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: 0 }}>Enter the email you used when you signed up.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+            <input type="email" placeholder="Your Email Address" value={restoreEmail} onChange={e => setRestoreEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <button type="submit" style={{ padding: '12px 20px', width: '100%', fontSize: '1rem', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+              Restore Account
+            </button>
+          </div>
+        </form>
+      )}
+
       {currentUser && (
-        <div style={{ background: currentUser.status === 'approved' ? '#14532d' : '#78350f', border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : '#f59e0b'}`, padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '400px' }}>
+        <div style={{ 
+          background: currentUser.status === 'approved' ? '#14532d' : currentUser.status === 'blocked' ? '#450a0a' : '#78350f', 
+          border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : currentUser.status === 'blocked' ? '#ef4444' : '#f59e0b'}`, 
+          padding: '12px 20px', 
+          borderRadius: '10px', 
+          margin: '15px auto', 
+          maxWidth: '400px' 
+        }}>
           <p style={{ margin: 0, fontSize: '1rem' }}>
             Account: <strong>{currentUser.name}</strong> ({currentUser.email})<br />
-            Status: <strong style={{ color: currentUser.status === 'approved' ? '#4ade80' : '#fbbf24' }}>
-              {currentUser.status === 'approved' ? '✅ Approved' : '⏳ Pending Admin Approval'}
+            Status: <strong style={{ 
+              color: currentUser.status === 'approved' ? '#4ade80' : currentUser.status === 'blocked' ? '#f87171' : '#fbbf24' 
+            }}>
+              {currentUser.status === 'approved' ? '✅ Approved' : 
+               currentUser.status === 'blocked' ? '🚫 Blocked' : 
+               '⏳ Pending Admin Approval'}
             </strong>
           </p>
         </div>
@@ -594,7 +778,7 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Admin button moved to bottom */}
+      {/* Admin button at bottom */}
       <div style={{ marginTop: '40px', paddingBottom: '30px', display: 'flex', justifyContent: 'center' }}>
         <button onClick={() => setShowAdminLogin(!showAdminLogin)} style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
           {isAdminAuthenticated ? '🔒 Admin Active' : 'Admin Login'}
