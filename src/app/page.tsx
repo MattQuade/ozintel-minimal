@@ -419,14 +419,9 @@ export default function HomePage() {
 
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px' }}>
-        <button onClick={() => setShowAdminLogin(!showAdminLogin)} style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
-          {isAdminAuthenticated ? '🔒 Admin Active' : 'Admin Login'}
-        </button>
-      </div>
-
-      <h1 style={{ color: '#22d3ee', margin: '5px 0' }}>🛡️ OzIntel</h1>
-      <p style={{ color: '#94a3b8', marginTop: 0 }}>Alert System</p>
+      
+      <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
+      <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
 
       {showAdminLogin && !isAdminAuthenticated && (
         <form onSubmit={handleAdminLogin} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '15px auto', maxWidth: '400px', border: '1px solid #334155' }}>
@@ -478,34 +473,40 @@ export default function HomePage() {
 
           <div>
             <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: '6px' }}>Approved Users ({approvedUsersList.length})</h3>
-            {approvedUsersList.length === 0 ? <p style={{ color: '#94a3b8' }}>No approved users yet.</p> : approvedUsersList.map((u, i) => (
-              <div key={i} style={{ background: '#334155', padding: '10px', borderRadius: '6px', margin: '8px 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <strong>{u.name}</strong> ({u.email})<br />
-                    <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | <strong>SMS Sent this month: {u.smsCount}</strong></span>
-                  </div>
-                  <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
-                    {selectedEditUser?.email === u.email ? 'Close Edit' : 'Edit'}
-                  </button>
-                </div>
+            {approvedUsersList.length === 0 ? (
+              <p style={{ color: '#94a3b8' }}>No approved users yet.</p>
+            ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
+                {approvedUsersList.map((u, i) => (
+                  <div key={i} style={{ background: '#334155', padding: '10px', borderRadius: '6px', margin: '8px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong>{u.name}</strong> ({u.email})<br />
+                        <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | <strong>SMS Sent this month: {u.smsCount}</strong></span>
+                      </div>
+                      <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                        {selectedEditUser?.email === u.email ? 'Close Edit' : 'Edit'}
+                      </button>
+                    </div>
 
-                {selectedEditUser?.email === u.email && (
-                  <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
-                    <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
-                    <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting
-                    </label>
-                    <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.pubOps} onChange={e => updatePermissions(u.email, 'pubOps', e.target.checked)} /> Pub Ops
-                    </label>
-                    <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops
-                    </label>
+                    {selectedEditUser?.email === u.email && (
+                      <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
+                        <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting
+                        </label>
+                        <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={u.permissions.pubOps} onChange={e => updatePermissions(u.email, 'pubOps', e.target.checked)} /> Pub Ops
+                        </label>
+                        <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops
+                        </label>
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -520,7 +521,7 @@ export default function HomePage() {
       <br />
       
       <button onClick={() => setShowSignUp(!showSignUp)} style={{ padding: '16px', fontSize: '1.1rem', margin: '10px 15px 25px 15px', border: '2px solid #0ea5e9', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#0ea5e9', fontWeight: 'bold' }}>
-        {showSignUp ? 'Close Sign Up' : 'Sign Up'}
+        {showSignUp ? 'Close Sign Up' : 'Sign Up - $11.00/month'}
       </button>
 
       {showSignUp && (
@@ -590,6 +591,13 @@ export default function HomePage() {
         </button>
         <button onClick={() => alert("OPS Panel: Pending Approval")} style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#3b82f6', color: 'white', fontWeight: 'bold' }}>
           OPS - Pending Approval
+        </button>
+      </div>
+
+      {/* Admin button moved to bottom */}
+      <div style={{ marginTop: '40px', paddingBottom: '30px', display: 'flex', justifyContent: 'center' }}>
+        <button onClick={() => setShowAdminLogin(!showAdminLogin)} style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+          {isAdminAuthenticated ? '🔒 Admin Active' : 'Admin Login'}
         </button>
       </div>
     </div>
