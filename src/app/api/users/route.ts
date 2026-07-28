@@ -1,152 +1,155 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join(process.cwd(), 'data', 'users.json');
-
-// Ensure data folder and file exist
-function ensureDataFile() {
-  const dir = path.dirname(DATA_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, '[]', 'utf8');
-  }
-}
-
-function loadUsers(): any[] {
-  ensureDataFile();
-  try {
-    const data = fs.readFileSync(DATA_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Failed to load users:', err);
-    return [];
-  }
-}
-
-function saveUsers(users: any[]) {
-  ensureDataFile();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2), 'utf8');
-}
-
+import { NextRequest, NextResponse } from "next/server";
+import {
+  publicUser,
+  readUsers,
+  writeUsers,
+  type User,
+  type UserPermissions,
+  type UserStatus,
+} from "@/lib/users";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export async function GET() {
-  const users = loadUsers();
-  return NextResponse.json({ success: true, users });
+  const users = await readUsers();
+  return NextResponse.json({
+    success: true,
+    users: users.map(publicUser),
+  });
 }
-
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, phone } = body;
-
-    if (!name || !email || !phone) {
+    const body = await req.json();
+    const name = String(body.name || "").trim();
+    const email = String(body.email || "").trim();
+    const phone = String(body.phone || "").trim() || "No phone yet";
+    if (!name || !email) {
       return NextResponse.json(
-        { success: false, error: 'Name, email and phone are required' },
+        { success: false, error: "Name and email are required" },
         { status: 400 }
       );
     }
-
-    const users = loadUsers();
-
-    const existingIndex = users.findIndex(
-      (u: any) => u.email.toLowerCase() === email.toLowerCase()
+    const users = await readUsers();
+    const existing = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
     );
-
-    const newUser = {
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "User already exists" },
+        { status: 409 }
+      );
+    }
+    const user: User = {
       name,
       email,
       phone,
-      status: 'pending',
+      status: "pending",
       smsCount: 0,
+      smsMonth: new Date().toISOString().slice(0, 7),
       permissions: {
         accounting: false,
         pubOps: false,
         forestryOps: false,
       },
+      lastAlert: null,
     };
-
-    if (existingIndex >= 0) {
-      users[existingIndex] = newUser;
-    } else {
-      users.push(newUser);
-    }
-
-    saveUsers(users);
-
-    return NextResponse.json({ success: true, user: newUser, users });
+    users.push(user);
+    await writeUsers(users);
+    return NextResponse.json({
+      success: true,
+      user: publicUser(user),
+      users: users.map(publicUser),
+    });
   } catch (error) {
-    console.error('Error creating user:', error);
+    console.error(error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create user' },
+      { success: false, error: "Failed to create user" },
       { status: 500 }
     );
   }
 }
-
-export async function PUT(request: Request) {
+export async function PUT(req: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, status, permissions } = body;
-
-    const users = loadUsers();
-    const index = users.findIndex(
-      (u: any) => u.email.toLowerCase() === email.toLowerCase()
-    );
-
-    if (index === -1) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    if (status) users[index].status = status;
-    if (permissions) users[index].permissions = permissions;
-
-    saveUsers(users);
-
-    return NextResponse.json({ success: true, users });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: 'Failed to update user' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
-
+    const body = await req.json();
+    const email = String(body.email || "").trim();
     if (!email) {
       return NextResponse.json(
-        { success: false, error: 'Email is required' },
+        { success: false, error: "Email is required" },
         { status: 400 }
       );
     }
-
-    const users = loadUsers();
-    const index = users.findIndex(
-      (u: any) => u.email.toLowerCase() === email.toLowerCase()
+    const users = await readUsers();
+    const idx = users.findIndex(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
     );
-
-    if (index === -1) {
+    if (idx < 0) {
       return NextResponse.json(
-        { success: false, error: 'User not found' },
+        { success: false, error: "User not found" },
         { status: 404 }
       );
     }
-
-    users.splice(index, 1);
-    saveUsers(users);
-
-    return NextResponse.json({ success: true, users });
+    if (body.status) {
+      users[idx].status = body.status as UserStatus;
+    }
+    if (body.permissions && typeof body.permissions === "object") {
+      users[idx].permissions = {
+        ...users[idx].permissions,
+        ...(body.permissions as Partial<UserPermissions>),
+      };
+    }
+    if (typeof body.name === "string") users[idx].name = body.name.trim();
+    if (typeof body.phone === "string") users[idx].phone = body.phone.trim();
+    await writeUsers(users);
+    return NextResponse.json({
+      success: true,
+      user: publicUser(users[idx]),
+      users: users.map(publicUser),
+    });
   } catch (error) {
+    console.error(error);
     return NextResponse.json(
-      { success: false, error: 'Failed to delete user' },
+      { success: false, error: "Failed to update user" },
+      { status: 500 }
+    );
+  }
+}
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    let email = searchParams.get("email") || "";
+    if (!email) {
+      try {
+        const body = await req.json();
+        email = String(body.email || "");
+      } catch {
+        // no body
+      }
+    }
+    email = email.trim();
+    if (!email) {
+      return NextResponse.json(
+        { success: false, error: "Email is required" },
+        { status: 400 }
+      );
+    }
+    const users = await readUsers();
+    const next = users.filter(
+      (u) => u.email.toLowerCase() !== email.toLowerCase()
+    );
+    if (next.length === users.length) {
+      return NextResponse.json(
+        { success: false, error: "User not found" },
+        { status: 404 }
+      );
+    }
+    await writeUsers(next);
+    return NextResponse.json({
+      success: true,
+      users: next.map(publicUser),
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { success: false, error: "Failed to delete user" },
       { status: 500 }
     );
   }
