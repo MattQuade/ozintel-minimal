@@ -1,174 +1,167 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
-declare global {
-  var alertHistoryStore: Record<string, { lat: number; lon: number; timestamp: string }> | undefined;
-}
+const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
 
-const alertHistory = global.alertHistoryStore || (global.alertHistoryStore = {});
-
-export async function POST(request: Request) {
+// ---------- helpers ----------
+function readUsers() {
   try {
-    const body = await request.json();
-    const { phone, message, location, userName, alertType } = body;
-
-    if (!phone) {
-      return NextResponse.json(
-        { success: false, error: 'Phone number is required.' },
-        { status: 400 }
-      );
-    }
-
-    // ========== SPECIAL CASE: SIGNUP REQUEST ==========
-    if (alertType === "SIGNUP_REQUEST") {
-      const payload = {
-        messages: [
-          {
-            content: message || "New user signup request",
-            destination_number: phone,
-            format: 'SMS',
-          },
-        ],
-      };
-
-      const response = await fetch('https://api.messagemedia.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Basic dGtieXJBQnJ6NldaT3N5bmdJdG86dmphSWRnUGpjOVZzbmRYRUxRSE9DTWlURUhQWTY3',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        return NextResponse.json({ success: false, error: data.message || 'Failed' }, { status: response.status });
-      }
-      return NextResponse.json({ success: true, data });
-    }
-
-    // ========== NORMAL ALERTS (SAFE ARRIVAL / EMERGENCY) ==========
-    const now = new Date();
-    const currentTimeStr = now.toLocaleTimeString('en-AU', {
-      timeZone: 'Australia/Sydney',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-    
-    const currentDateStr = now.toLocaleDateString('en-AU', {
-      timeZone: 'Australia/Sydney',
-    });
-
-    const currentDateTimeFull = now.toLocaleString('en-AU', {
-      timeZone: 'Australia/Sydney',
-      dateStyle: 'medium',
-      timeStyle: 'medium',
-    });
-
-    const typeLabel = alertType || (message?.toLowerCase().includes('emergency') ? 'EMERGENCY' : 'SAFE ARRIVAL');
-    const tickIcon = typeLabel === 'EMERGENCY' ? '🚨' : '✅';
-    const senderName = userName || 'User';
-
-    const historyKey = `${phone}_${typeLabel}_${currentDateStr}`;
-    let timeDiffDisplay = '0h 0m (First alert today)';
-    let distanceDisplay = 'N/A (First alert today)';
-
-    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
-      const lastRecord = alertHistory[historyKey];
-
-      if (lastRecord) {
-        const distKm = calculateDistance(
-          lastRecord.lat,
-          lastRecord.lon,
-          location.latitude,
-          location.longitude
-        );
-        distanceDisplay = `${distKm.toFixed(2)} km`;
-
-        const [lastH, lastM] = lastRecord.timestamp.split(':').map(Number);
-        const [currH, currM] = currentTimeStr.split(':').map(Number);
-        const diffMinutesTotal = (currH * 60 + currM) - (lastH * 60 + lastM);
-
-        if (diffMinutesTotal > 0) {
-          const diffHours = Math.floor(diffMinutesTotal / 60);
-          const diffMins = diffMinutesTotal % 60;
-          timeDiffDisplay = `${diffHours}h ${diffMins}m`;
-        } else {
-          timeDiffDisplay = `0h 0m`;
-        }
-      }
-
-      alertHistory[historyKey] = {
-        lat: location.latitude,
-        lon: location.longitude,
-        timestamp: currentTimeStr,
-      };
-    }
-
-    // Build the message
-    let finalMessage = `${tickIcon} ${typeLabel} - ${senderName}\n`;
-    finalMessage += `Time: ${currentDateTimeFull}\n`;
-    finalMessage += `Time since last ${typeLabel}: ${timeDiffDisplay}\n`;
-
-    if (location && location.latitude && location.longitude) {
-      const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}&z=18`;
-      finalMessage += `Location: ${mapsLink}\n`;
-      finalMessage += `Distance from previous alert: ${distanceDisplay}`;
-    } else if (message) {
-      // Always include the original message from frontend (contains location link)
-      finalMessage += `\n${message}`;
-    }
-
-    const payload = {
-      messages: [
-        {
-          content: finalMessage,
-          destination_number: phone,
-          format: 'SMS',
-        },
-      ],
-    };
-
-    const response = await fetch('https://api.messagemedia.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic dGtieXJBQnJ6NldaT3N5bmdJdG86dmphSWRnUGpjOVZzbmRYRUxRSE9DTWlURUhQWTY3',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('MessageMedia Gateway Error:', data);
-      return NextResponse.json(
-        { success: false, error: data.message || 'Failed to send via MessageMedia' },
-        { status: response.status }
-      );
-    }
-
-    return NextResponse.json({ success: true, data });
-  } catch (error) {
-    console.error('Error handling SMS request:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to process SMS request' },
-      { status: 500 }
-    );
+    if (!fs.existsSync(USERS_FILE)) return [];
+    const raw = fs.readFileSync(USERS_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
   }
 }
 
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371;
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
+function writeUsers(users: any[]) {
+  const dir = path.dirname(USERS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
-function deg2rad(deg: number) {
-  return deg * (Math.PI / 180);
+function formatTimeDiff(ms: number): string {
+  if (ms < 0) ms = 0;
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0 && minutes === 0) return '0h 0m (just now)';
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const {
+      phone,
+      message: frontendMessage,
+      userName = 'Unknown User',
+      userEmail = '',
+      alertType = 'ALERT',
+      lat = null,
+      lng = null
+    } = body;
+
+    if (!phone) {
+      return NextResponse.json({ success: false, error: 'Phone required' }, { status: 400 });
+    }
+
+    // Special case – signup notifications stay untouched
+    if (alertType === 'SIGNUP_REQUEST') {
+      const auth = Buffer.from('YOUR_MESSAGEMEDIA_API_KEY:YOUR_MESSAGEMEDIA_API_SECRET').toString('base64');
+      const res = await fetch('https://api.messagemedia.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: [{
+            content: frontendMessage,
+            destination_number: phone,
+            format: 'SMS'
+          }]
+        })
+      });
+      return NextResponse.json({ success: res.ok });
+    }
+
+    // ---------- normal alerts ----------
+    let users = readUsers();
+    let user = null;
+
+    // Prefer email lookup (most reliable)
+    if (userEmail) {
+      user = users.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+    }
+    // Fallback to name
+    if (!user && userName && userName !== 'Unknown User') {
+      user = users.find((u: any) => u.name === userName);
+    }
+
+    let richExtra = '';
+    const now = Date.now();
+    const hasCoords = typeof lat === 'number' && typeof lng === 'number';
+
+    if (user && user.lastAlert && hasCoords) {
+      const prev = user.lastAlert;
+      const timeDiffMs = now - prev.timestamp;
+      const timeStr = formatTimeDiff(timeDiffMs);
+      const distKm = haversineKm(prev.lat, prev.lng, lat, lng);
+      const distStr = distKm < 1
+        ? `${Math.round(distKm * 1000)} m`
+        : `${distKm.toFixed(2)} km`;
+
+      richExtra = `\n⏱ ${timeStr} since last alert\n📏 ${distStr} from previous location`;
+    } else if (user) {
+      richExtra = `\n⏱ First alert today`;
+    }
+
+    // Maps link
+    let mapsLink = '';
+    if (hasCoords) {
+      mapsLink = `\n📍 https://maps.google.com/?q=${lat},${lng}&z=18`;
+    } else {
+      mapsLink = `\n📍 Location unavailable`;
+    }
+
+    // Final message
+    const finalMessage = `${frontendMessage}${richExtra}${mapsLink}`;
+
+    // Update lastAlert on the user
+    if (user && hasCoords) {
+      user.lastAlert = {
+        timestamp: now,
+        lat,
+        lng
+      };
+      // also bump smsCount
+      user.smsCount = (user.smsCount || 0) + 1;
+      writeUsers(users);
+    }
+
+    // ---------- send via MessageMedia ----------
+    // REPLACE WITH YOUR REAL CREDENTIALS
+    const auth = Buffer.from('YOUR_MESSAGEMEDIA_API_KEY:YOUR_MESSAGEMEDIA_API_SECRET').toString('base64');
+
+    const mmRes = await fetch('https://api.messagemedia.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: [{
+          content: finalMessage,
+          destination_number: phone,
+          format: 'SMS'
+        }]
+      })
+    });
+
+    if (!mmRes.ok) {
+      const errText = await mmRes.text();
+      console.error('MessageMedia error:', errText);
+      return NextResponse.json({ success: false, error: 'SMS provider error' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('send-sms error:', err);
+    return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
+  }
 }
