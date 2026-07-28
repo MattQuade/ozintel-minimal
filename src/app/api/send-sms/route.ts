@@ -47,6 +47,18 @@ function getCurrentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function formatDateTime(date: Date): string {
+  return date.toLocaleString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -96,14 +108,24 @@ export async function POST(req: NextRequest) {
       user = users.find((u: any) => u.name === userName);
     }
 
-    let richExtra = '';
-    const now = Date.now();
+    const now = new Date();
     const hasCoords = typeof lat === 'number' && typeof lng === 'number';
     const currentMonth = getCurrentMonth();
 
+    // Build rich message
+    let header = '';
+    if (alertType === 'SAFE ARRIVAL') {
+      header = `✅ SAFE ARRIVAL`;
+    } else if (alertType === 'EMERGENCY') {
+      header = `🚨 EMERGENCY - SEND HELP`;
+    } else {
+      header = `⚠️ ALERT`;
+    }
+
+    let richExtra = '';
     if (user && user.lastAlert && hasCoords) {
       const prev = user.lastAlert;
-      const timeDiffMs = now - prev.timestamp;
+      const timeDiffMs = now.getTime() - prev.timestamp;
       const timeStr = formatTimeDiff(timeDiffMs);
       const distKm = haversineKm(prev.lat, prev.lng, lat, lng);
       const distStr = distKm < 1
@@ -111,7 +133,7 @@ export async function POST(req: NextRequest) {
         : `${distKm.toFixed(2)} km`;
 
       richExtra = `\n⏱ ${timeStr} since last alert\n📏 ${distStr} from previous location`;
-    } else if (user) {
+    } else {
       richExtra = `\n⏱ First alert today`;
     }
 
@@ -122,17 +144,23 @@ export async function POST(req: NextRequest) {
       mapsLink = `\n📍 Location unavailable`;
     }
 
-    const finalMessage = `${frontendMessage}${richExtra}${mapsLink}`;
+    // Final professional message
+    const finalMessage = 
+`${header}
+From: ${userName}
+Time: ${formatDateTime(now)}
+
+${frontendMessage}
+${richExtra}${mapsLink}`;
 
     // Update lastAlert + monthly SMS counter
     if (user && hasCoords) {
       user.lastAlert = {
-        timestamp: now,
+        timestamp: now.getTime(),
         lat,
         lng
       };
 
-      // Monthly reset logic
       if (user.smsMonth !== currentMonth) {
         user.smsCount = 1;
         user.smsMonth = currentMonth;
