@@ -4,7 +4,6 @@ import path from 'path';
 
 const USERS_FILE = path.join(process.cwd(), 'data', 'users.json');
 
-// ---------- helpers ----------
 function readUsers() {
   try {
     if (!fs.existsSync(USERS_FILE)) return [];
@@ -22,7 +21,7 @@ function writeUsers(users: any[]) {
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
@@ -43,6 +42,11 @@ function formatTimeDiff(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function getCurrentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -60,10 +64,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Phone required' }, { status: 400 });
     }
 
-    // MessageMedia credentials
     const auth = Buffer.from('tkbyrABrz6WZOsyngIto:vjaIdgPjc9VsndXELQHOCMiTEHPY67').toString('base64');
 
-    // Special case – signup notifications stay untouched
+    // Special case – signup notifications
     if (alertType === 'SIGNUP_REQUEST') {
       const res = await fetch('https://api.messagemedia.com/v1/messages', {
         method: 'POST',
@@ -86,11 +89,9 @@ export async function POST(req: NextRequest) {
     let users = readUsers();
     let user = null;
 
-    // Prefer email lookup (most reliable)
     if (userEmail) {
       user = users.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
     }
-    // Fallback to name
     if (!user && userName && userName !== 'Unknown User') {
       user = users.find((u: any) => u.name === userName);
     }
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
     let richExtra = '';
     const now = Date.now();
     const hasCoords = typeof lat === 'number' && typeof lng === 'number';
+    const currentMonth = getCurrentMonth();
 
     if (user && user.lastAlert && hasCoords) {
       const prev = user.lastAlert;
@@ -113,7 +115,6 @@ export async function POST(req: NextRequest) {
       richExtra = `\n⏱ First alert today`;
     }
 
-    // Maps link
     let mapsLink = '';
     if (hasCoords) {
       mapsLink = `\n📍 https://maps.google.com/?q=${lat},${lng}&z=18`;
@@ -121,22 +122,28 @@ export async function POST(req: NextRequest) {
       mapsLink = `\n📍 Location unavailable`;
     }
 
-    // Final message
     const finalMessage = `${frontendMessage}${richExtra}${mapsLink}`;
 
-    // Update lastAlert on the user
+    // Update lastAlert + monthly SMS counter
     if (user && hasCoords) {
       user.lastAlert = {
         timestamp: now,
         lat,
         lng
       };
-      // also bump smsCount
-      user.smsCount = (user.smsCount || 0) + 1;
+
+      // Monthly reset logic
+      if (user.smsMonth !== currentMonth) {
+        user.smsCount = 1;
+        user.smsMonth = currentMonth;
+      } else {
+        user.smsCount = (user.smsCount || 0) + 1;
+      }
+
       writeUsers(users);
     }
 
-    // ---------- send via MessageMedia ----------
+    // Send via MessageMedia
     const mmRes = await fetch('https://api.messagemedia.com/v1/messages', {
       method: 'POST',
       headers: {
