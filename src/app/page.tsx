@@ -13,18 +13,24 @@ type UserProfile = {
   phone: string;
   status: 'pending' | 'approved' | 'blocked';
   smsCount: number;
+  smsMonth?: string;
   permissions: {
     accounting: boolean;
     pubOps: boolean;
     forestryOps: boolean;
   };
+  lastAlert?: {
+    timestamp: number;
+    lat: number;
+    lng: number;
+  } | null;
 };
 
 const API_BASE = "";
 
 // ---------- Cookie helpers ----------
 const COOKIE_NAME = 'ozintel_user_email';
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function setUserCookie(email: string) {
   if (typeof document === 'undefined') return;
@@ -67,17 +73,14 @@ export default function HomePage() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [selectedEditUser, setSelectedEditUser] = useState<UserProfile | null>(null);
 
-  // Manual Add User states
   const [manualName, setManualName] = useState('');
   const [manualEmail, setManualEmail] = useState('');
   const [manualPhone, setManualPhone] = useState('+614');
   const [manualApproved, setManualApproved] = useState(true);
 
-  // Restore Account
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState('');
 
-  // ---------- Auto-restore from cookie ----------
   const restoreFromServer = async (email: string, silent = false) => {
     try {
       const res = await fetch(`${API_BASE}/api/users`);
@@ -89,7 +92,7 @@ export default function HomePage() {
         if (found) {
           setCurrentUser(found);
           localStorage.setItem('ozintel_current_user', JSON.stringify(found));
-          setUserCookie(found.email); // refresh cookie
+          setUserCookie(found.email);
           if (!silent) {
             if (found.status === 'approved') {
               setStatus("✅ Account restored – you are approved and ready to send alerts.");
@@ -101,7 +104,6 @@ export default function HomePage() {
           }
           return true;
         } else {
-          // User no longer exists on server
           clearUserCookie();
           localStorage.removeItem('ozintel_current_user');
           setCurrentUser(null);
@@ -133,15 +135,12 @@ export default function HomePage() {
 
     fetchUsers();
 
-    // Auto-restore from cookie if needed
     const cookieEmail = getUserCookie();
     if (cookieEmail) {
-      // Always sync from server using the cookie (even if localStorage exists)
       restoreFromServer(cookieEmail, true);
     }
   }, []);
 
-  // Sync current user status from server every 5 seconds
   useEffect(() => {
     if (!currentUser) return;
 
@@ -152,19 +151,9 @@ export default function HomePage() {
         if (data.success) {
           const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
           if (latest) {
-            if (JSON.stringify(latest) !== JSON.stringify(currentUser)) {
-              setCurrentUser(latest);
-              localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
-              if (latest.status === 'approved') {
-                setStatus("✅ Your account is approved and active.");
-              } else if (latest.status === 'blocked') {
-                setStatus("🚫 Your account has been temporarily blocked.");
-              } else {
-                setStatus("⏳ Your account is pending approval.");
-              }
-            }
+            setCurrentUser(latest);
+            localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
           } else {
-            // User was deleted on server
             clearUserCookie();
             localStorage.removeItem('ozintel_current_user');
             setCurrentUser(null);
@@ -226,7 +215,7 @@ export default function HomePage() {
         setAllUsers(data.users);
         setCurrentUser(data.user);
         localStorage.setItem('ozintel_current_user', JSON.stringify(data.user));
-        setUserCookie(data.user.email); // ← permanent cookie
+        setUserCookie(data.user.email);
 
         await fetch(`${API_BASE}/api/send-sms`, {
           method: 'POST',
@@ -438,35 +427,36 @@ export default function HomePage() {
 
   const sendSMSViaMessageMedia = async (recipientPhone: string, messageBody: string, alertType: string): Promise<boolean> => {
     try {
-      let locationLink = "";
+      let lat: number | null = null;
+      let lng: number | null = null;
 
       if (typeof window !== 'undefined' && navigator.geolocation) {
         try {
           const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 10000,
+              timeout: 12000,
               maximumAge: 0
             });
           });
-
-          locationLink = `\n📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}&z=18`;
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
         } catch (geoErr) {
           console.warn("Geolocation failed:", geoErr);
-          locationLink = "\n📍 Location unavailable";
         }
       }
-
-      const finalMessage = `${messageBody}${locationLink}`;
 
       const res = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: recipientPhone,
-          message: finalMessage,
+          message: messageBody,
           userName: currentUser ? currentUser.name : 'Unknown User',
-          alertType: alertType
+          userEmail: currentUser ? currentUser.email : '',
+          alertType: alertType,
+          lat,
+          lng
         })
       });
       
@@ -474,6 +464,23 @@ export default function HomePage() {
     } catch (err) {
       console.error("Fetch exception:", err);
       return false;
+    }
+  };
+
+  const refreshCurrentUser = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/users`);
+      const data = await res.json();
+      if (data.success) {
+        const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
+        if (latest) {
+          setCurrentUser(latest);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
+        }
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -498,7 +505,7 @@ export default function HomePage() {
 
     if (sentCount > 0) {
       setStatus("✅ Safe arrival alert sent successfully!");
-      setSmsCount(prev => prev + 1);
+      await refreshCurrentUser(); // force counter update
     } else {
       setStatus("Failed to send SMS.");
       alert("Failed to send SMS through server backend.");
@@ -526,7 +533,7 @@ export default function HomePage() {
 
     if (sentCount > 0) {
       setStatus("🚨 Emergency alert dispatched!");
-      setSmsCount(prev => prev + 1);
+      await refreshCurrentUser(); // force counter update
     } else {
       setStatus("Failed to dispatch emergency SMS.");
       alert("Failed to dispatch emergency SMS.");
@@ -536,6 +543,9 @@ export default function HomePage() {
   const pendingUsers = allUsers.filter(u => u.status === 'pending');
   const approvedUsersList = allUsers.filter(u => u.status === 'approved');
   const blockedUsersList = allUsers.filter(u => u.status === 'blocked');
+
+  // Total SMS this month (all users)
+  const totalSmsThisMonth = allUsers.reduce((sum, u) => sum + (u.smsCount || 0), 0);
 
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
@@ -555,10 +565,15 @@ export default function HomePage() {
       )}
 
       {isAdminAuthenticated && (
-        <div style={{ background: '#1e2937', border: '2px solid #f59e0b', padding: '20px', borderRadius: '12px', margin: '20px auto', maxWidth: '600px', textAlign: 'left' }}>
+        <div style={{ background: '#1e2937', border: '2px solid #f59e0b', padding: '20px', borderRadius: '12px', margin: '20px auto', maxWidth: '900px', textAlign: 'left' }}>
           <h2 style={{ color: '#f59e0b', marginTop: 0 }}>🛡️ Admin Control Panel</h2>
+
+          {/* Total SMS this month */}
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', textAlign: 'center' }}>
+            <span style={{ color: '#94a3b8' }}>Total SMS sent this month (all users): </span>
+            <strong style={{ color: '#22c55e', fontSize: '1.4rem' }}>{totalSmsThisMonth}</strong>
+          </div>
           
-          {/* Manual Add User */}
           <div style={{ marginBottom: '25px', padding: '15px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#38bdf8' }}>Manually Add User</h3>
             <form onSubmit={handleManualAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -581,7 +596,7 @@ export default function HomePage() {
               <div key={i} style={{ background: '#334155', padding: '10px', borderRadius: '6px', margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <strong>{u.name}</strong> ({u.email})<br />
-                  <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | SMS Sent: {u.smsCount}</span>
+                  <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | SMS this month: {u.smsCount || 0}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button onClick={() => approveUser(u.email)} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>Approve</button>
@@ -596,13 +611,15 @@ export default function HomePage() {
             {approvedUsersList.length === 0 ? (
               <p style={{ color: '#94a3b8' }}>No approved users yet.</p>
             ) : (
-              <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
+              <div style={{ maxHeight: '450px', overflowY: 'auto', paddingRight: '6px' }}>
                 {approvedUsersList.map((u, i) => (
                   <div key={i} style={{ background: '#334155', padding: '10px', borderRadius: '6px', margin: '8px 0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
                         <strong>{u.name}</strong> ({u.email})<br />
-                        <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{u.phone} | <strong>SMS Sent this month: {u.smsCount}</strong></span>
+                        <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                          {u.phone} | <strong style={{ color: '#4ade80' }}>SMS this month: {u.smsCount || 0}</strong>
+                        </span>
                       </div>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
@@ -648,7 +665,7 @@ export default function HomePage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
                         <strong>{u.name}</strong> ({u.email})<br />
-                        <span style={{ fontSize: '0.85rem', color: '#fca5a5' }}>{u.phone} | SMS Sent: {u.smsCount}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#fca5a5' }}>{u.phone} | SMS this month: {u.smsCount || 0}</span>
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <button onClick={() => approveUser(u.email)} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
@@ -736,7 +753,7 @@ export default function HomePage() {
       <p style={{ margin: '15px', fontSize: '1.1rem', minHeight: '30px', color: '#22c55e' }}>{status}</p>
 
       <div style={{ background: '#1e2937', padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '300px', fontSize: '1.1rem', color: '#cbd5e1' }}>
-        SMS Sent this month: <strong style={{ color: '#22c55e', fontSize: '1.3rem' }}>{currentUser ? currentUser.smsCount : smsCount}</strong>
+        SMS Sent this month: <strong style={{ color: '#22c55e', fontSize: '1.3rem' }}>{currentUser ? (currentUser.smsCount || 0) : 0}</strong>
       </div>
 
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
@@ -778,7 +795,6 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Admin button at bottom */}
       <div style={{ marginTop: '40px', paddingBottom: '30px', display: 'flex', justifyContent: 'center' }}>
         <button onClick={() => setShowAdminLogin(!showAdminLogin)} style={{ background: '#334155', color: '#cbd5e1', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
           {isAdminAuthenticated ? '🔒 Admin Active' : 'Admin Login'}
