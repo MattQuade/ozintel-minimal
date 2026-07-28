@@ -60,9 +60,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Phone required' }, { status: 400 });
     }
 
+    // MessageMedia credentials
+    const auth = Buffer.from('tkbyrABrz6WZOsyngIto:vjaIdgPjc9VsndXELQHOCMiTEHPY67').toString('base64');
+
     // Special case – signup notifications stay untouched
     if (alertType === 'SIGNUP_REQUEST') {
-      const auth = Buffer.from('YOUR_MESSAGEMEDIA_API_KEY:YOUR_MESSAGEMEDIA_API_SECRET').toString('base64');
       const res = await fetch('https://api.messagemedia.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -135,9 +137,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ---------- send via MessageMedia ----------
-    // REPLACE WITH YOUR REAL CREDENTIALS
-    const auth = Buffer.from('YOUR_MESSAGEMEDIA_API_KEY:YOUR_MESSAGEMEDIA_API_SECRET').toString('base64');
-
     const mmRes = await fetch('https://api.messagemedia.com/v1/messages', {
       method: 'POST',
       headers: {
