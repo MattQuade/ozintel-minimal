@@ -39,15 +39,15 @@ function agentLog(
   data: Record<string, unknown> = {}
 ) {
   // #region agent log
-  fetch('http://127.0.0.1:7637/ingest/e5b909e0-698a-4c37-ac57-038313e08195', {
+  fetch('http://127.0.0.1:7243/ingest/30bd1147-33ea-4880-ad5c-b2d5823ae024', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Debug-Session-Id': '943e70',
+      'X-Debug-Session-Id': 'f48452',
     },
     body: JSON.stringify({
-      sessionId: '943e70',
-      runId: 'restore-debug',
+      sessionId: 'f48452',
+      runId: 'restore-debug-2',
       hypothesisId,
       location,
       message,
@@ -128,6 +128,7 @@ export default function HomePage() {
           foundStatus: found?.status ?? null,
           serverUserCount: serverEmails.length,
           serverEmails,
+          dataDirConfigured: Boolean(data._debug?.dataDirConfigured),
         });
         // #endregion
         if (found) {
@@ -525,10 +526,27 @@ export default function HomePage() {
           lng
         })
       });
-      
+      const payload = await res.json().catch(() => ({}));
+      // #region agent log
+      agentLog('C', 'page.tsx:sendSMSViaMessageMedia', 'send-sms response', {
+        ok: res.ok,
+        status: res.status,
+        alertType,
+        hasGeo: lat != null && lng != null,
+        userEmail: currentUser?.email ?? null,
+        userStatus: currentUser?.status ?? null,
+        error: payload?.error ?? null,
+      });
+      // #endregion
       return res.ok;
     } catch (err) {
       console.error("Fetch exception:", err);
+      // #region agent log
+      agentLog('C', 'page.tsx:sendSMSViaMessageMedia', 'send-sms fetch exception', {
+        alertType,
+        error: String(err),
+      });
+      // #endregion
       return false;
     }
   };
