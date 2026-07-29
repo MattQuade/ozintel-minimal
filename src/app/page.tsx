@@ -110,6 +110,7 @@ export default function HomePage() {
 
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState('');
+  const [dataDirConfigured, setDataDirConfigured] = useState<boolean | null>(null);
 
   const restoreFromServer = async (email: string, silent = false) => {
     try {
@@ -241,6 +242,15 @@ export default function HomePage() {
       const data = await res.json();
       if (data.success && Array.isArray(data.users)) {
         setAllUsers(data.users);
+      }
+      if (typeof data._debug?.dataDirConfigured === 'boolean') {
+        setDataDirConfigured(data._debug.dataDirConfigured);
+        // #region agent log
+        agentLog('B', 'page.tsx:fetchUsers', 'storage config from API', {
+          dataDirConfigured: data._debug.dataDirConfigured,
+          userCount: data._debug.userCount ?? data.users?.length ?? 0,
+        });
+        // #endregion
       }
     } catch (err) {
       console.error("Failed to load users from server:", err);
@@ -667,6 +677,19 @@ export default function HomePage() {
       {isAdminAuthenticated && (
         <div style={{ background: '#1e2937', border: '2px solid #f59e0b', padding: '20px', borderRadius: '12px', margin: '20px auto', maxWidth: '900px', textAlign: 'left' }}>
           <h2 style={{ color: '#f59e0b', marginTop: 0 }}>🛡️ Admin Control Panel</h2>
+
+          {dataDirConfigured === false && (
+            <div style={{ background: '#450a0a', border: '1px solid #ef4444', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', color: '#fecaca' }}>
+              <strong>Persistent storage is OFF.</strong> Render env <code>OZINTEL_DATA_DIR</code> is not set,
+              so approved users are wiped on every redeploy. Add disk mount + set{" "}
+              <code>OZINTEL_DATA_DIR=/var/data</code>, redeploy, then re-approve users once.
+            </div>
+          )}
+          {dataDirConfigured === true && (
+            <div style={{ background: '#14532d', border: '1px solid #22c55e', borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', color: '#bbf7d0' }}>
+              Persistent disk is configured — approved users should survive redeploys.
+            </div>
+          )}
 
           {/* Total SMS this month */}
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', textAlign: 'center' }}>
