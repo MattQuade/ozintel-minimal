@@ -18,8 +18,8 @@ export async function GET(_req: Request, { params }: Params) {
     }
     return NextResponse.json({
       success: true,
-      locked: true,
       ...snapshot,
+      locked: true,
       entries: [...snapshot.entries].reverse(),
     });
   } catch (error) {
