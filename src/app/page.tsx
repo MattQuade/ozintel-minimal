@@ -425,6 +425,8 @@ export default function HomePage() {
   };
 
   const removeSafeContact = (index: number) => {
+    const contact = safeContacts[index];
+    if (!window.confirm(`Remove safe arrival contact "${contact.name} (${contact.phone})"?`)) return;
     const updated = safeContacts.filter((_, i) => i !== index);
     saveContacts(updated, emergencyContacts);
   };
@@ -438,6 +440,8 @@ export default function HomePage() {
   };
 
   const removeEmergencyContact = (index: number) => {
+    const contact = emergencyContacts[index];
+    if (!window.confirm(`Remove emergency contact "${contact.name} (${contact.phone})"?\n\nThis cannot be undone.`)) return;
     const updated = emergencyContacts.filter((_, i) => i !== index);
     saveContacts(safeContacts, updated);
   };
