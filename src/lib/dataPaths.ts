@@ -31,3 +31,12 @@ export function getPubOpsDataDir(): string {
 export function getKegsFilePath(): string {
   return path.join(getPubOpsDataDir(), "kegs.json");
 }
+
+/** Closed monthly keg ledgers (read-only after archive). */
+export function getKegsArchiveDir(): string {
+  return path.join(getPubOpsDataDir(), "archives");
+}
+
+export function getKegsArchiveFilePath(month: string): string {
+  return path.join(getKegsArchiveDir(), `kegs-${month}.json`);
+}
