@@ -43,8 +43,8 @@ function PendingContent() {
           Pending approval from Admin
         </p>
         <p style={{ margin: "16px 0 0", color: "#fde68a", fontSize: "0.95rem" }}>
-          This section is coming soon. Contact your administrator if you need
-          early access.
+          Combined Alerts/Accounting/Operations - $AUD44/month (incl. GST). Pls
+          contact admin@ozintel.com.au
         </p>
       </div>
       <p style={{ marginTop: 24 }}>
