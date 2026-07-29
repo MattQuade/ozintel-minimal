@@ -32,6 +32,36 @@ const API_BASE = "";
 const COOKIE_NAME = 'ozintel_user_email';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+function agentLog(
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown> = {}
+) {
+  // #region agent log
+  fetch('http://127.0.0.1:7637/ingest/e5b909e0-698a-4c37-ac57-038313e08195', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '943e70',
+    },
+    body: JSON.stringify({
+      sessionId: '943e70',
+      runId: 'restore-debug',
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
+function emailsMatch(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 function setUserCookie(email: string) {
   if (typeof document === 'undefined') return;
   document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; max-age=${COOKIE_MAX_AGE}; path=/; SameSite=Lax`;
@@ -86,9 +116,20 @@ export default function HomePage() {
       const res = await fetch(`${API_BASE}/api/users`);
       const data = await res.json();
       if (data.success) {
-        const found = data.users.find((u: UserProfile) => 
-          u.email.toLowerCase() === email.toLowerCase()
+        const serverEmails = (data.users || []).map((u: UserProfile) => u.email);
+        const found = data.users.find((u: UserProfile) =>
+          emailsMatch(u.email, email)
         );
+        // #region agent log
+        agentLog('B', 'page.tsx:restoreFromServer', 'restore lookup', {
+          silent,
+          requestedEmail: email,
+          found: Boolean(found),
+          foundStatus: found?.status ?? null,
+          serverUserCount: serverEmails.length,
+          serverEmails,
+        });
+        // #endregion
         if (found) {
           setCurrentUser(found);
           localStorage.setItem('ozintel_current_user', JSON.stringify(found));
@@ -107,12 +148,23 @@ export default function HomePage() {
           clearUserCookie();
           localStorage.removeItem('ozintel_current_user');
           setCurrentUser(null);
-          if (!silent) alert("No account found with that email.");
+          if (!silent) {
+            alert(
+              `No account found with that email.\n\nServer currently has ${serverEmails.length} user(s). Check the email spelling, or sign up again and ask admin to approve.`
+            );
+          }
           return false;
         }
       }
     } catch (err) {
       console.error("Restore error:", err);
+      // #region agent log
+      agentLog('D', 'page.tsx:restoreFromServer', 'restore error', {
+        silent,
+        requestedEmail: email,
+        error: String(err),
+      });
+      // #endregion
       if (!silent) alert("Could not restore account. Please try again.");
     }
     return false;
@@ -149,7 +201,21 @@ export default function HomePage() {
         const res = await fetch(`${API_BASE}/api/users`);
         const data = await res.json();
         if (data.success) {
-          const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
+          const latest = data.users.find((u: UserProfile) =>
+            emailsMatch(u.email, currentUser.email)
+          );
+          const exactMatch = data.users.find(
+            (u: UserProfile) => u.email === currentUser.email
+          );
+          // #region agent log
+          agentLog('A', 'page.tsx:statusPoll', '5s status poll', {
+            clientEmail: currentUser.email,
+            caseInsensitiveFound: Boolean(latest),
+            caseSensitiveFound: Boolean(exactMatch),
+            latestStatus: latest?.status ?? null,
+            serverUserCount: data.users?.length ?? 0,
+          });
+          // #endregion
           if (latest) {
             setCurrentUser(latest);
             localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
@@ -473,7 +539,9 @@ export default function HomePage() {
       const res = await fetch(`${API_BASE}/api/users`);
       const data = await res.json();
       if (data.success) {
-        const latest = data.users.find((u: UserProfile) => u.email === currentUser.email);
+        const latest = data.users.find((u: UserProfile) =>
+          emailsMatch(u.email, currentUser.email)
+        );
         if (latest) {
           setCurrentUser(latest);
           localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
@@ -486,6 +554,13 @@ export default function HomePage() {
 
   const sendSafeArrival = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
+      // #region agent log
+      agentLog('E', 'page.tsx:sendSafeArrival', 'send blocked by approval gate', {
+        hasUser: Boolean(currentUser),
+        email: currentUser?.email ?? null,
+        status: currentUser?.status ?? null,
+      });
+      // #endregion
       alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }
@@ -514,6 +589,13 @@ export default function HomePage() {
 
   const sendEmergencyAlert = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
+      // #region agent log
+      agentLog('E', 'page.tsx:sendEmergencyAlert', 'send blocked by approval gate', {
+        hasUser: Boolean(currentUser),
+        email: currentUser?.email ?? null,
+        status: currentUser?.status ?? null,
+      });
+      // #endregion
       alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }

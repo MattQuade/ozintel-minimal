@@ -11,6 +11,44 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
   const users = await readUsers();
+  // #region agent log
+  console.log(
+    "[debug-943e70]",
+    JSON.stringify({
+      hypothesisId: "B",
+      location: "api/users:GET",
+      dataDir: process.env.OZINTEL_DATA_DIR || null,
+      userCount: users.length,
+      emails: users.map((u) => u.email),
+      statuses: users.map((u) => ({ email: u.email, status: u.status, smsCount: u.smsCount })),
+    })
+  );
+  fetch("http://127.0.0.1:7637/ingest/e5b909e0-698a-4c37-ac57-038313e08195", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "943e70",
+    },
+    body: JSON.stringify({
+      sessionId: "943e70",
+      runId: "restore-debug",
+      hypothesisId: "B",
+      location: "api/users:GET",
+      message: "users store snapshot",
+      data: {
+        dataDir: process.env.OZINTEL_DATA_DIR || null,
+        userCount: users.length,
+        emails: users.map((u) => u.email),
+        statuses: users.map((u) => ({
+          email: u.email,
+          status: u.status,
+          smsCount: u.smsCount,
+        })),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   return NextResponse.json({
     success: true,
     users: users.map(publicUser),
