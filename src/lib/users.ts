@@ -1,4 +1,4 @@
-import { promises as fs } from "fs";
+﻿import { promises as fs } from "fs";
 import {
   getDataDir,
   getRepoSeedUsersPath,
@@ -78,28 +78,66 @@ export function publicUser(user: User) {
     permissions: user.permissions,
   };
 }
-/** Copy repo `data/users.json` onto persistent disk once (first deploy with disk). */
-async function maybeSeedFromRepo() {
-  const usersFile = getUsersFilePath();
-  try {
-    await fs.access(usersFile);
-    return;
-  } catch {
-    // no file on persistent storage yet
+function extractUsersArray(parsed: unknown): {
+  users: Array<Partial<User> & { email: string }>;
+  wasLegacyArray: boolean;
+} {
+  if (Array.isArray(parsed)) {
+    return {
+      users: parsed.filter(
+        (u): u is Partial<User> & { email: string } =>
+          Boolean(u && typeof u === "object" && "email" in u)
+      ),
+      wasLegacyArray: true,
+    };
   }
-  if (!process.env.OZINTEL_DATA_DIR?.trim()) return;
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Array.isArray((parsed as { users?: unknown }).users)
+  ) {
+    return {
+      users: (parsed as { users: Array<Partial<User> & { email: string }> })
+        .users,
+      wasLegacyArray: false,
+    };
+  }
+  return { users: [], wasLegacyArray: false };
+}
+/** Copy repo `data/users.json` onto persistent disk once (first deploy with disk). */
+async function maybeSeedFromRepo(force = false) {
+  const usersFile = getUsersFilePath();
+  if (!force) {
+    try {
+      await fs.access(usersFile);
+      return false;
+    } catch {
+      // no file on persistent storage yet
+    }
+  } else {
+    try {
+      const raw = await fs.readFile(usersFile, "utf8");
+      const { users } = extractUsersArray(JSON.parse(raw || '{"users":[]}'));
+      if (users.length > 0) return false;
+    } catch {
+      // file missing — seed below
+    }
+  }
+  if (!process.env.OZINTEL_DATA_DIR?.trim()) return false;
   try {
     const seedPath = getRepoSeedUsersPath();
     const seedRaw = await fs.readFile(seedPath, "utf8");
     const parsed = JSON.parse(seedRaw || '{"users":[]}');
-    if (!Array.isArray(parsed.users) || parsed.users.length === 0) return;
+    const { users } = extractUsersArray(parsed);
+    if (users.length === 0) return false;
     await fs.mkdir(getDataDir(), { recursive: true });
-    await fs.writeFile(usersFile, seedRaw, "utf8");
+    await fs.writeFile(usersFile, JSON.stringify({ users }, null, 2), "utf8");
     console.log(
-      `[users] Seeded ${parsed.users.length} user(s) from repo data/ onto persistent disk`
+      `[users] Seeded ${users.length} user(s) from repo data/ onto persistent disk`
     );
+    return true;
   } catch {
-    // no seed file in repo — start empty on disk
+    return false;
   }
 }
 async function ensureStore() {
@@ -119,11 +157,40 @@ async function ensureStore() {
 }
 export async function readUsers(): Promise<User[]> {
   await ensureStore();
-  const raw = await fs.readFile(getUsersFilePath(), "utf8");
+  let seeded = await maybeSeedFromRepo(true);
+  if (seeded) {
+    // #region agent log
+    console.log(
+      "[debug-943e70]",
+      JSON.stringify({
+        hypothesisId: "B",
+        location: "users.ts:readUsers",
+        message: "reseeded empty persistent store from repo",
+      })
+    );
+    // #endregion
+  }
+  const usersFile = getUsersFilePath();
+  const raw = await fs.readFile(usersFile, "utf8");
   const parsed = JSON.parse(raw || '{"users":[]}');
-  const users = Array.isArray(parsed.users) ? parsed.users : [];
+  const { users, wasLegacyArray } = extractUsersArray(parsed);
+  // #region agent log
+  console.log(
+    "[debug-943e70]",
+    JSON.stringify({
+      hypothesisId: "B",
+      location: "users.ts:readUsers",
+      dataDir: getDataDir(),
+      ozintelDataDir: process.env.OZINTEL_DATA_DIR || null,
+      usersFile,
+      wasLegacyArray,
+      rawUserCount: users.length,
+      emails: users.map((u) => u.email),
+    })
+  );
+  // #endregion
   const month = currentMonthKey();
-  let changed = false;
+  let changed = wasLegacyArray;
   const normalized = users.map((u: Partial<User> & { email: string }) => {
     const next = normalizeUser(u);
     if (u.smsMonth !== month || Number(u.smsCount || 0) !== next.smsCount) {
@@ -149,3 +216,5 @@ export async function findUserByEmail(email: string) {
   );
 }
 export { currentMonthKey };
+
+

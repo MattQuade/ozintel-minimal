@@ -1,34 +1,74 @@
-[
-  {
-    "email": "mqtallimba@gmail.com",
-    "name": "John Quade",
-    "phone": "+61439033847",
-    "status": "approved",
-    "permissions": ["accounting", "pub", "forestry"],
-    "smsThisMonth": 12
-  },
-  {
-    "email": "leoquade75@gmail.com",
-    "name": "Leo Quade",
-    "phone": "+61491787228",
-    "status": "pending",
-    "permissions": [],
-    "smsThisMonth": 3
-  },
-  {
-    "email": "cevennesq@gmail.com",
-    "name": "Cevennes Quade",
-    "phone": "No phone yet",
-    "status": "pending",
-    "permissions": [],
-    "smsThisMonth": 0
-  },
-  {
-    "email": "automnequade1234@gmail.com",
-    "name": "Automne Quade",
-    "phone": "+61493456384",
-    "status": "pending",
-    "permissions": [],
-    "smsThisMonth": 1
-  }
-]
+﻿{
+  "users": [
+    {
+      "name": "Matt Quade",
+      "email": "mattquade2000@gmail.com",
+      "phone": "+61416619600",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": true,
+        "pubOps": true,
+        "forestryOps": true
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "John Quade",
+      "email": "mqtallimba@gmail.com",
+      "phone": "+61439033847",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": true,
+        "pubOps": true,
+        "forestryOps": true
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Leo Quade",
+      "email": "leoquade75@gmail.com",
+      "phone": "+61491787228",
+      "status": "pending",
+      "smsCount": 0,
+      "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Cevennes Quade",
+      "email": "cevennesq@gmail.com",
+      "phone": "No phone yet",
+      "status": "pending",
+      "smsCount": 0,
+      "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Automne Quade",
+      "email": "automnequade1234@gmail.com",
+      "phone": "+61493456384",
+      "status": "pending",
+      "smsCount": 0,
+      "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    }
+  ]
+}
