@@ -20,7 +20,66 @@ export default function ForestryOperationsPage() {
   const [status, setStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [shareLink, setShareLink] = useState("");
+  const [sharePayload, setSharePayload] = useState<{
+    link: string;
+    accessCode: string;
+    clientName: string;
+  } | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [reports, setReports] = useState<ForestryReport[]>([]);
+
+  const buildShareMessage = (link: string, accessCode: string, clientName: string) =>
+    `Forestry site report for ${clientName}\n\nOpen: ${link}\nAccess code: ${accessCode}`;
+
+  const shareWithClient = async () => {
+    if (!sharePayload) return;
+    const { link, accessCode, clientName } = sharePayload;
+    const text = buildShareMessage(link, accessCode, clientName);
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: `Forestry report – ${clientName}`,
+          text,
+          url: link,
+        });
+        setCopyFeedback("Shared.");
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        console.warn("Native share failed, falling back to copy:", err);
+      }
+    }
+    await copyShareMessage();
+  };
+
+  const copyShareMessage = async () => {
+    if (!sharePayload) return;
+    const { link, accessCode, clientName } = sharePayload;
+    const text = buildShareMessage(link, accessCode, clientName);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback("Copied — paste into SMS, email, or WhatsApp.");
+    } catch {
+      window.prompt("Copy this message and send to your client:", text);
+    }
+  };
+
+  const openSmsShare = () => {
+    if (!sharePayload) return;
+    const { link, accessCode, clientName } = sharePayload;
+    const body = buildShareMessage(link, accessCode, clientName);
+    window.location.href = `sms:?body=${encodeURIComponent(body)}`;
+  };
+
+  const copyReportLink = async (reportId: string) => {
+    const link = `${window.location.origin}/operations/forestry/share/${reportId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopyFeedback("Link copied. Client still needs the access code you set.");
+    } catch {
+      window.prompt("Copy this link:", link);
+    }
+  };
 
   const loadReports = async () => {
     try {
@@ -70,13 +129,18 @@ export default function ForestryOperationsPage() {
     setIsUploading(true);
     setStatus("Capturing location and saving report...");
     setShareLink("");
+    setSharePayload(null);
+    setCopyFeedback("");
 
     try {
       const { latitude, longitude } = await captureLocation();
+      const trimmedClient = clientName.trim();
+      const trimmedNotes = notes.trim();
+      const trimmedCode = accessCode.trim();
       const form = new FormData();
-      form.append("clientName", clientName.trim());
-      form.append("notes", notes.trim());
-      form.append("accessCode", accessCode.trim());
+      form.append("clientName", trimmedClient);
+      form.append("notes", trimmedNotes);
+      form.append("accessCode", trimmedCode);
       form.append("capturedAt", new Date().toISOString());
       if (latitude != null) form.append("latitude", String(latitude));
       if (longitude != null) form.append("longitude", String(longitude));
@@ -93,7 +157,12 @@ export default function ForestryOperationsPage() {
 
       const nextShareLink = `${window.location.origin}/operations/forestry/share/${data.report.id}`;
       setShareLink(nextShareLink);
-      setStatus("✅ Forestry report saved. Share link ready.");
+      setSharePayload({
+        link: nextShareLink,
+        accessCode: trimmedCode,
+        clientName: trimmedClient,
+      });
+      setStatus("✅ Forestry report saved. Use Share or Copy below to send to your client.");
       setClientName("");
       setNotes("");
       setAccessCode("");
@@ -228,7 +297,7 @@ export default function ForestryOperationsPage() {
           </div>
         )}
 
-        {shareLink && (
+        {shareLink && sharePayload && (
           <div
             style={{
               marginTop: 16,
@@ -238,10 +307,74 @@ export default function ForestryOperationsPage() {
               padding: 14,
             }}
           >
-            <p style={{ marginTop: 0, fontWeight: 700 }}>Share this link with the client:</p>
-            <p style={{ wordBreak: "break-all", marginBottom: 8 }}>{shareLink}</p>
-            <p style={{ marginBottom: 0, color: "#dcfce7" }}>
-              Client will also need the access code you entered.
+            <p style={{ marginTop: 0, fontWeight: 700 }}>Send to client</p>
+            <p style={{ wordBreak: "break-all", marginBottom: 12, fontSize: "0.9rem" }}>
+              {shareLink}
+            </p>
+            <p style={{ margin: "0 0 12px", color: "#dcfce7", fontSize: "0.95rem" }}>
+              Access code: <strong>{sharePayload.accessCode}</strong> (included when you share or copy)
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                justifyContent: "center",
+              }}
+            >
+              <button
+                type="button"
+                onClick={shareWithClient}
+                style={{
+                  padding: "12px 18px",
+                  background: "#22c55e",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Share with client
+              </button>
+              <button
+                type="button"
+                onClick={copyShareMessage}
+                style={{
+                  padding: "12px 18px",
+                  background: "#0ea5e9",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Copy message
+              </button>
+              <button
+                type="button"
+                onClick={openSmsShare}
+                style={{
+                  padding: "12px 18px",
+                  background: "#334155",
+                  color: "white",
+                  border: "1px solid #64748b",
+                  borderRadius: 8,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Open SMS
+              </button>
+            </div>
+            {copyFeedback && (
+              <p style={{ margin: "12px 0 0", color: "#bbf7d0", fontSize: "0.9rem" }}>
+                {copyFeedback}
+              </p>
+            )}
+            <p style={{ margin: "12px 0 0", color: "#86efac", fontSize: "0.85rem" }}>
+              On phone, <strong>Share with client</strong> opens your usual apps (Messages, WhatsApp, email).
             </p>
           </div>
         )}
@@ -288,6 +421,22 @@ export default function ForestryOperationsPage() {
                       ? `${report.notes.slice(0, 140)}...`
                       : report.notes}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => copyReportLink(report.id)}
+                    style={{
+                      marginTop: 10,
+                      padding: "8px 12px",
+                      background: "#334155",
+                      color: "#e2e8f0",
+                      border: "1px solid #64748b",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Copy link only
+                  </button>
                 </div>
               ))}
             </div>
