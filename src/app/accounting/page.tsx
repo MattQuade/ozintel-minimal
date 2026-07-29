@@ -2,12 +2,12 @@
 
 export default function AccountingHubPage() {
   const links = [
-    { href: "/bank", label: "Bank" },
-    { href: "/coa", label: "Chart of Accounts" },
-    { href: "/journal", label: "Journal" },
-    { href: "/transactions", label: "Transactions" },
-    { href: "/employees", label: "Employees" },
-    { href: "/reports", label: "Reports" },
+    { href: "/accounting/pending?section=Bank", label: "Bank" },
+    { href: "/accounting/pending?section=Chart%20of%20Accounts", label: "Chart of Accounts" },
+    { href: "/accounting/pending?section=Journal", label: "Journal" },
+    { href: "/accounting/pending?section=Transactions", label: "Transactions" },
+    { href: "/accounting/pending?section=Employees", label: "Employees" },
+    { href: "/accounting/pending?section=Reports", label: "Reports" },
   ];
 
   return (
@@ -27,7 +27,9 @@ export default function AccountingHubPage() {
         </a>
       </p>
       <h1 style={{ color: "#f97316", marginBottom: 8 }}>Accounting</h1>
-      <p style={{ color: "#94a3b8" }}>Choose a section.</p>
+      <p style={{ color: "#94a3b8" }}>
+        Preview the modules below. Full access requires admin approval.
+      </p>
       <div
         style={{
           display: "flex",
