@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ForestryReport = {
   id: string;
@@ -17,6 +17,7 @@ export default function ForestryOperationsPage() {
   const [notes, setNotes] = useState("");
   const [accessCode, setAccessCode] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [shareLink, setShareLink] = useState("");
@@ -167,6 +168,7 @@ export default function ForestryOperationsPage() {
       setNotes("");
       setAccessCode("");
       setPhotoFile(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
       await loadReports();
     } catch (err) {
       console.error(err);
@@ -212,6 +214,31 @@ export default function ForestryOperationsPage() {
         >
           <div style={{ display: "grid", gap: 12 }}>
             <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+              style={{ display: "none" }}
+              aria-hidden
+            />
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              style={{
+                padding: "14px 20px",
+                background: "#0ea5e9",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: "1rem",
+              }}
+            >
+              Take Photo
+            </button>
+            <input
               type="text"
               placeholder="Client or job name"
               value={clientName}
@@ -243,19 +270,6 @@ export default function ForestryOperationsPage() {
               placeholder="Simple access code"
               value={accessCode}
               onChange={(e) => setAccessCode(e.target.value)}
-              style={{
-                padding: 12,
-                borderRadius: 8,
-                border: "1px solid #475569",
-                background: "#0f172a",
-                color: "white",
-              }}
-            />
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
               style={{
                 padding: 12,
                 borderRadius: 8,
