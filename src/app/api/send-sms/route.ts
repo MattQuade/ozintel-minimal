@@ -25,44 +25,16 @@ function formatDuration(ms: number) {
   return `${hours}h ${mins}m`;
 }
 function formatTime(date: Date) {
-  const opts = {
-    weekday: "short" as const,
-    day: "numeric" as const,
-    month: "short" as const,
-    year: "numeric" as const,
-    hour: "numeric" as const,
-    minute: "2-digit" as const,
-    hour12: true as const,
-  };
-  const withSydney = date.toLocaleString("en-AU", {
-    ...opts,
+  return date.toLocaleString("en-AU", {
     timeZone: "Australia/Sydney",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
-  // #region agent log
-  fetch("http://127.0.0.1:7637/ingest/e5b909e0-698a-4c37-ac57-038313e08195", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "943e70",
-    },
-    body: JSON.stringify({
-      sessionId: "943e70",
-      runId: "sms-tz",
-      hypothesisId: "A",
-      location: "send-sms/route.ts:formatTime",
-      message: "SMS time formatting",
-      data: {
-        envTZ: process.env.TZ || null,
-        iso: date.toISOString(),
-        withoutTz: date.toLocaleString("en-AU", opts),
-        withSydney,
-        firstAlertLabel: "N/A (first alert)",
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-  return withSydney;
 }
 async function sendViaMessageMedia(phone: string, message: string) {
   const mode = process.env.SMS_MODE || "mock";
@@ -185,43 +157,10 @@ export async function POST(req: NextRequest) {
       lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
         ? `https://maps.google.com/?q=${lat},${lng}&z=18`
         : "Location unavailable";
-    const formattedTime = formatTime(now);
-    // #region agent log
-    fetch("http://127.0.0.1:7637/ingest/e5b909e0-698a-4c37-ac57-038313e08195", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "943e70",
-      },
-      body: JSON.stringify({
-        sessionId: "943e70",
-        runId: "sms-tz",
-        hypothesisId: "B",
-        location: "send-sms/route.ts:POST",
-        message: "SMS message fields",
-        data: {
-          formattedTime,
-          timeSince,
-          distanceLine,
-          hasLastAlert: Boolean(user.lastAlert?.at),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    console.log(
-      "[debug-943e70]",
-      JSON.stringify({
-        hypothesisId: "B",
-        formattedTime,
-        timeSince,
-        distanceLine,
-      })
-    );
-    // #endregion
     const richMessage = [
       header,
       `From: ${user.name || fallbackName}`,
-      `Time: ${formattedTime}`,
+      `Time: ${formatTime(now)}`,
       bodyLine,
       `⏱ ${timeSince} since last alert`,
       `📏 ${distanceLine}`,
@@ -239,9 +178,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       mocked: result.mocked,
-      formattedTime,
-      timeSince,
-      distanceLine,
       message: richMessage,
       user: {
         name: users[idx].name,
