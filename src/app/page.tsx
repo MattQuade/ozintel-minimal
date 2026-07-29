@@ -32,32 +32,6 @@ const API_BASE = "";
 const COOKIE_NAME = 'ozintel_user_email';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-function agentLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown> = {}
-) {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/30bd1147-33ea-4880-ad5c-b2d5823ae024', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Debug-Session-Id': 'f48452',
-    },
-    body: JSON.stringify({
-      sessionId: 'f48452',
-      runId: 'restore-debug-2',
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 function emailsMatch(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
@@ -121,17 +95,6 @@ export default function HomePage() {
         const found = data.users.find((u: UserProfile) =>
           emailsMatch(u.email, email)
         );
-        // #region agent log
-        agentLog('B', 'page.tsx:restoreFromServer', 'restore lookup', {
-          silent,
-          requestedEmail: email,
-          found: Boolean(found),
-          foundStatus: found?.status ?? null,
-          serverUserCount: serverEmails.length,
-          serverEmails,
-          dataDirConfigured: Boolean(data._debug?.dataDirConfigured),
-        });
-        // #endregion
         if (found) {
           setCurrentUser(found);
           localStorage.setItem('ozintel_current_user', JSON.stringify(found));
@@ -160,13 +123,6 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error("Restore error:", err);
-      // #region agent log
-      agentLog('D', 'page.tsx:restoreFromServer', 'restore error', {
-        silent,
-        requestedEmail: email,
-        error: String(err),
-      });
-      // #endregion
       if (!silent) alert("Could not restore account. Please try again.");
     }
     return false;
@@ -206,18 +162,6 @@ export default function HomePage() {
           const latest = data.users.find((u: UserProfile) =>
             emailsMatch(u.email, currentUser.email)
           );
-          const exactMatch = data.users.find(
-            (u: UserProfile) => u.email === currentUser.email
-          );
-          // #region agent log
-          agentLog('A', 'page.tsx:statusPoll', '5s status poll', {
-            clientEmail: currentUser.email,
-            caseInsensitiveFound: Boolean(latest),
-            caseSensitiveFound: Boolean(exactMatch),
-            latestStatus: latest?.status ?? null,
-            serverUserCount: data.users?.length ?? 0,
-          });
-          // #endregion
           if (latest) {
             setCurrentUser(latest);
             localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
@@ -243,14 +187,8 @@ export default function HomePage() {
       if (data.success && Array.isArray(data.users)) {
         setAllUsers(data.users);
       }
-      if (typeof data._debug?.dataDirConfigured === 'boolean') {
-        setDataDirConfigured(data._debug.dataDirConfigured);
-        // #region agent log
-        agentLog('B', 'page.tsx:fetchUsers', 'storage config from API', {
-          dataDirConfigured: data._debug.dataDirConfigured,
-          userCount: data._debug.userCount ?? data.users?.length ?? 0,
-        });
-        // #endregion
+      if (typeof data.persistentDisk === 'boolean') {
+        setDataDirConfigured(data.persistentDisk);
       }
     } catch (err) {
       console.error("Failed to load users from server:", err);
@@ -536,27 +474,10 @@ export default function HomePage() {
           lng
         })
       });
-      const payload = await res.json().catch(() => ({}));
-      // #region agent log
-      agentLog('C', 'page.tsx:sendSMSViaMessageMedia', 'send-sms response', {
-        ok: res.ok,
-        status: res.status,
-        alertType,
-        hasGeo: lat != null && lng != null,
-        userEmail: currentUser?.email ?? null,
-        userStatus: currentUser?.status ?? null,
-        error: payload?.error ?? null,
-      });
-      // #endregion
+
       return res.ok;
     } catch (err) {
       console.error("Fetch exception:", err);
-      // #region agent log
-      agentLog('C', 'page.tsx:sendSMSViaMessageMedia', 'send-sms fetch exception', {
-        alertType,
-        error: String(err),
-      });
-      // #endregion
       return false;
     }
   };
@@ -582,13 +503,6 @@ export default function HomePage() {
 
   const sendSafeArrival = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
-      // #region agent log
-      agentLog('E', 'page.tsx:sendSafeArrival', 'send blocked by approval gate', {
-        hasUser: Boolean(currentUser),
-        email: currentUser?.email ?? null,
-        status: currentUser?.status ?? null,
-      });
-      // #endregion
       alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }
@@ -617,13 +531,6 @@ export default function HomePage() {
 
   const sendEmergencyAlert = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
-      // #region agent log
-      agentLog('E', 'page.tsx:sendEmergencyAlert', 'send blocked by approval gate', {
-        hasUser: Boolean(currentUser),
-        email: currentUser?.email ?? null,
-        status: currentUser?.status ?? null,
-      });
-      // #endregion
       alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
       return;
     }

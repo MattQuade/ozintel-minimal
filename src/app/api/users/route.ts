@@ -11,28 +11,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
   const users = await readUsers();
-  // #region agent log
-  console.log(
-    "[debug-f48452]",
-    JSON.stringify({
-      hypothesisId: "B",
-      location: "api/users:GET",
-      dataDir: process.env.OZINTEL_DATA_DIR || null,
-      userCount: users.length,
-      emails: users.map((u) => u.email),
-      statuses: users.map((u) => ({ email: u.email, status: u.status, smsCount: u.smsCount })),
-    })
-  );
-  // #endregion
   return NextResponse.json({
     success: true,
     users: users.map(publicUser),
-    // temporary debug meta (no secrets) — remove after restore bug verified
-    _debug: {
-      sessionId: "f48452",
-      dataDirConfigured: Boolean(process.env.OZINTEL_DATA_DIR?.trim()),
-      userCount: users.length,
-    },
+    persistentDisk: Boolean(process.env.OZINTEL_DATA_DIR?.trim()),
   });
 }
 export async function POST(req: NextRequest) {
