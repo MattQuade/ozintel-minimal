@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 type Contact = {
   name: string;
@@ -63,6 +63,8 @@ export default function HomePage() {
   
   const [status, setStatus] = useState<string>('');
   const [smsCount, setSmsCount] = useState<number>(0);
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
+  const cancelSendRef = useRef(false);
 
   const [showSignUp, setShowSignUp] = useState<boolean>(false);
   const [signUpName, setSignUpName] = useState<string>('');
@@ -440,27 +442,33 @@ export default function HomePage() {
     saveContacts(safeContacts, updated);
   };
 
-  const sendSMSViaMessageMedia = async (recipientPhone: string, messageBody: string, alertType: string): Promise<boolean> => {
+  const getLocationOnce = async (): Promise<{ lat: number | null; lng: number | null }> => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      return { lat: null, lng: null };
+    }
     try {
-      let lat: number | null = null;
-      let lng: number | null = null;
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 60000,
+        });
+      });
+      return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    } catch (geoErr) {
+      console.warn("Geolocation failed:", geoErr);
+      return { lat: null, lng: null };
+    }
+  };
 
-      if (typeof window !== 'undefined' && navigator.geolocation) {
-        try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true,
-              timeout: 12000,
-              maximumAge: 0
-            });
-          });
-          lat = pos.coords.latitude;
-          lng = pos.coords.longitude;
-        } catch (geoErr) {
-          console.warn("Geolocation failed:", geoErr);
-        }
-      }
-
+  const sendSMSViaMessageMedia = async (
+    recipientPhone: string,
+    messageBody: string,
+    alertType: string,
+    lat: number | null,
+    lng: number | null
+  ): Promise<boolean> => {
+    try {
       const res = await fetch(`${API_BASE}/api/send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -482,6 +490,11 @@ export default function HomePage() {
     }
   };
 
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
   const refreshCurrentUser = async () => {
     if (!currentUser) return;
     try {
@@ -501,6 +514,76 @@ export default function HomePage() {
     }
   };
 
+  /** Keep retrying every 5s until all contacts succeed (spotty regional reception). */
+  const sendAlertWithRetry = async (
+    contacts: Contact[],
+    messageBody: string,
+    alertType: 'SAFE ARRIVAL' | 'EMERGENCY',
+    successMessage: string
+  ) => {
+    if (isSendingAlert) return;
+
+    cancelSendRef.current = false;
+    setIsSendingAlert(true);
+
+    const label = alertType === 'SAFE ARRIVAL' ? 'Safe Arrival' : 'Emergency';
+    setStatus(`Sending ${label} alert...`);
+
+    const { lat, lng } = await getLocationOnce();
+    let pending = [...contacts];
+    let attempt = 1;
+
+    while (pending.length > 0) {
+      if (cancelSendRef.current) {
+        setStatus(`⏹ ${label} send cancelled. ${contacts.length - pending.length} of ${contacts.length} delivered.`);
+        setIsSendingAlert(false);
+        return;
+      }
+
+      setStatus(
+        attempt === 1
+          ? `Sending ${label} alert...`
+          : `📶 Poor signal – retrying ${label} (attempt ${attempt})...`
+      );
+
+      const stillPending: Contact[] = [];
+      for (const contact of pending) {
+        if (cancelSendRef.current) break;
+        const success = await sendSMSViaMessageMedia(
+          contact.phone,
+          messageBody,
+          alertType,
+          lat,
+          lng
+        );
+        if (!success) stillPending.push(contact);
+      }
+
+      pending = stillPending;
+      if (pending.length === 0) break;
+
+      setStatus(
+        `📶 No signal / send failed – retrying in 5 seconds... (${pending.length} contact${pending.length === 1 ? '' : 's'} left)`
+      );
+      await sleep(5000);
+      attempt += 1;
+    }
+
+    if (cancelSendRef.current) {
+      setIsSendingAlert(false);
+      return;
+    }
+
+    setStatus(successMessage);
+    await refreshCurrentUser();
+    setIsSendingAlert(false);
+  };
+
+  const cancelAlertSend = () => {
+    cancelSendRef.current = true;
+    setStatus('⏹ Cancelling send...');
+  };
+
   const sendSafeArrival = async () => {
     if (!currentUser || currentUser.status !== 'approved') {
       alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
@@ -512,21 +595,12 @@ export default function HomePage() {
       return;
     }
 
-    setStatus("Sending Safe Arrival alert...");
-    let sentCount = 0;
-
-    for (const contact of safeContacts) {
-      const success = await sendSMSViaMessageMedia(contact.phone, "I have arrived safely.", "SAFE ARRIVAL");
-      if (success) sentCount++;
-    }
-
-    if (sentCount > 0) {
-      setStatus("✅ Safe arrival alert sent successfully!");
-      await refreshCurrentUser(); // force counter update
-    } else {
-      setStatus("Failed to send SMS.");
-      alert("Failed to send SMS through server backend.");
-    }
+    await sendAlertWithRetry(
+      safeContacts,
+      "I have arrived safely.",
+      "SAFE ARRIVAL",
+      "✅ Safe arrival alert sent successfully!"
+    );
   };
 
   const sendEmergencyAlert = async () => {
@@ -540,21 +614,12 @@ export default function HomePage() {
       return;
     }
 
-    setStatus("Dispatching Emergency alert...");
-    let sentCount = 0;
-
-    for (const contact of emergencyContacts) {
-      const success = await sendSMSViaMessageMedia(contact.phone, "I need immediate assistance!", "EMERGENCY");
-      if (success) sentCount++;
-    }
-
-    if (sentCount > 0) {
-      setStatus("🚨 Emergency alert dispatched!");
-      await refreshCurrentUser(); // force counter update
-    } else {
-      setStatus("Failed to dispatch emergency SMS.");
-      alert("Failed to dispatch emergency SMS.");
-    }
+    await sendAlertWithRetry(
+      emergencyContacts,
+      "I need immediate assistance!",
+      "EMERGENCY",
+      "🚨 Emergency alert dispatched!"
+    );
   };
 
   const pendingUsers = allUsers.filter(u => u.status === 'pending');
@@ -714,13 +779,67 @@ export default function HomePage() {
         </div>
       )}
 
-      <button onClick={sendSafeArrival} style={{ padding: '20px', fontSize: '1.3rem', margin: '15px', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#22c55e', color: 'white', fontWeight: 'bold' }}>
+      <button
+        onClick={sendSafeArrival}
+        disabled={isSendingAlert}
+        style={{
+          padding: '20px',
+          fontSize: '1.3rem',
+          margin: '15px',
+          border: 'none',
+          borderRadius: '12px',
+          width: '90%',
+          maxWidth: '400px',
+          cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+          background: '#22c55e',
+          color: 'white',
+          fontWeight: 'bold',
+          opacity: isSendingAlert ? 0.7 : 1,
+        }}
+      >
         ✅ SAFE ARRIVAL
       </button>
       <br />
-      <button onClick={sendEmergencyAlert} style={{ padding: '20px', fontSize: '1.3rem', margin: '15px', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#ef4444', color: 'white', fontWeight: 'bold' }}>
+      <button
+        onClick={sendEmergencyAlert}
+        disabled={isSendingAlert}
+        style={{
+          padding: '20px',
+          fontSize: '1.3rem',
+          margin: '15px',
+          border: 'none',
+          borderRadius: '12px',
+          width: '90%',
+          maxWidth: '400px',
+          cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+          background: '#ef4444',
+          color: 'white',
+          fontWeight: 'bold',
+          opacity: isSendingAlert ? 0.7 : 1,
+        }}
+      >
         🚨 SEND HELP
       </button>
+      {isSendingAlert && (
+        <button
+          onClick={cancelAlertSend}
+          style={{
+            padding: '12px',
+            fontSize: '1rem',
+            margin: '0 15px 10px 15px',
+            border: '2px solid #f59e0b',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '400px',
+            cursor: 'pointer',
+            background: 'transparent',
+            color: '#f59e0b',
+            fontWeight: 'bold',
+          }}
+        >
+          Cancel retry
+        </button>
+      )}
       <br />
       
       <button onClick={() => { setShowSignUp(!showSignUp); setShowRestore(false); }} style={{ padding: '16px', fontSize: '1.1rem', margin: '10px 15px 10px 15px', border: '2px solid #0ea5e9', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: 'transparent', color: '#0ea5e9', fontWeight: 'bold' }}>
