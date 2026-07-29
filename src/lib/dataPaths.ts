@@ -40,3 +40,16 @@ export function getKegsArchiveDir(): string {
 export function getKegsArchiveFilePath(month: string): string {
   return path.join(getKegsArchiveDir(), `kegs-${month}.json`);
 }
+
+/** Forestry Operations data folder (reports/photos) on persistent disk. */
+export function getForestryDataDir(): string {
+  return path.join(getDataDir(), "operations", "forestry");
+}
+
+export function getForestryReportsFilePath(): string {
+  return path.join(getForestryDataDir(), "reports.json");
+}
+
+export function getForestryPhotosDir(): string {
+  return path.join(getForestryDataDir(), "photos");
+}
