@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readCoa, readLedger } from "@/lib/accounting/store";
+import { readBankAccounts, readCoa, readLedger } from "@/lib/accounting/store";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import { buildBalanceSheet } from "@/lib/accounting/reports";
 
@@ -15,8 +15,12 @@ export async function GET(req: Request) {
     const asAt =
       url.searchParams.get("asAt") || new Date().toISOString().slice(0, 10);
 
-    const [entries, coa] = await Promise.all([readLedger(), readCoa()]);
-    const report = buildBalanceSheet(entries, coa, asAt);
+    const [entries, coa, banks] = await Promise.all([
+      readLedger(),
+      readCoa(),
+      readBankAccounts(),
+    ]);
+    const report = buildBalanceSheet(entries, coa, asAt, banks);
 
     return NextResponse.json(report);
   } catch (error) {

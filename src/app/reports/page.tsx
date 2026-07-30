@@ -69,7 +69,7 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Link
             href="/reports/profit-loss"
             className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
@@ -85,7 +85,16 @@ export default function ReportsPage() {
           >
             <h2 className="text-2xl font-semibold mb-2">Balance Sheet</h2>
             <p className="text-gray-500">
-              Assets, liabilities and equity as at a chosen date, including current year earnings.
+              Assets, liabilities and equity as at a chosen date, including openings and earnings.
+            </p>
+          </Link>
+          <Link
+            href="/reports/bas"
+            className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
+          >
+            <h2 className="text-2xl font-semibold mb-2">BAS / GST</h2>
+            <p className="text-gray-500">
+              Quarterly GST collected and paid from taxable ledger lines.
             </p>
           </Link>
         </div>

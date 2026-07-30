@@ -13,6 +13,7 @@ export interface BankRule {
     | "Uncategorized"
     | string;
   autoReconcile?: boolean;
+  noGST?: boolean;
 }
 
 export interface ClassifiedTransaction {
@@ -21,6 +22,7 @@ export interface ClassifiedTransaction {
   type: BankRule["type"];
   accountCode: string;
   accountName: string;
+  noGST?: boolean;
   confidence: number;
   needsReview: boolean;
 }
@@ -50,6 +52,7 @@ export function classifyTransaction(
         type: rule.type,
         accountCode: rule.accountCode,
         accountName: rule.accountName,
+        noGST: Boolean(rule.noGST),
         confidence: 0.9,
         needsReview: false,
       };
@@ -61,6 +64,7 @@ export function classifyTransaction(
     type: "Uncategorized",
     accountCode: "9999",
     accountName: "Uncategorized",
+    noGST: false,
     confidence: 0.3,
     needsReview: true,
   };

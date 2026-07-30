@@ -3,8 +3,10 @@ import { promises as fs } from "fs";
 import {
   getAccountingDataDir,
   getAccountingRulesFilePath,
+  getBankAccountsFilePath,
   getCoaFilePath,
   getLedgerFilePath,
+  getRepoSeedBankAccountsPath,
   getRepoSeedCoaPath,
   getRepoSeedLedgerPath,
   getRepoSeedRulesPath,
@@ -32,6 +34,8 @@ export type LedgerEntry = {
   bankAccountName?: string;
   source?: string;
   timestamp?: string;
+  hasGST?: boolean;
+  noGST?: boolean;
   [key: string]: unknown;
 };
 
@@ -43,6 +47,17 @@ export type BankRule = {
   accountName: string;
   type: string;
   autoReconcile?: boolean;
+  noGST?: boolean;
+};
+
+export type BankAccount = {
+  id: string;
+  name: string;
+  accountNumber: string;
+  bsb: string;
+  openingBalance: number;
+  openingAsAt: string;
+  type: string;
 };
 
 async function ensureAccountingDir() {
@@ -210,6 +225,68 @@ export async function writeRules(rules: BankRule[]) {
   await fs.writeFile(
     getAccountingRulesFilePath(),
     JSON.stringify({ rules }, null, 2),
+    "utf8"
+  );
+}
+
+const DEFAULT_BANKS: BankAccount[] = [
+  {
+    id: "1",
+    name: "NAB Credit Card",
+    accountNumber: "NAB-CC-XXXX",
+    bsb: "",
+    openingBalance: 0,
+    openingAsAt: "2025-07-01",
+    type: "Credit Card",
+  },
+  {
+    id: "2",
+    name: "NAB Business Account",
+    accountNumber: "NAB-BIZ-XXXX",
+    bsb: "084-XXX",
+    openingBalance: 0,
+    openingAsAt: "2025-07-01",
+    type: "Cheque",
+  },
+  {
+    id: "3",
+    name: "ANZ Business Account",
+    accountNumber: "ANZ-BIZ-XXXX",
+    bsb: "013-XXX",
+    openingBalance: 0,
+    openingAsAt: "2025-07-01",
+    type: "Cheque",
+  },
+];
+
+export async function readBankAccounts(): Promise<BankAccount[]> {
+  await seedFileIfMissing(
+    getBankAccountsFilePath(),
+    getRepoSeedBankAccountsPath(),
+    JSON.stringify(DEFAULT_BANKS, null, 2)
+  );
+  const raw = await fs.readFile(getBankAccountsFilePath(), "utf8");
+  const parsed = JSON.parse(raw || "[]");
+  const rows = Array.isArray(parsed) ? parsed : [];
+  return rows.map((row, index) => {
+    const r = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+    return {
+      id: String(r.id || `bank-${index + 1}`),
+      name: String(r.name || "Bank account"),
+      accountNumber: String(r.accountNumber || ""),
+      bsb: String(r.bsb || ""),
+      openingBalance: Number(r.openingBalance) || 0,
+      openingAsAt: String(r.openingAsAt || "2025-07-01"),
+      type: String(r.type || "Cheque"),
+    };
+  });
+}
+
+export async function writeBankAccounts(accounts: BankAccount[]) {
+  await ensureAccountingDir();
+  await fs.writeFile(
+    getBankAccountsFilePath(),
+    JSON.stringify(accounts, null, 2),
     "utf8"
   );
 }

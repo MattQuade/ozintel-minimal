@@ -1,0 +1,29 @@
+[
+  {
+    "id": "1",
+    "name": "NAB Credit Card",
+    "accountNumber": "NAB-CC-XXXX",
+    "bsb": "",
+    "openingBalance": 0,
+    "openingAsAt": "2025-07-01",
+    "type": "Credit Card"
+  },
+  {
+    "id": "2",
+    "name": "NAB Business Account",
+    "accountNumber": "NAB-BIZ-XXXX",
+    "bsb": "084-XXX",
+    "openingBalance": 0,
+    "openingAsAt": "2025-07-01",
+    "type": "Cheque"
+  },
+  {
+    "id": "3",
+    "name": "ANZ Business Account",
+    "accountNumber": "ANZ-BIZ-XXXX",
+    "bsb": "013-XXX",
+    "openingBalance": 0,
+    "openingAsAt": "2025-07-01",
+    "type": "Cheque"
+  }
+]

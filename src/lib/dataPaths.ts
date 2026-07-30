@@ -74,6 +74,10 @@ export function getAccountingRulesFilePath(): string {
   return path.join(getAccountingDataDir(), "rules.json");
 }
 
+export function getBankAccountsFilePath(): string {
+  return path.join(getAccountingDataDir(), "bank-accounts.json");
+}
+
 /** Repo seeds used once when persistent accounting files are missing. */
 export function getRepoSeedLedgerPath(): string {
   return path.join(process.cwd(), "data", "ledger.json");
@@ -85,4 +89,8 @@ export function getRepoSeedCoaPath(): string {
 
 export function getRepoSeedRulesPath(): string {
   return path.join(process.cwd(), "src", "core", "rules", "rules.json");
+}
+
+export function getRepoSeedBankAccountsPath(): string {
+  return path.join(process.cwd(), "data", "bank-accounts.json");
 }
