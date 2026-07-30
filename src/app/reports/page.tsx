@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 
 type Summary = {
@@ -37,7 +38,8 @@ export default function ReportsPage() {
       {loading ? (
         <div className="text-center py-20">Loading reports...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <div className="bg-white rounded-3xl p-8 shadow-sm">
             <p className="text-gray-500">Total Revenue</p>
             <p className="text-4xl font-semibold text-green-600 mt-4">
@@ -66,6 +68,28 @@ export default function ReportsPage() {
             </p>
           </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Link
+            href="/reports/profit-loss"
+            className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
+          >
+            <h2 className="text-2xl font-semibold mb-2">Profit &amp; Loss</h2>
+            <p className="text-gray-500">
+              Revenue, COGS and expenses from your ledger for the selected period.
+            </p>
+          </Link>
+          <Link
+            href="/reports/balance-sheet"
+            className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
+          >
+            <h2 className="text-2xl font-semibold mb-2">Balance Sheet</h2>
+            <p className="text-gray-500">
+              Assets, liabilities and equity as at a chosen date, including current year earnings.
+            </p>
+          </Link>
+        </div>
+        </>
       )}
     </div>
     </AccountingGate>

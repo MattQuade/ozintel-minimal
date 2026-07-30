@@ -1,63 +1,176 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 
+type ReportLine = { code: string; name: string; amount: number };
+
+type BalanceSheetReport = {
+  asAt: string;
+  periodLabel: string;
+  assets: { lines: ReportLine[]; total: number };
+  liabilities: { lines: ReportLine[]; total: number };
+  equity: { lines: ReportLine[]; total: number };
+  totalLiabilitiesAndEquity: number;
+  balanced: boolean;
+  difference: number;
+  entryCount: number;
+};
+
+function money(n: number) {
+  return n.toLocaleString('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+    minimumFractionDigits: 2,
+  });
+}
+
 export default function BalanceSheet() {
+  const [asAt, setAsAt] = useState(new Date().toISOString().slice(0, 10));
+  const [report, setReport] = useState<BalanceSheetReport | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    setError('');
+    fetch(`/api/reports/balance-sheet?asAt=${encodeURIComponent(asAt)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load');
+        setReport(data);
+      })
+      .catch((err) => setError(err.message || 'Failed to load'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <AccountingGate section="Reports">
-      <div className="p-10">
-        <h1 className="text-4xl font-bold mb-8">Balance Sheet</h1>
-        <p className="text-gray-500 mb-10">As at 31 May 2026</p>
-
-        <div className="bg-white rounded-3xl shadow p-10">
-          <div className="grid grid-cols-2 gap-16">
-            <div>
-              <h3 className="font-semibold text-xl mb-6 text-blue-700">Assets</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span>Cash at Bank</span>
-                  <span className="font-medium">$87,450</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Accounts Receivable</span>
-                  <span className="font-medium">$12,300</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Inventory</span>
-                  <span className="font-medium">$28,900</span>
-                </div>
-                <div className="flex justify-between border-t pt-4 font-bold">
-                  <span>Total Assets</span>
-                  <span>$128,650</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-xl mb-6 text-orange-700">
-                Liabilities & Equity
-              </h3>
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span>Accounts Payable</span>
-                  <span className="font-medium">$18,200</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Loans</span>
-                  <span className="font-medium">$45,000</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Equity</span>
-                  <span className="font-medium">$65,450</span>
-                </div>
-                <div className="flex justify-between border-t pt-4 font-bold">
-                  <span>Total Liabilities & Equity</span>
-                  <span>$128,650</span>
-                </div>
-              </div>
-            </div>
-          </div>
+      <div className="p-10 max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
+          <h1 className="text-4xl font-bold">Balance Sheet</h1>
+          <Link href="/reports" className="text-sm text-blue-600 hover:underline">
+            ← Reports hub
+          </Link>
         </div>
+
+        <div className="bg-white rounded-3xl shadow p-6 mb-6 flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-sm text-gray-500 mb-1">As at</label>
+            <input
+              type="date"
+              value={asAt}
+              onChange={(e) => setAsAt(e.target.value)}
+              className="border rounded-xl px-3 py-2"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={load}
+            className="bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-16 text-gray-500">Loading balance sheet…</div>
+        ) : error ? (
+          <div className="bg-red-50 text-red-700 rounded-2xl p-6">{error}</div>
+        ) : report ? (
+          <div className="bg-white rounded-3xl shadow p-10">
+            <p className="text-gray-500 mb-2">{report.periodLabel}</p>
+            <p className="text-sm text-gray-400 mb-10">
+              {report.entryCount} ledger entries on or before {report.asAt}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+              <div>
+                <h3 className="font-semibold text-xl mb-6 text-blue-700">Assets</h3>
+                <div className="space-y-4">
+                  {report.assets.lines.length === 0 ? (
+                    <p className="text-gray-400 text-sm">No asset balances yet</p>
+                  ) : (
+                    report.assets.lines.map((line) => (
+                      <div key={`a-${line.code}-${line.name}`} className="flex justify-between">
+                        <span>
+                          {line.code ? (
+                            <span className="text-gray-400 font-mono text-sm mr-2">{line.code}</span>
+                          ) : null}
+                          {line.name}
+                        </span>
+                        <span className="font-medium">{money(line.amount)}</span>
+                      </div>
+                    ))
+                  )}
+                  <div className="flex justify-between border-t pt-4 font-bold">
+                    <span>Total Assets</span>
+                    <span>{money(report.assets.total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-xl mb-6 text-orange-700">
+                  Liabilities & Equity
+                </h3>
+                <div className="space-y-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Liabilities</p>
+                  {report.liabilities.lines.length === 0 ? (
+                    <p className="text-gray-400 text-sm">None</p>
+                  ) : (
+                    report.liabilities.lines.map((line) => (
+                      <div key={`l-${line.code}-${line.name}`} className="flex justify-between">
+                        <span>
+                          {line.code ? (
+                            <span className="text-gray-400 font-mono text-sm mr-2">{line.code}</span>
+                          ) : null}
+                          {line.name}
+                        </span>
+                        <span className="font-medium">{money(line.amount)}</span>
+                      </div>
+                    ))
+                  )}
+
+                  <p className="text-xs uppercase tracking-wide text-gray-400 pt-4">Equity</p>
+                  {report.equity.lines.length === 0 ? (
+                    <p className="text-gray-400 text-sm">None</p>
+                  ) : (
+                    report.equity.lines.map((line) => (
+                      <div key={`eq-${line.code}-${line.name}`} className="flex justify-between">
+                        <span>
+                          {line.code ? (
+                            <span className="text-gray-400 font-mono text-sm mr-2">{line.code}</span>
+                          ) : null}
+                          {line.name}
+                        </span>
+                        <span className="font-medium">{money(line.amount)}</span>
+                      </div>
+                    ))
+                  )}
+
+                  <div className="flex justify-between border-t pt-4 font-bold">
+                    <span>Total Liabilities & Equity</span>
+                    <span>{money(report.totalLiabilitiesAndEquity)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {!report.balanced && (
+              <p className="mt-8 text-sm text-amber-700 bg-amber-50 rounded-xl p-4">
+                Sheet difference {money(report.difference)} — usually means missing opening
+                balances. Import more history or add equity/asset journals to close the gap.
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
     </AccountingGate>
   );

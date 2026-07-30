@@ -81,6 +81,8 @@ export default function BankImport() {
         amount: parseFloat(item.original[1] || 0),
         description: item.original[2] || '',
         type: item.type,
+        accountCode: item.accountCode || '',
+        accountName: item.accountName || '',
         category: typeof item.rule === 'object' ? item.rule?.name || 'Manual' : item.rule || 'Manual',
         bankAccountId: selectedAccount,
         bankAccountName: selectedBank?.name || 'Unknown',

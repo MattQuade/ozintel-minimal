@@ -63,18 +63,36 @@ export default function NewJournalEntry() {
       return;
     }
 
+    const typeFromCode = (account: string, isDebit: boolean): string => {
+      const code = (account.match(/^(\d{3,5})/) || [])[1] || '';
+      if (code.startsWith('1')) return 'Asset';
+      if (code.startsWith('2')) return 'Liability';
+      if (code.startsWith('3')) return 'Equity';
+      if (code.startsWith('4')) return 'Revenue';
+      if (code.startsWith('5') || code.startsWith('6')) return 'Expense';
+      return isDebit ? 'Expense' : 'Revenue';
+    };
+
     const entries = lines
       .filter(line => line.debit > 0 || line.credit > 0)
-      .map(line => ({
-        id: 'manual-' + Date.now() + '-' + line.id,
-        date,
-        description: line.description || reference,
-        amount: line.debit > 0 ? line.debit : -line.credit,
-        type: line.debit > 0 ? 'Expense' : 'Revenue',
-        account: line.account,
-        hasGST: line.hasGST,
-        timestamp: new Date().toISOString(),
-      }));
+      .map(line => {
+        const codeMatch = line.account.match(/^(\d{3,5})\s*[—–\-]?\s*(.*)$/);
+        const accountCode = codeMatch?.[1] || '';
+        const accountName = (codeMatch?.[2] || line.account).trim();
+        const isDebit = line.debit > 0;
+        return {
+          id: 'manual-' + Date.now() + '-' + line.id,
+          date,
+          description: line.description || reference,
+          amount: isDebit ? line.debit : -line.credit,
+          type: typeFromCode(line.account, isDebit),
+          account: line.account,
+          accountCode,
+          accountName,
+          hasGST: line.hasGST,
+          timestamp: new Date().toISOString(),
+        };
+      });
 
     try {
       await fetch('/api/ledger/add', {
