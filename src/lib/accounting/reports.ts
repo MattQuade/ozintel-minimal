@@ -42,6 +42,8 @@ export type BasReport = {
   g1TotalSales: number;
   g10CapitalPurchases: number;
   g11NonCapitalPurchases: number;
+  wagesTotal: number;
+  paygWithheldEstimate: number;
   taxableSalesCount: number;
   taxablePurchaseCount: number;
   entryCount: number;
@@ -357,7 +359,8 @@ function isGstFree(
 
 /**
  * Simple BAS-style GST summary (GST-inclusive amounts ÷ 11).
- * G1 = taxable sales (ex GST), G11 = non-capital purchases (ex GST).
+ * G1 = taxable sales (ex GST), G10 = capital, G11 = non-capital purchases (ex GST).
+ * PAYG estimate = 15% of wages-like expenses (indicative only).
  */
 export function buildBasSummary(
   entries: LedgerEntry[],
@@ -370,7 +373,9 @@ export function buildBasSummary(
   let gstCollected = 0;
   let gstPaid = 0;
   let g1Inc = 0;
+  let g10Inc = 0;
   let g11Inc = 0;
+  let wagesTotal = 0;
   let taxableSalesCount = 0;
   let taxablePurchaseCount = 0;
   let entryCount = 0;
@@ -381,24 +386,47 @@ export function buildBasSummary(
     entryCount += 1;
 
     const type = String(entry.type || "");
-    if (type !== "Revenue" && type !== "Expense") continue;
-    if (isGstFree(entry, coaByCode)) continue;
-
     const abs = Math.abs(Number(entry.amount) || 0);
     if (abs < 0.005) continue;
+
+    const code = resolveAccountCode(entry);
+    const coaAcc = code ? coaByCode.get(code) : undefined;
+    const name = resolveAccountName(entry, coaByCode).toLowerCase();
+    const isWages =
+      type === "Expense" &&
+      (code === "5001" ||
+        name.includes("wage") ||
+        name.includes("salary") ||
+        name.includes("superannuation expense"));
+
+    if (isWages) {
+      wagesTotal += abs;
+    }
+
+    if (type !== "Revenue" && type !== "Expense") continue;
+    if (isGstFree(entry, coaByCode)) continue;
 
     if (type === "Revenue") {
       g1Inc += abs;
       gstCollected += abs / 11;
       taxableSalesCount += 1;
     } else {
-      g11Inc += abs;
+      const capital =
+        Boolean(coaAcc?.isCapital) ||
+        code === "5100" ||
+        name.includes("capital purchase");
+      if (capital) {
+        g10Inc += abs;
+      } else {
+        g11Inc += abs;
+      }
       gstPaid += abs / 11;
       taxablePurchaseCount += 1;
     }
   }
 
   const netGst = round2(gstCollected - gstPaid);
+  const paygWithheldEstimate = round2(wagesTotal * 0.15);
 
   return {
     period: {
@@ -412,13 +440,15 @@ export function buildBasSummary(
     gstCollected: round2(gstCollected),
     gstPaid: round2(gstPaid),
     netGst,
-    g1TotalSales: round2(g1Inc - gstCollected),
-    g10CapitalPurchases: 0,
-    g11NonCapitalPurchases: round2(g11Inc - gstPaid),
+    g1TotalSales: round2(g1Inc - g1Inc / 11),
+    g10CapitalPurchases: round2(g10Inc - g10Inc / 11),
+    g11NonCapitalPurchases: round2(g11Inc - g11Inc / 11),
+    wagesTotal: round2(wagesTotal),
+    paygWithheldEstimate,
     taxableSalesCount,
     taxablePurchaseCount,
     entryCount,
-    note: "Assumes GST-inclusive bank amounts. GST-free accounts (COA noGST / wages) are excluded.",
+    note: "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG estimate = 15% of wages (indicative only).",
   };
 }
 

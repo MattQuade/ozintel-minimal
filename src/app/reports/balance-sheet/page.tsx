@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { downloadCsv, moneyCsv } from '@/lib/accounting/exportCsv';
 
 type ReportLine = { code: string; name: string; amount: number };
 
@@ -50,6 +51,39 @@ export default function BalanceSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const exportCsv = () => {
+    if (!report) return;
+    const rows: string[][] = [
+      ['Section', 'Code', 'Name', 'Amount'],
+      ...report.assets.lines.map((l) => [
+        'Asset',
+        l.code,
+        l.name,
+        moneyCsv(l.amount),
+      ]),
+      ['Asset', '', 'Total Assets', moneyCsv(report.assets.total)],
+      ...report.liabilities.lines.map((l) => [
+        'Liability',
+        l.code,
+        l.name,
+        moneyCsv(l.amount),
+      ]),
+      ...report.equity.lines.map((l) => [
+        'Equity',
+        l.code,
+        l.name,
+        moneyCsv(l.amount),
+      ]),
+      [
+        '',
+        '',
+        'Total Liabilities & Equity',
+        moneyCsv(report.totalLiabilitiesAndEquity),
+      ],
+    ];
+    downloadCsv(`balance-sheet-${report.asAt}.csv`, rows);
+  };
+
   return (
     <AccountingGate section="Reports" backHref="/reports" backLabel="← Back to Reports">
       <div className="p-10 max-w-5xl mx-auto">
@@ -72,6 +106,21 @@ export default function BalanceSheet() {
             className="bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700"
           >
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!report}
+            className="bg-slate-700 text-white px-5 py-2 rounded-xl hover:bg-slate-800 disabled:bg-gray-300"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="border px-5 py-2 rounded-xl hover:bg-gray-50"
+          >
+            Print / PDF
           </button>
         </div>
 

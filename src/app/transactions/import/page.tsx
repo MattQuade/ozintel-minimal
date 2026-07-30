@@ -82,6 +82,7 @@ export default function BankImport() {
         accountName: item.accountName || '',
         noGST: Boolean(item.noGST),
         hasGST: !item.noGST,
+        reconciled: false,
         category:
           typeof item.rule === 'object' ? item.rule?.name || 'Manual' : item.rule || 'Manual',
         bankAccountId: selectedAccount,

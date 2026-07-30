@@ -18,6 +18,7 @@ export type CoaAccount = {
   type: "Asset" | "Liability" | "Equity" | "Revenue" | "Expense" | string;
   isBank?: boolean;
   noGST?: boolean;
+  isCapital?: boolean;
 };
 
 export type LedgerEntry = {
@@ -36,6 +37,7 @@ export type LedgerEntry = {
   timestamp?: string;
   hasGST?: boolean;
   noGST?: boolean;
+  reconciled?: boolean;
   [key: string]: unknown;
 };
 
@@ -230,6 +232,62 @@ export async function readCoa(): Promise<CoaAccount[]> {
     console.log(`[accounting] Merged ${added} missing COA accounts from seed`);
   }
   return merged;
+}
+
+/** Refresh seed-defined accounts (name/type/flags) while keeping custom codes. */
+export async function syncCoaFromSeed(): Promise<{
+  accounts: CoaAccount[];
+  added: number;
+  updated: number;
+}> {
+  await seedFileIfMissing(
+    getCoaFilePath(),
+    getRepoSeedCoaPath(),
+    "[]",
+    path.join(process.cwd(), "data", "coa.json")
+  );
+  const raw = await fs.readFile(getCoaFilePath(), "utf8");
+  const parsed = JSON.parse(raw || "[]");
+  const existing: CoaAccount[] = Array.isArray(parsed) ? parsed : [];
+  let seedAccounts: CoaAccount[] = [];
+  try {
+    const seedRaw = await fs.readFile(getRepoSeedCoaPath(), "utf8");
+    const seedParsed = JSON.parse(seedRaw || "[]");
+    seedAccounts = Array.isArray(seedParsed) ? seedParsed : [];
+  } catch {
+    seedAccounts = [];
+  }
+
+  const byCode = new Map<string, CoaAccount>();
+  for (const a of existing) {
+    if (a?.code) byCode.set(String(a.code), a);
+  }
+  let added = 0;
+  let updated = 0;
+  for (const s of seedAccounts) {
+    if (!s?.code) continue;
+    const code = String(s.code);
+    const prev = byCode.get(code);
+    if (!prev) {
+      byCode.set(code, s);
+      added += 1;
+    } else {
+      byCode.set(code, {
+        ...prev,
+        name: s.name,
+        type: s.type,
+        isBank: s.isBank,
+        noGST: s.noGST,
+        isCapital: s.isCapital,
+      });
+      updated += 1;
+    }
+  }
+  const accounts = [...byCode.values()].sort((a, b) =>
+    String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
+  );
+  await writeCoa(accounts);
+  return { accounts, added, updated };
 }
 
 export async function writeCoa(accounts: CoaAccount[]) {

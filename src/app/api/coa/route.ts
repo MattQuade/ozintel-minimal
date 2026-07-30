@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { readCoa, writeCoa, type CoaAccount } from "@/lib/accounting/store";
+import {
+  readCoa,
+  writeCoa,
+  syncCoaFromSeed,
+  type CoaAccount,
+} from "@/lib/accounting/store";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -23,6 +28,10 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    if (body?.action === "syncSeed") {
+      const result = await syncCoaFromSeed();
+      return NextResponse.json({ success: true, ...result });
+    }
     const accounts = (Array.isArray(body) ? body : body.accounts) as CoaAccount[];
     if (!Array.isArray(accounts)) {
       return NextResponse.json(

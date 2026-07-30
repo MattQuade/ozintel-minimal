@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDateRange } from '@/lib/accounting/dates';
+import { downloadCsv, moneyCsv } from '@/lib/accounting/exportCsv';
 
 type ReportLine = { code: string; name: string; amount: number };
 
@@ -60,6 +61,32 @@ export default function ProfitLoss() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const exportCsv = () => {
+    if (!report) return;
+    const rows: string[][] = [
+      ['Section', 'Code', 'Name', 'Amount'],
+      ...report.revenue.lines.map((l) => [
+        'Revenue',
+        l.code,
+        l.name,
+        moneyCsv(l.amount),
+      ]),
+      ['Revenue', '', 'Total Revenue', moneyCsv(report.revenue.total)],
+      ...report.cogs.lines.map((l) => ['COGS', l.code, l.name, moneyCsv(l.amount)]),
+      ['COGS', '', 'Total COGS', moneyCsv(report.cogs.total)],
+      ['', '', 'Gross Profit', moneyCsv(report.grossProfit)],
+      ...report.expenses.lines.map((l) => [
+        'Expense',
+        l.code,
+        l.name,
+        moneyCsv(l.amount),
+      ]),
+      ['Expense', '', 'Total Expenses', moneyCsv(report.expenses.total)],
+      ['', '', 'Net Profit', moneyCsv(report.netProfit)],
+    ];
+    downloadCsv(`profit-loss-${report.period.from}-${report.period.to}.csv`, rows);
+  };
+
   return (
     <AccountingGate section="Reports" backHref="/reports" backLabel="← Back to Reports">
       <div className="p-10 max-w-4xl mx-auto">
@@ -91,6 +118,21 @@ export default function ProfitLoss() {
             className="bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700"
           >
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!report}
+            className="bg-slate-700 text-white px-5 py-2 rounded-xl hover:bg-slate-800 disabled:bg-gray-300"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="border px-5 py-2 rounded-xl hover:bg-gray-50"
+          >
+            Print / PDF
           </button>
         </div>
 

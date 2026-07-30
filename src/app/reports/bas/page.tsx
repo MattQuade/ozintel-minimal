@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDateRange } from '@/lib/accounting/dates';
+import { downloadCsv, moneyCsv } from '@/lib/accounting/exportCsv';
 
 type Quarter = { id: string; label: string; from: string; to: string };
 
@@ -14,6 +15,8 @@ type BasReport = {
   g1TotalSales: number;
   g10CapitalPurchases: number;
   g11NonCapitalPurchases: number;
+  wagesTotal: number;
+  paygWithheldEstimate: number;
   taxableSalesCount: number;
   taxablePurchaseCount: number;
   entryCount: number;
@@ -55,6 +58,24 @@ export default function BasReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const exportCsv = () => {
+    if (!report) return;
+    downloadCsv(`bas-${report.period.from}-${report.period.to}.csv`, [
+      ['Field', 'Amount'],
+      ['Period', report.period.label],
+      ['From', report.period.from],
+      ['To', report.period.to],
+      ['GST collected (1A)', moneyCsv(report.gstCollected)],
+      ['GST paid (1B)', moneyCsv(report.gstPaid)],
+      ['Net GST', moneyCsv(report.netGst)],
+      ['G1 Total sales ex GST', moneyCsv(report.g1TotalSales)],
+      ['G10 Capital purchases ex GST', moneyCsv(report.g10CapitalPurchases)],
+      ['G11 Non-capital purchases ex GST', moneyCsv(report.g11NonCapitalPurchases)],
+      ['Wages total', moneyCsv(report.wagesTotal)],
+      ['PAYG estimate (15%)', moneyCsv(report.paygWithheldEstimate)],
+    ]);
+  };
+
   return (
     <AccountingGate section="Reports" backHref="/reports" backLabel="← Back to Reports">
       <div className="p-10 max-w-3xl mx-auto">
@@ -92,6 +113,21 @@ export default function BasReportPage() {
             className="bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700"
           >
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!report}
+            className="bg-slate-700 text-white px-5 py-2 rounded-xl hover:bg-slate-800 disabled:bg-gray-300"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="border px-5 py-2 rounded-xl hover:bg-gray-50"
+          >
+            Print / PDF
           </button>
         </div>
 
@@ -150,16 +186,22 @@ export default function BasReportPage() {
                 <span className="font-medium">{money(report.g1TotalSales)}</span>
               </div>
               <div className="flex justify-between border-b pb-2">
+                <span>G10 Capital purchases (ex GST)</span>
+                <span className="font-medium">{money(report.g10CapitalPurchases)}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
                 <span>G11 Non-capital purchases (ex GST)</span>
                 <span className="font-medium">
                   {money(report.g11NonCapitalPurchases)}
                 </span>
               </div>
+              <div className="flex justify-between border-b pb-2">
+                <span>Wages / salary total</span>
+                <span className="font-medium">{money(report.wagesTotal)}</span>
+              </div>
               <div className="flex justify-between">
-                <span>G10 Capital purchases</span>
-                <span className="font-medium text-gray-400">
-                  {money(report.g10CapitalPurchases)} (not tracked yet)
-                </span>
+                <span>PAYG withheld estimate (15%)</span>
+                <span className="font-medium">{money(report.paygWithheldEstimate)}</span>
               </div>
             </div>
 
