@@ -520,14 +520,18 @@
       "id": 64,
       "name": "Weekly Wages",
       "matchValue": "WAGES",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "1965",
       "accountName": "Salaries & Wages",
       "type": "Expense",
       "noGST": true,
       "bankAccountId": "2020",
-      "direction": "spend"
+      "direction": "spend",
+      "matchValues": [
+        "THI AI LE TRAN",
+        "THI MY THI HUYNH"
+      ]
     },
     {
       "id": 66,
@@ -840,9 +844,10 @@
       "name": "Cash ATM",
       "matchValue": "ANZ ATM",
       "matchValues": [
-        "NABATM"
+        "NABATM",
+        "NABATM DEP"
       ],
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "0107",
       "accountName": "Sales - Bar",
@@ -854,14 +859,19 @@
       "id": 203,
       "name": "Matt Quade - Funds Intro",
       "matchValue": "Matt Quade",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "3565/04",
       "accountName": "Loan - Matt Quade",
       "type": "Liability",
       "noGST": true,
       "direction": "receive",
-      "bankAccountId": "2020"
+      "bankAccountId": "2020",
+      "matchValues": [
+        "MR MATTHEW JOHN QUAD",
+        "MATTHEW JOHN QUAD",
+        "Transfer bw bus. acc"
+      ]
     },
     {
       "id": 204,
@@ -1189,7 +1199,8 @@
       "direction": "spend",
       "matchValues": [
         "INS PREMIUM - MLC",
-        "MLC NCCC"
+        "MLC NCCC",
+        "INS PREMIUM"
       ]
     },
     {
@@ -1198,12 +1209,15 @@
       "matchValue": "INTEREST ON PURCHASE(S)",
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1372",
-      "accountName": "Interest",
+      "accountCode": "1545",
+      "accountName": "Bank Fees & Charges",
       "type": "Expense",
       "bankAccountId": "2010",
       "direction": "spend",
-      "noGST": true
+      "noGST": true,
+      "matchValues": [
+        "INTEREST ON PURCHASE"
+      ]
     },
     {
       "id": 2016,
@@ -1299,7 +1313,7 @@
       "id": 2022,
       "name": "Woolworths Bar Purchases",
       "matchValue": "WOOLWORTHS",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "1118",
       "accountName": "Purchases - Restaurant (NO GST)",
@@ -1366,7 +1380,7 @@
       "id": 2027,
       "name": "Dan Murphys Wagga",
       "matchValue": "DAN MURPHY",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "0100",
       "accountName": "Packaged",
@@ -1418,7 +1432,7 @@
       "id": 2031,
       "name": "CUB Draught & Packaged",
       "matchValue": "CUB",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "1116",
       "accountName": "Purchases - Bar",
@@ -1507,13 +1521,17 @@
       "id": 2038,
       "name": "Ferndale Distributors",
       "matchValue": "Ferndale",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1116",
-      "accountName": "Purchases - Bar",
+      "accountCode": "1118",
+      "accountName": "Purchases - Restaurant (NO GST)",
       "type": "Expense",
       "bankAccountId": "2010",
-      "direction": "spend"
+      "direction": "spend",
+      "matchValues": [
+        "FERNDALE"
+      ],
+      "noGST": true
     },
     {
       "id": 2039,
@@ -1551,15 +1569,16 @@
       "matchValues": [
         "CC Rpymnt",
         "CC Rpymnt LONDON AUSSI",
-        "CC PYMNTS"
+        "CC PYMNTS",
+        "INTERNET PAYMENT CC"
       ],
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
-      "accountCode": "2020",
-      "accountName": "NAB Business Account #4091",
+      "accountCode": "2475",
+      "accountName": "Suspense",
       "type": "Asset",
       "bankAccountId": "2010",
-      "direction": "transfer",
+      "direction": "receive",
       "noGST": true
     },
     {
@@ -1582,7 +1601,7 @@
       "id": 2043,
       "name": "SupaGas",
       "matchValue": "SUPAGAS",
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
       "accountCode": "1358",
       "accountName": "Gas",
@@ -1590,7 +1609,8 @@
       "bankAccountId": "2010",
       "direction": "spend",
       "matchValues": [
-        "Elgas"
+        "Elgas",
+        "Supagas"
       ]
     },
     {
@@ -1622,13 +1642,16 @@
       "id": 2046,
       "name": "Spotify - Pub",
       "matchValue": "Spotify",
-      "matchField": "reference",
+      "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1925",
-      "accountName": "Subscriptions",
+      "accountCode": "1330",
+      "accountName": "Entertainment",
       "type": "Expense",
       "bankAccountId": "2010",
-      "direction": "spend"
+      "direction": "spend",
+      "matchValues": [
+        "SPOTIFY"
+      ]
     },
     {
       "id": 2048,
@@ -3128,6 +3151,343 @@
       "type": "Liability",
       "bankAccountId": "3",
       "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3241,
+      "name": "SDRO Infringement",
+      "matchValue": "SDRO",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "INFRNGMNT"
+      ],
+      "noGST": true
+    },
+    {
+      "id": 3242,
+      "name": "Carinya Christian School",
+      "matchValue": "CARINYA",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3244,
+      "name": "South West Catering",
+      "matchValue": "SOUTH WEST CATERING",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1116",
+      "accountName": "Purchases - Bar",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3245,
+      "name": "Pearl Sturt Hwy Fuel",
+      "matchValue": "PEARL STURT",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1385",
+      "accountName": "MV - Fuel & Oil",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3246,
+      "name": "Mister Minit",
+      "matchValue": "MISTER MINIT",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1119",
+      "accountName": "Purchases - Accommodation",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "Mister Minit"
+      ]
+    },
+    {
+      "id": 3247,
+      "name": "Metcash Trading",
+      "matchValue": "METCASH",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "0100",
+      "accountName": "Packaged",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3248,
+      "name": "NAB Intl Tran Fee",
+      "matchValue": "NAB INTNL",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1376",
+      "accountName": "Merchant fees",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3249,
+      "name": "Dr Andrew Redgment",
+      "matchValue": "DR ANDREW",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3250,
+      "name": "Go Dental",
+      "matchValue": "GO DENTAL",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3251,
+      "name": "BIG W",
+      "matchValue": "BIGW",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1117",
+      "accountName": "Purchases - Restaurant (inc GST)",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "BIG W"
+      ]
+    },
+    {
+      "id": 3252,
+      "name": "ACT Endodontics",
+      "matchValue": "ACT ENDODONTICS",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3253,
+      "name": "ACT Cabs",
+      "matchValue": "ACT CABS",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3254,
+      "name": "Lockhart Cafe",
+      "matchValue": "LOCKHART CAFE",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3255,
+      "name": "NRMA Insurance",
+      "matchValue": "NRMA",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1368",
+      "accountName": "Insurance Premiums",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3256,
+      "name": "Macquarie University",
+      "matchValue": "MACQUARIE UNIVERSITY",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3257,
+      "name": "Tallimba P and C",
+      "matchValue": "TALLIMBA P AND C",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "TALLIMBA"
+      ],
+      "noGST": true
+    },
+    {
+      "id": 3258,
+      "name": "Riverina Oral",
+      "matchValue": "RIVERINA ORAL",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3259,
+      "name": "Jardines Cafe",
+      "matchValue": "Jardines",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "JARDINES"
+      ],
+      "noGST": true
+    },
+    {
+      "id": 3260,
+      "name": "Box Office",
+      "matchValue": "BOX OFFICE",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3261,
+      "name": "Stars on Ice",
+      "matchValue": "STARS ON ICE",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "noGST": true
+    },
+    {
+      "id": 3262,
+      "name": "Birdy Bar",
+      "matchValue": "Birdy Bar",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3565/04",
+      "accountName": "Loan - Matt Quade",
+      "type": "Liability",
+      "bankAccountId": "2010",
+      "direction": "spend",
+      "matchValues": [
+        "BIRDY BAR"
+      ],
+      "noGST": true
+    },
+    {
+      "id": 3263,
+      "name": "Starlink Internet",
+      "matchValue": "STARLINK",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1462",
+      "accountName": "Telephone & Fax",
+      "type": "Expense",
+      "bankAccountId": "2020",
+      "direction": "spend",
+      "matchValues": [
+        "STARLINK INTERNET"
+      ]
+    },
+    {
+      "id": 3264,
+      "name": "TF Between Bus Accounts (NAB)",
+      "matchValue": "TF bw Bus Accts",
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "3",
+      "accountName": "ANZ Business Account",
+      "type": "Asset",
+      "bankAccountId": "2020",
+      "direction": "any",
+      "matchValues": [
+        "TF bw bus. accounts",
+        "bw Bus Accts",
+        "bw bus. accounts",
+        "MQTF bw",
+        "LAS ANZ"
+      ],
+      "noGST": true
+    },
+    {
+      "id": 3265,
+      "name": "Wage Reversal Credit",
+      "matchValue": "WAGES",
+      "matchValues": [
+        "REVERSAL CREDIT",
+        "THI MY THI HUYNH",
+        "THI AI LE TRAN"
+      ],
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1965",
+      "accountName": "Salaries & Wages",
+      "type": "Expense",
+      "bankAccountId": "2020",
+      "direction": "receive",
       "noGST": true
     }
   ]
