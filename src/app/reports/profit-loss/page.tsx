@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDateRange } from '@/lib/accounting/dates';
 
 type ReportLine = { code: string; name: string; amount: number };
 
@@ -61,14 +61,9 @@ export default function ProfitLoss() {
   }, []);
 
   return (
-    <AccountingGate section="Reports">
+    <AccountingGate section="Reports" backHref="/reports" backLabel="← Back to Reports">
       <div className="p-10 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
-          <h1 className="text-4xl font-bold">Profit & Loss Statement</h1>
-          <Link href="/reports" className="text-sm text-blue-600 hover:underline">
-            ← Reports hub
-          </Link>
-        </div>
+        <h1 className="text-4xl font-bold mb-8">Profit & Loss Statement</h1>
 
         <div className="bg-white rounded-3xl shadow p-6 mb-6 flex flex-wrap gap-4 items-end">
           <div>
@@ -79,6 +74,7 @@ export default function ProfitLoss() {
               onChange={(e) => setFrom(e.target.value)}
               className="border rounded-xl px-3 py-2"
             />
+            <p className="text-xs text-gray-400 mt-1">Shows as DD/MM/YYYY on AU browsers</p>
           </div>
           <div>
             <label className="block text-sm text-gray-500 mb-1">To</label>
@@ -108,7 +104,7 @@ export default function ProfitLoss() {
               <div>
                 <p className="text-gray-500">{report.period.label}</p>
                 <p className="text-2xl font-semibold">
-                  {report.period.from} – {report.period.to}
+                  {formatAuDateRange(report.period.from, report.period.to)}
                 </p>
                 <p className="text-sm text-gray-400 mt-1">
                   {report.entryCount} revenue/expense entries

@@ -109,7 +109,7 @@ export default function NewJournalEntry() {
   };
 
   return (
-    <AccountingGate section="Journal">
+    <AccountingGate section="Journal" backHref="/journal" backLabel="← Back to Journal">
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">New Journal Entry</h1>
 
@@ -124,6 +124,7 @@ export default function NewJournalEntry() {
               onChange={(e) => setDate(e.target.value)}
               className="w-full border rounded-xl p-3"
             />
+            <p className="text-xs text-gray-400 mt-1">DD/MM/YYYY on AU browsers</p>
           </div>
           <div>
             <label className="block text-sm mb-2">Reference</label>

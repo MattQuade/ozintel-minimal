@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 const bankAccounts = [
   { id: '1', name: 'NAB Credit Card', number: 'NAB-CC-XXXX' },
@@ -110,7 +111,7 @@ export default function BankImport() {
   };
 
   return (
-    <AccountingGate section="Transactions">
+    <AccountingGate section="Transactions" backHref="/transactions" backLabel="← Back to Transactions">
     <div className="p-10 max-w-6xl mx-auto">
       <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
       <p className="text-gray-600 mb-8">Upload quarterly statements → Select Account → Auto-classify → Save</p>
@@ -184,7 +185,7 @@ export default function BankImport() {
 
                     return (
                       <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">{row[0]}</td>
+                        <td className="px-4 py-3">{formatAuDate(row[0])}</td>
                         <td className="px-4 py-3 font-medium">{row[1]}</td>
                         <td className="px-4 py-3 max-w-md truncate">{row[2] || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{ruleName}</td>

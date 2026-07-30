@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 
 interface BankRule {
@@ -81,16 +80,13 @@ export default function RulesManagement() {
   };
 
   return (
-    <AccountingGate section="Transactions">
+    <AccountingGate section="Transactions" backHref="/transactions" backLabel="← Back to Transactions">
     <div className="p-10 max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-10">
         <div>
           <h1 className="text-4xl font-bold">Bank Rules Editor</h1>
           <p className="text-gray-600">Create and manage auto-reconciliation rules</p>
         </div>
-        <Link href="/transactions/import" className="bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700">
-          ← Back to Import
-        </Link>
       </div>
 
       {/* New Rule Form */}

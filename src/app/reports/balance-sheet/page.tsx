@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type ReportLine = { code: string; name: string; amount: number };
 
@@ -51,14 +51,9 @@ export default function BalanceSheet() {
   }, []);
 
   return (
-    <AccountingGate section="Reports">
+    <AccountingGate section="Reports" backHref="/reports" backLabel="← Back to Reports">
       <div className="p-10 max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
-          <h1 className="text-4xl font-bold">Balance Sheet</h1>
-          <Link href="/reports" className="text-sm text-blue-600 hover:underline">
-            ← Reports hub
-          </Link>
-        </div>
+        <h1 className="text-4xl font-bold mb-8">Balance Sheet</h1>
 
         <div className="bg-white rounded-3xl shadow p-6 mb-6 flex flex-wrap gap-4 items-end">
           <div>
@@ -69,6 +64,7 @@ export default function BalanceSheet() {
               onChange={(e) => setAsAt(e.target.value)}
               className="border rounded-xl px-3 py-2"
             />
+            <p className="text-xs text-gray-400 mt-1">Shows as DD/MM/YYYY on AU browsers</p>
           </div>
           <button
             type="button"
@@ -87,7 +83,7 @@ export default function BalanceSheet() {
           <div className="bg-white rounded-3xl shadow p-10">
             <p className="text-gray-500 mb-2">{report.periodLabel}</p>
             <p className="text-sm text-gray-400 mb-10">
-              {report.entryCount} ledger entries on or before {report.asAt}
+              {report.entryCount} ledger entries on or before {formatAuDate(report.asAt)}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-16">

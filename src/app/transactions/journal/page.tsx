@@ -4,7 +4,7 @@ import AccountingGate from '@/components/AccountingGate';
 
 export default function GeneralJournal() {
   return (
-    <AccountingGate section="Transactions">
+    <AccountingGate section="Transactions" backHref="/transactions" backLabel="← Back to Transactions">
       <div className="p-10 max-w-7xl mx-auto">
         <div className="flex justify-between items-start mb-8">
           <div>

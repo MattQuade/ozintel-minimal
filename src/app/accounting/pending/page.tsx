@@ -19,7 +19,18 @@ function PendingContent() {
       }}
     >
       <p style={{ margin: "0 0 16px" }}>
-        <a href="/accounting" style={{ color: "#38bdf8" }}>
+        <a
+          href="/accounting"
+          style={{
+            display: "inline-block",
+            color: "#0f172a",
+            background: "#e2e8f0",
+            textDecoration: "none",
+            fontWeight: 600,
+            padding: "10px 16px",
+            borderRadius: 10,
+          }}
+        >
           ← Back to Accounting
         </a>
       </p>

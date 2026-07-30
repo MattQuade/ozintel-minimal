@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate, parseFlexibleDate, toIsoDateInput } from '@/lib/accounting/dates';
 
 const periods = [
   { label: 'Full Year FY25/26', value: 'full' },
@@ -72,7 +73,8 @@ export default function JournalPage() {
       const matchesSearch = tx.description.toLowerCase().includes(searchTerm.toLowerCase());
       if (activePeriod === 'full') return matchesSearch;
 
-      const d = new Date(tx.date);
+      const d = parseFlexibleDate(tx.date);
+      if (!d) return matchesSearch;
       const m = d.getMonth() + 1;
       if (activePeriod === 'q1') return m >= 7 && m <= 9 && matchesSearch;
       if (activePeriod === 'q2') return m >= 10 && m <= 12 && matchesSearch;
@@ -80,7 +82,11 @@ export default function JournalPage() {
       if (activePeriod === 'q4') return m >= 4 && m <= 6 && matchesSearch;
       return matchesSearch;
     })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => {
+      const da = parseFlexibleDate(a.date)?.getTime() || 0;
+      const db = parseFlexibleDate(b.date)?.getTime() || 0;
+      return db - da;
+    });
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return;
@@ -167,7 +173,7 @@ export default function JournalPage() {
             <tbody>
               {filtered.map(tx => (
                 <tr key={tx.id} className="border-t hover:bg-gray-50">
-                  <td className="p-5">{tx.date}</td>
+                  <td className="p-5">{formatAuDate(tx.date)}</td>
                   <td className="p-5">{tx.description}</td>
                   <td className="p-5 text-right font-medium">${Math.abs(tx.amount).toFixed(2)}</td>
                   <td className="p-5 text-center">
@@ -194,10 +200,11 @@ export default function JournalPage() {
 
             <input 
               type="date" 
-              value={editingTx.date} 
+              value={toIsoDateInput(editingTx.date)} 
               onChange={e => setEditingTx({...editingTx, date: e.target.value})} 
               className="w-full border rounded-xl p-3 mb-4" 
             />
+            <p className="text-xs text-gray-400 -mt-3 mb-4">Date shown as DD/MM/YYYY on AU browsers</p>
 
             <select 
               value={editingTx.account || ''} 

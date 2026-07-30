@@ -1,4 +1,10 @@
 import type { CoaAccount, LedgerEntry } from "@/lib/accounting/store";
+import {
+  formatAuDate,
+  formatAuDateRange,
+  parseFlexibleDate,
+  toIsoDateInput,
+} from "@/lib/accounting/dates";
 
 export type ReportLine = {
   code: string;
@@ -46,25 +52,13 @@ export function getAuFyBounds(ref: Date = new Date()): {
   };
 }
 
+/** @deprecated Prefer parseFlexibleDate from dates.ts */
 export function parseEntryDate(dateStr: string): Date | null {
-  if (!dateStr || typeof dateStr !== "string") return null;
-  const trimmed = dateStr.trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    const d = new Date(trimmed.slice(0, 10) + "T12:00:00");
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-  const dmy = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (dmy) {
-    const iso = `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
-    const d = new Date(iso + "T12:00:00");
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-  const d = new Date(trimmed);
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseFlexibleDate(dateStr);
 }
 
 function toIsoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return toIsoDateInput(d);
 }
 
 function inRange(entryDate: Date | null, from: string, to: string): boolean {
@@ -151,7 +145,7 @@ export function buildProfitLoss(
   let entryCount = 0;
 
   for (const entry of entries) {
-    const d = parseEntryDate(String(entry.date || ""));
+    const d = parseFlexibleDate(String(entry.date || ""));
     if (!inRange(d, from, to)) continue;
     const type = String(entry.type || "");
     if (type !== "Revenue" && type !== "Expense") continue;
@@ -185,7 +179,10 @@ export function buildProfitLoss(
     period: {
       from,
       to,
-      label: from === fy.from && to === fy.to ? `FY ${fy.label}` : `${from} – ${to}`,
+      label:
+        from === fy.from && to === fy.to
+          ? `FY ${fy.label}`
+          : formatAuDateRange(from, to),
     },
     revenue,
     cogs,
@@ -218,7 +215,7 @@ export function buildBalanceSheet(
   let entryCount = 0;
 
   for (const entry of entries) {
-    const d = parseEntryDate(String(entry.date || ""));
+    const d = parseFlexibleDate(String(entry.date || ""));
     if (!onOrBefore(d, asAt)) continue;
     entryCount += 1;
 
@@ -294,7 +291,7 @@ export function buildBalanceSheet(
 
   return {
     asAt,
-    periodLabel: `As at ${asAt} (FY ${fy.label} earnings)`,
+    periodLabel: `As at ${formatAuDate(asAt)} (FY ${fy.label} earnings)`,
     assets,
     liabilities,
     equity,

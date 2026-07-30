@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type Employee = {
   id: number;
@@ -138,8 +139,8 @@ export default function EmployeesPage() {
 
     const newRun: PayRun = {
       id: Date.now(),
-      period: `Fortnight ending ${new Date().toLocaleDateString('en-AU')}`,
-      date: new Date().toLocaleDateString('en-AU'),
+      period: `Fortnight ending ${formatAuDate(new Date())}`,
+      date: formatAuDate(new Date()),
       employeesCount: employees.length,
       grossPay: gross,
       superGuarantee: superG,

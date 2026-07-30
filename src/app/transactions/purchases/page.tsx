@@ -4,7 +4,7 @@ import AccountingGate from '@/components/AccountingGate';
 
 export default function Expenses() {
   return (
-    <AccountingGate section="Transactions">
+    <AccountingGate section="Transactions" backHref="/transactions" backLabel="← Back to Transactions">
       <div className="p-10">
         <div className="max-w-5xl">
           <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
