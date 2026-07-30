@@ -145,9 +145,6 @@ export default function JournalPage() {
       return;
     }
     setClearingAll(true);
-    // #region agent log
-    fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'journal-clear-all',hypothesisId:'H1',location:'journal/page.tsx:handleClearAll',message:'clear all requested',data:{transactionCount:transactions.length,filteredCount:filtered.length,period:activePeriod,reconFilter,searchTermLength:searchTerm.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const visibleIds = filtered.map((tx) => tx.id);
       const res = await fetch('/api/ledger/delete', {
@@ -159,9 +156,6 @@ export default function JournalPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Failed to clear visible journal transactions');
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'journal-clear-all',hypothesisId:'H2',location:'journal/page.tsx:handleClearAll',message:'clear all succeeded',data:{requestedCount:visibleIds.length,deletedCount:data.deletedCount ?? null,remainingCount:transactions.length-(data.deletedCount ?? visibleIds.length)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const deletedIds = new Set(visibleIds);
       setTransactions((prev) => prev.filter((tx) => !deletedIds.has(tx.id)));
       setEditingTx(null);
@@ -174,6 +168,7 @@ export default function JournalPage() {
   };
 
   const openCount = transactions.filter((t) => !t.reconciled).length;
+  const doneCount = transactions.length - openCount;
 
   return (
     <AccountingGate section="Journal">
@@ -202,6 +197,33 @@ export default function JournalPage() {
               + New Entry
             </Link>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-6 max-w-xl">
+          <button
+            type="button"
+            onClick={() => setReconFilter('done')}
+            className={`rounded-2xl border p-5 text-left transition ${
+              reconFilter === 'done'
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-gray-200 bg-white hover:border-emerald-300'
+            }`}
+          >
+            <p className="text-sm text-emerald-800">Reconciled</p>
+            <p className="text-3xl font-bold text-emerald-900">{doneCount}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReconFilter('open')}
+            className={`rounded-2xl border p-5 text-left transition ${
+              reconFilter === 'open'
+                ? 'border-amber-500 bg-amber-50'
+                : 'border-gray-200 bg-white hover:border-amber-300'
+            }`}
+          >
+            <p className="text-sm text-amber-800">Unreconciled</p>
+            <p className="text-3xl font-bold text-amber-900">{openCount}</p>
+          </button>
         </div>
 
         <input

@@ -124,7 +124,74 @@ function ensureEntryId(entry: Record<string, unknown>, index: number): LedgerEnt
   return { ...entry, id } as LedgerEntry;
 }
 
-export async function readLedger(): Promise<LedgerEntry[]> {
+/** Serialize ledger mutations so concurrent Clear All / Save cannot corrupt JSON. */
+let ledgerChain: Promise<unknown> = Promise.resolve();
+function withLedgerLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = ledgerChain.then(fn, fn);
+  ledgerChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+/** Recover from truncated / double-written ledger files (concurrent writes). */
+function parseLedgerRows(raw: string): unknown[] {
+  const text = String(raw || "").trim() || "[]";
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // Common corruption: two arrays concatenated `][` after overlapping writes
+    const join = text.indexOf("]\n[");
+    const joinAlt = join < 0 ? text.indexOf("][") : join;
+    if (joinAlt > 0) {
+      try {
+        const parsed = JSON.parse(text.slice(0, joinAlt + 1));
+        if (Array.isArray(parsed)) {
+          console.warn(
+            "[accounting] Recovered ledger.json from concatenated JSON arrays"
+          );
+          return parsed;
+        }
+      } catch {
+        // continue
+      }
+    }
+
+    const start = text.indexOf("[");
+    if (start >= 0) {
+      let depth = 0;
+      for (let i = start; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === "[") depth += 1;
+        else if (ch === "]") {
+          depth -= 1;
+          if (depth === 0) {
+            try {
+              const parsed = JSON.parse(text.slice(start, i + 1));
+              if (Array.isArray(parsed)) {
+                console.warn(
+                  "[accounting] Recovered ledger.json from first valid JSON array"
+                );
+                return parsed;
+              }
+            } catch {
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    console.error(
+      "[accounting] ledger.json unreadable — starting empty (backup left on disk if present)"
+    );
+    return [];
+  }
+}
+
+async function readLedgerUnlocked(): Promise<LedgerEntry[]> {
   await seedFileIfMissing(
     getLedgerFilePath(),
     getRepoSeedLedgerPath(),
@@ -132,67 +199,97 @@ export async function readLedger(): Promise<LedgerEntry[]> {
     path.join(process.cwd(), "data", "ledger.json")
   );
   const raw = await fs.readFile(getLedgerFilePath(), "utf8");
-  const parsed = JSON.parse(raw || "[]");
-  const rows = Array.isArray(parsed) ? parsed : [];
+  const rows = parseLedgerRows(raw);
   return rows.map((row, index) =>
-    ensureEntryId(row && typeof row === "object" ? (row as Record<string, unknown>) : {}, index)
+    ensureEntryId(
+      row && typeof row === "object" ? (row as Record<string, unknown>) : {},
+      index
+    )
   );
 }
 
-export async function writeLedger(entries: LedgerEntry[]) {
+async function writeLedgerUnlocked(entries: LedgerEntry[]) {
   await ensureAccountingDir();
-  await fs.writeFile(
-    getLedgerFilePath(),
-    JSON.stringify(entries, null, 2),
-    "utf8"
-  );
+  const target = getLedgerFilePath();
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  const payload = JSON.stringify(entries, null, 2);
+  await fs.writeFile(tmp, payload, "utf8");
+  try {
+    await fs.rename(tmp, target);
+  } catch {
+    // Windows may refuse rename over an existing file
+    await fs.copyFile(tmp, target);
+    await fs.unlink(tmp).catch(() => undefined);
+  }
+}
+
+export async function readLedger(): Promise<LedgerEntry[]> {
+  return readLedgerUnlocked();
+}
+
+export async function writeLedger(entries: LedgerEntry[]) {
+  return withLedgerLock(() => writeLedgerUnlocked(entries));
 }
 
 export async function appendLedgerEntries(
   incoming: Array<Partial<LedgerEntry>>
 ): Promise<{ saved: number; total: number; entries: LedgerEntry[] }> {
-  const ledger = await readLedger();
-  const stamped = incoming.map((e, index) =>
-    ensureEntryId(
-      {
-        ...e,
-        timestamp: e.timestamp || new Date().toISOString(),
-        id: e.id || `LE${Date.now()}-${index}`,
-      },
-      ledger.length + index
-    )
-  );
-  const next = [...ledger, ...stamped];
-  await writeLedger(next);
-  return { saved: stamped.length, total: next.length, entries: next };
+  return withLedgerLock(async () => {
+    const ledger = await readLedgerUnlocked();
+    const stamped = incoming.map((e, index) =>
+      ensureEntryId(
+        {
+          ...e,
+          timestamp: e.timestamp || new Date().toISOString(),
+          id: e.id || `LE${Date.now()}-${index}`,
+        },
+        ledger.length + index
+      )
+    );
+    const next = [...ledger, ...stamped];
+    await writeLedgerUnlocked(next);
+    return { saved: stamped.length, total: next.length, entries: next };
+  });
 }
 
 export async function updateLedgerEntry(
   patch: Partial<LedgerEntry> & { id: string }
 ): Promise<LedgerEntry> {
-  const ledger = await readLedger();
-  const idx = ledger.findIndex((e) => e.id === patch.id);
-  if (idx < 0) throw new Error("Entry not found");
-  const updated: LedgerEntry = {
-    ...ledger[idx],
-    ...patch,
-    id: ledger[idx].id,
-  };
-  ledger[idx] = updated;
-  await writeLedger(ledger);
-  return updated;
+  return withLedgerLock(async () => {
+    const ledger = await readLedgerUnlocked();
+    const idx = ledger.findIndex((e) => e.id === patch.id);
+    if (idx < 0) throw new Error("Entry not found");
+    const updated: LedgerEntry = {
+      ...ledger[idx],
+      ...patch,
+      id: ledger[idx].id,
+    };
+    ledger[idx] = updated;
+    await writeLedgerUnlocked(ledger);
+    return updated;
+  });
 }
 
 export async function deleteLedgerEntry(id: string): Promise<boolean> {
-  const ledger = await readLedger();
-  const next = ledger.filter((e) => e.id !== id);
-  if (next.length === ledger.length) return false;
-  await writeLedger(next);
-  return true;
+  const result = await deleteLedgerEntries([id]);
+  return result > 0;
+}
+
+/** Delete many entries in one read/write (avoids corrupting ledger.json). */
+export async function deleteLedgerEntries(ids: string[]): Promise<number> {
+  const idSet = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+  if (idSet.size === 0) return 0;
+  return withLedgerLock(async () => {
+    const ledger = await readLedgerUnlocked();
+    const next = ledger.filter((e) => !idSet.has(e.id));
+    const deleted = ledger.length - next.length;
+    if (deleted > 0) await writeLedgerUnlocked(next);
+    return deleted;
+  });
 }
 
 export async function resetLedger() {
-  await writeLedger([]);
+  return withLedgerLock(() => writeLedgerUnlocked([]));
 }
 
 export async function readCoa(): Promise<CoaAccount[]> {

@@ -110,9 +110,6 @@ export default function BankImport() {
     }
 
     setSaving(true);
-    // #region agent log
-    fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'ledger-save',hypothesisId:'H1',location:'transactions/import/page.tsx:persistClassified',message:'ledger save requested',data:{selectedAccount,entryCount:toSave.length,firstEntry:toSave[0]?{date:toSave[0].date,amount:toSave[0].amount,accountCode:toSave[0].accountCode,type:toSave[0].type}:null,lastEntry:toSave[toSave.length-1]?{date:toSave[toSave.length-1].date,amount:toSave[toSave.length-1].amount,accountCode:toSave[toSave.length-1].accountCode,type:toSave[toSave.length-1].type}:null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     try {
       const res = await fetch('/api/ledger/add', {
         method: 'POST',
@@ -121,27 +118,22 @@ export default function BankImport() {
       });
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
-        // #region agent log
-        fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'ledger-save',hypothesisId:'H2',location:'transactions/import/page.tsx:persistClassified',message:'ledger save failed response',data:{status:res.status,error:errorBody?.error||null,entryCount:toSave.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        setStatus('❌ Failed to save');
+        setStatus(
+          `❌ Failed to save${errorBody?.error ? `: ${errorBody.error}` : ` (${res.status})`}`
+        );
         setLedgerSaved(false);
         return false;
       }
       const data = await res.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'ledger-save',hypothesisId:'H3',location:'transactions/import/page.tsx:persistClassified',message:'ledger save succeeded',data:{saved:data.saved||null,total:data.total||null,entryCount:toSave.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const count = data.saved || toSave.length;
       setSavedCount(count);
       setLedgerSaved(true);
       setStatus(`💾 Saved to Ledger — ${count} transactions → ${selectedBank?.name}`);
       return true;
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'ledger-save',hypothesisId:'H4',location:'transactions/import/page.tsx:persistClassified',message:'ledger save threw client error',data:{error:error instanceof Error ? error.message : String(error),entryCount:toSave.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setStatus('❌ Connection error');
+      setStatus(
+        `❌ Connection error${error instanceof Error ? `: ${error.message}` : ''}`
+      );
       setLedgerSaved(false);
       return false;
     } finally {
@@ -271,6 +263,21 @@ export default function BankImport() {
 
           {classified.length > 0 && (
             <>
+              <div className="mt-8 grid grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+                  <p className="text-sm text-emerald-800">Matched (classified)</p>
+                  <p className="text-3xl font-bold text-emerald-900">
+                    {classified.filter((i) => i.type !== 'Uncategorized').length}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center">
+                  <p className="text-sm text-amber-800">Unreconciled (uncategorized)</p>
+                  <p className="text-3xl font-bold text-amber-900">
+                    {classified.filter((i) => i.type === 'Uncategorized').length}
+                  </p>
+                </div>
+              </div>
+
               <div className="mt-8 flex gap-4">
                 {ledgerSaved ? (
                   <div className="flex-1 bg-emerald-100 text-emerald-900 py-5 rounded-2xl text-xl font-semibold text-center border border-emerald-300">
