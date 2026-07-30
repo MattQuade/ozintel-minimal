@@ -33,21 +33,23 @@ function money(n: number) {
 }
 
 export default function BasReportPage() {
-  const [quarter, setQuarter] = useState('q1');
+  const [quarter, setQuarter] = useState('');
   const [quarters, setQuarters] = useState<Quarter[]>([]);
   const [report, setReport] = useState<BasReport | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const load = (q = quarter) => {
+  const load = (q?: string) => {
     setLoading(true);
     setError('');
-    fetch(`/api/reports/bas?quarter=${encodeURIComponent(q)}`)
+    const qs = q ? `?quarter=${encodeURIComponent(q)}` : '';
+    fetch(`/api/reports/bas${qs}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load');
         setReport(data);
         if (Array.isArray(data.quarters)) setQuarters(data.quarters);
+        if (data.selectedQuarterId) setQuarter(data.selectedQuarterId);
       })
       .catch((err) => setError(err.message || 'Failed to load'))
       .finally(() => setLoading(false));
@@ -55,7 +57,6 @@ export default function BasReportPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const exportCsv = () => {
@@ -89,18 +90,14 @@ export default function BasReportPage() {
             <label className="block text-sm text-gray-500 mb-1">Quarter</label>
             <select
               value={quarter}
-              onChange={(e) => setQuarter(e.target.value)}
-              className="border rounded-xl px-3 py-2 min-w-[220px]"
+              onChange={(e) => {
+                setQuarter(e.target.value);
+                load(e.target.value);
+              }}
+              className="border rounded-xl px-3 py-2 min-w-[280px]"
             >
-              {(quarters.length
-                ? quarters
-                : [
-                    { id: 'q1', label: 'Q1' },
-                    { id: 'q2', label: 'Q2' },
-                    { id: 'q3', label: 'Q3' },
-                    { id: 'q4', label: 'Q4' },
-                  ]
-              ).map((q) => (
+              {quarters.length === 0 && <option value="">Loading…</option>}
+              {quarters.map((q) => (
                 <option key={q.id} value={q.id}>
                   {q.label}
                 </option>

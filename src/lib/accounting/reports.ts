@@ -486,3 +486,36 @@ export function getAuBasQuarters(fyStartYear: number): Array<{
     },
   ];
 }
+
+/**
+ * BAS quarter picker options: previous FY + current FY (8 quarters).
+ * Ids are unique across years, e.g. fy2025-q1.
+ */
+export function listBasQuarterOptions(ref: Date = new Date()): Array<{
+  id: string;
+  label: string;
+  from: string;
+  to: string;
+}> {
+  const fy = getAuFyBounds(ref);
+  const years = [fy.startYear - 1, fy.startYear];
+  return years.flatMap((startYear) => {
+    const fyLabel = `${startYear}/${String(startYear + 1).slice(2)}`;
+    return getAuBasQuarters(startYear).map((q) => ({
+      id: `fy${startYear}-${q.id}`,
+      label: `${q.label} · FY${fyLabel}`,
+      from: q.from,
+      to: q.to,
+    }));
+  });
+}
+
+/** Current BAS quarter id for `listBasQuarterOptions`, falling back to latest past quarter. */
+export function currentBasQuarterId(ref: Date = new Date()): string {
+  const day = toIsoDateInput(ref);
+  const options = listBasQuarterOptions(ref);
+  const current = options.find((q) => day >= q.from && day <= q.to);
+  if (current) return current.id;
+  const past = [...options].reverse().find((q) => day > q.to);
+  return past?.id || options[0]?.id || "";
+}
