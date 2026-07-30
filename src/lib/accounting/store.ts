@@ -196,7 +196,40 @@ export async function readCoa(): Promise<CoaAccount[]> {
   );
   const raw = await fs.readFile(getCoaFilePath(), "utf8");
   const parsed = JSON.parse(raw || "[]");
-  return Array.isArray(parsed) ? parsed : [];
+  const existing: CoaAccount[] = Array.isArray(parsed) ? parsed : [];
+
+  // Merge any missing seed accounts (recovers codes lost after localStorage era)
+  let seedAccounts: CoaAccount[] = [];
+  try {
+    const seedRaw = await fs.readFile(getRepoSeedCoaPath(), "utf8");
+    const seedParsed = JSON.parse(seedRaw || "[]");
+    seedAccounts = Array.isArray(seedParsed) ? seedParsed : [];
+  } catch {
+    seedAccounts = [];
+  }
+
+  const byCode = new Map<string, CoaAccount>();
+  for (const a of existing) {
+    if (a?.code) byCode.set(String(a.code), a);
+  }
+  let added = 0;
+  for (const s of seedAccounts) {
+    if (!s?.code) continue;
+    const code = String(s.code);
+    if (!byCode.has(code)) {
+      byCode.set(code, s);
+      added += 1;
+    }
+  }
+
+  const merged = [...byCode.values()].sort((a, b) =>
+    String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
+  );
+  if (added > 0) {
+    await writeCoa(merged);
+    console.log(`[accounting] Merged ${added} missing COA accounts from seed`);
+  }
+  return merged;
 }
 
 export async function writeCoa(accounts: CoaAccount[]) {

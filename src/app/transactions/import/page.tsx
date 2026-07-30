@@ -24,6 +24,8 @@ export default function BankImport() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState('');
   const [savedCount, setSavedCount] = useState(0);
+  const [ledgerSaved, setLedgerSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [quarter, setQuarter] = useState('Q4 FY25/26');
 
   useEffect(() => {
@@ -39,6 +41,11 @@ export default function BankImport() {
       .catch(() => setStatus('Failed to load bank accounts / COA'));
   }, []);
 
+  const accountsForType = (type: string) => {
+    if (!type || type === 'Uncategorized') return coa;
+    return coa.filter((a) => a.type === type);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -48,6 +55,7 @@ export default function BankImport() {
     setPreview([]);
     setClassified([]);
     setSavedCount(0);
+    setLedgerSaved(false);
 
     Papa.parse(file, {
       header: false,
@@ -61,52 +69,9 @@ export default function BankImport() {
     });
   };
 
-  const handleClassify = async () => {
-    if (preview.length === 0) return;
-    setIsProcessing(true);
-    setStatus('Classifying using Bank Rules...');
-
-    try {
-      const res = await fetch('/api/rules');
-      const rules = (await res.json()) as BankRule[];
-      const results = classifyBatch(preview, Array.isArray(rules) ? rules : []);
-      setClassified(results);
-      const matched = results.filter((r) => r.type !== 'Uncategorized').length;
-      setStatus(`✅ ${matched} matched out of ${results.length} • ${quarter}`);
-    } catch (err) {
-      console.error(err);
-      setStatus('❌ Failed to load bank rules');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const updateType = (index: number, newType: string) => {
-    const updated = [...classified];
-    updated[index] = { ...updated[index], type: newType, rule: 'Manual' };
-    setClassified(updated);
-  };
-
-  const updateAccount = (index: number, code: string) => {
-    const account = coa.find((a) => a.code === code);
-    const updated = [...classified];
-    updated[index] = {
-      ...updated[index],
-      accountCode: code,
-      accountName: account?.name || updated[index].accountName,
-      noGST: account?.noGST ?? updated[index].noGST,
-      type: account?.type || updated[index].type,
-      rule: 'Manual',
-    };
-    setClassified(updated);
-  };
-
-  const saveToLedger = async () => {
-    if (classified.length === 0) return;
-
+  const persistClassified = async (rows: any[]) => {
     const selectedBank = bankAccounts.find((acc) => acc.id === selectedAccount);
-
-    const toSave = classified
+    const toSave = rows
       .filter((item) => item.type !== 'Uncategorized')
       .map((item) => ({
         date: item.original[0],
@@ -125,25 +90,91 @@ export default function BankImport() {
         quarter,
       }));
 
+    if (toSave.length === 0) {
+      setStatus('Nothing to save — all rows are Uncategorized');
+      setLedgerSaved(false);
+      return false;
+    }
+
+    setSaving(true);
     try {
       const res = await fetch('/api/ledger/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entries: toSave }),
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        setSavedCount(data.saved || toSave.length);
-        setStatus(
-          `💾 Saved ${data.saved || toSave.length} transactions to ${selectedBank?.name}`
-        );
-      } else {
+      if (!res.ok) {
         setStatus('❌ Failed to save');
+        setLedgerSaved(false);
+        return false;
       }
-    } catch (err) {
+      const data = await res.json();
+      const count = data.saved || toSave.length;
+      setSavedCount(count);
+      setLedgerSaved(true);
+      setStatus(`💾 Saved to Ledger — ${count} transactions → ${selectedBank?.name}`);
+      return true;
+    } catch {
       setStatus('❌ Connection error');
+      setLedgerSaved(false);
+      return false;
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const handleClassify = async () => {
+    if (preview.length === 0) return;
+    setIsProcessing(true);
+    setStatus('Classifying using Bank Rules...');
+    setLedgerSaved(false);
+
+    try {
+      const res = await fetch('/api/rules');
+      const rules = (await res.json()) as BankRule[];
+      const results = classifyBatch(preview, Array.isArray(rules) ? rules : []);
+      setClassified(results);
+      const matched = results.filter((r) => r.type !== 'Uncategorized').length;
+      setStatus(`✅ ${matched} matched out of ${results.length} — saving to ledger…`);
+      await persistClassified(results);
+    } catch (err) {
+      console.error(err);
+      setStatus('❌ Failed to load bank rules');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const updateType = (index: number, newType: string) => {
+    const updated = [...classified];
+    const current = updated[index];
+    const allowed = accountsForType(newType);
+    const stillValid = allowed.some((a) => a.code === current.accountCode);
+    updated[index] = {
+      ...current,
+      type: newType,
+      rule: 'Manual',
+      ...(stillValid
+        ? {}
+        : { accountCode: '', accountName: '', noGST: false }),
+    };
+    setClassified(updated);
+    setLedgerSaved(false);
+  };
+
+  const updateAccount = (index: number, code: string) => {
+    const account = coa.find((a) => a.code === code);
+    const updated = [...classified];
+    updated[index] = {
+      ...updated[index],
+      accountCode: code,
+      accountName: account?.name || updated[index].accountName,
+      noGST: account?.noGST ?? updated[index].noGST,
+      type: account?.type || updated[index].type,
+      rule: 'Manual',
+    };
+    setClassified(updated);
+    setLedgerSaved(false);
   };
 
   return (
@@ -155,7 +186,7 @@ export default function BankImport() {
       <div className="p-10 max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
-          Upload quarterly statements → Select Account → Auto-classify → Review codes → Save
+          Upload → Classify (auto-saves matched rows) → Adjust Type/Account if needed → save updates
         </p>
 
         <div className="bg-white rounded-3xl shadow-xl p-10">
@@ -195,29 +226,37 @@ export default function BankImport() {
 
           {status && <p className="text-center mt-8 text-lg font-medium">{status}</p>}
           {savedCount > 0 && (
-            <p className="text-center text-sm text-gray-500">Last save: {savedCount} rows</p>
+            <p className="text-center text-sm text-gray-500">Ledger rows written: {savedCount}</p>
           )}
 
           {preview.length > 0 && classified.length === 0 && (
             <button
               onClick={handleClassify}
-              disabled={isProcessing}
+              disabled={isProcessing || !selectedAccount}
               className="mt-8 w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-5 rounded-2xl text-xl font-semibold"
             >
-              {isProcessing ? 'Classifying...' : `Classify ${preview.length} Transactions`}
+              {isProcessing ? 'Classifying & saving…' : `Classify ${preview.length} Transactions`}
             </button>
           )}
 
           {classified.length > 0 && (
             <>
               <div className="mt-8 flex gap-4">
-                <button
-                  onClick={saveToLedger}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-5 rounded-2xl text-xl font-semibold"
-                >
-                  💾 Save to Ledger (
-                  {classified.filter((i) => i.type !== 'Uncategorized').length})
-                </button>
+                {ledgerSaved ? (
+                  <div className="flex-1 bg-emerald-100 text-emerald-900 py-5 rounded-2xl text-xl font-semibold text-center border border-emerald-300">
+                    💾 Saved to Ledger (
+                    {classified.filter((i) => i.type !== 'Uncategorized').length})
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => persistClassified(classified)}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-5 rounded-2xl text-xl font-semibold"
+                  >
+                    {saving ? 'Saving…' : 'Save updates to Ledger'}
+                  </button>
+                )}
               </div>
 
               <div className="mt-10 overflow-x-auto max-h-[650px] border rounded-2xl">
@@ -228,8 +267,8 @@ export default function BankImport() {
                       <th className="px-4 py-3 text-left">Amount</th>
                       <th className="px-4 py-3 text-left">Description</th>
                       <th className="px-4 py-3 text-left">Rule</th>
-                      <th className="px-4 py-3 text-left">Account</th>
                       <th className="px-4 py-3 text-left">Type</th>
+                      <th className="px-4 py-3 text-left">Account</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -239,6 +278,7 @@ export default function BankImport() {
                         typeof item.rule === 'object' && item.rule?.name
                           ? item.rule.name
                           : item.rule || 'Manual';
+                      const typeAccounts = accountsForType(item.type);
 
                       return (
                         <tr key={i} className="hover:bg-gray-50">
@@ -248,24 +288,6 @@ export default function BankImport() {
                           <td className="px-4 py-3 font-medium">{row[1]}</td>
                           <td className="px-4 py-3 max-w-xs truncate">{row[2] || '—'}</td>
                           <td className="px-4 py-3 text-gray-600">{ruleName}</td>
-                          <td className="px-4 py-3 min-w-[200px]">
-                            <select
-                              value={item.accountCode || ''}
-                              onChange={(e) => updateAccount(i, e.target.value)}
-                              className="border rounded px-2 py-1 text-sm w-full"
-                            >
-                              <option value={item.accountCode || ''}>
-                                {item.accountCode
-                                  ? `${item.accountCode} — ${item.accountName}`
-                                  : 'Select account'}
-                              </option>
-                              {coa.map((a) => (
-                                <option key={a.code} value={a.code}>
-                                  {a.code} — {a.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
                           <td className="px-4 py-3">
                             <select
                               value={item.type}
@@ -278,6 +300,25 @@ export default function BankImport() {
                               <option value="Liability">Liability</option>
                               <option value="Equity">Equity</option>
                               <option value="Uncategorized">Uncategorized</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 min-w-[220px]">
+                            <select
+                              value={item.accountCode || ''}
+                              onChange={(e) => updateAccount(i, e.target.value)}
+                              className="border rounded px-2 py-1 text-sm w-full"
+                              disabled={item.type === 'Uncategorized'}
+                            >
+                              <option value="">
+                                {item.type === 'Uncategorized'
+                                  ? 'Pick a type first'
+                                  : 'Select account'}
+                              </option>
+                              {typeAccounts.map((a) => (
+                                <option key={a.code} value={a.code}>
+                                  {a.code} — {a.name}
+                                </option>
+                              ))}
                             </select>
                           </td>
                         </tr>
