@@ -1,14 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { checkAccountingAccess } from "@/lib/accounting/access";
+
+const previewLinks = [
+  { href: "/accounting/pending?section=Bank", label: "Bank" },
+  { href: "/accounting/pending?section=Chart%20of%20Accounts", label: "Chart of Accounts" },
+  { href: "/accounting/pending?section=Journal", label: "Journal" },
+  { href: "/accounting/pending?section=Transactions", label: "Transactions" },
+  { href: "/accounting/pending?section=Employees", label: "Employees" },
+  { href: "/accounting/pending?section=Reports", label: "Reports" },
+];
+
+const fullLinks = [
+  { href: "/bank/accounts", label: "Bank" },
+  { href: "/coa", label: "Chart of Accounts" },
+  { href: "/journal", label: "Journal" },
+  { href: "/transactions", label: "Transactions" },
+  { href: "/employees", label: "Employees" },
+  { href: "/reports", label: "Reports" },
+];
+
 export default function AccountingHubPage() {
-  const links = [
-    { href: "/accounting/pending?section=Bank", label: "Bank" },
-    { href: "/accounting/pending?section=Chart%20of%20Accounts", label: "Chart of Accounts" },
-    { href: "/accounting/pending?section=Journal", label: "Journal" },
-    { href: "/accounting/pending?section=Transactions", label: "Transactions" },
-    { href: "/accounting/pending?section=Employees", label: "Employees" },
-    { href: "/accounting/pending?section=Reports", label: "Reports" },
-  ];
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkAccountingAccess().then(setHasAccess);
+  }, []);
+
+  const links = hasAccess ? fullLinks : previewLinks;
 
   return (
     <main
@@ -28,7 +48,11 @@ export default function AccountingHubPage() {
       </p>
       <h1 style={{ color: "#f97316", marginBottom: 8 }}>Accounting</h1>
       <p style={{ color: "#94a3b8" }}>
-        Preview the modules below. Full access requires admin approval.
+        {hasAccess === null
+          ? "Checking your access…"
+          : hasAccess
+            ? "Full access enabled for your account."
+            : "Preview the modules below. Full access requires admin approval."}
       </p>
       <div
         style={{

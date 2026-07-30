@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import AccountingGate from '@/components/AccountingGate';
 
 const coaOptions = [
   "1000 - Cash at Bank",
@@ -90,6 +91,7 @@ export default function NewJournalEntry() {
   };
 
   return (
+    <AccountingGate section="Journal">
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">New Journal Entry</h1>
 
@@ -217,6 +219,7 @@ export default function NewJournalEntry() {
         </div>
       </div>
     </div>
+    </AccountingGate>
   );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import AccountingGate from '@/components/AccountingGate';
 
 const quickActions = [
   { 
@@ -42,6 +43,7 @@ const quickActions = [
 
 export default function TransactionsPage() {
   return (
+    <AccountingGate section="Transactions">
     <div className="p-10">
       <div className="flex justify-between items-end mb-10">
         <div>
@@ -69,5 +71,6 @@ export default function TransactionsPage() {
         ))}
       </div>
     </div>
+    </AccountingGate>
   );
 }

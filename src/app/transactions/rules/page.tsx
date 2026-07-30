@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import AccountingGate from '@/components/AccountingGate';
 
 interface BankRule {
   id: number;
@@ -80,6 +81,7 @@ export default function RulesManagement() {
   };
 
   return (
+    <AccountingGate section="Transactions">
     <div className="p-10 max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-10">
         <div>
@@ -213,5 +215,6 @@ export default function RulesManagement() {
         </table>
       </div>
     </div>
+    </AccountingGate>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AccountingGate from '@/components/AccountingGate';
 
 type COAAccount = {
   code: string;
@@ -122,6 +123,7 @@ export default function COAPage() {
   const typeOrder = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
 
   return (
+    <AccountingGate section="Chart of Accounts">
     <div className="p-8 max-w-screen-2xl mx-auto">
       <div className="flex justify-between items-center mb-10">
         <div>
@@ -247,5 +249,6 @@ export default function COAPage() {
         );
       })}
     </div>
+    </AccountingGate>
   );
 }

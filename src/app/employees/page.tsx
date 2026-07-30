@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import AccountingGate from '@/components/AccountingGate';
 
 type Employee = {
   id: number;
@@ -153,6 +154,7 @@ export default function EmployeesPage() {
   };
 
   return (
+    <AccountingGate section="Employees">
     <div className="p-10 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-10">
         <div>
@@ -308,5 +310,6 @@ export default function EmployeesPage() {
         </div>
       )}
     </div>
+    </AccountingGate>
   );
 }

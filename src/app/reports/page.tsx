@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import AccountingGate from '@/components/AccountingGate';
 
 type Summary = {
   totalRevenue: number;
@@ -29,6 +30,7 @@ export default function ReportsPage() {
   }, []);
 
   return (
+    <AccountingGate section="Reports">
     <div className="p-8 max-w-screen-2xl mx-auto">
       <h1 className="text-4xl font-bold mb-10">Reports</h1>
 
@@ -66,5 +68,6 @@ export default function ReportsPage() {
         </div>
       )}
     </div>
+    </AccountingGate>
   );
 }

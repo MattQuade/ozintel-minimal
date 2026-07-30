@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import AccountingGate from '@/components/AccountingGate';
 
 const periods = [
   { label: 'Full Year FY25/26', value: 'full' },
@@ -113,6 +114,7 @@ export default function JournalPage() {
   };
 
   return (
+    <AccountingGate section="Journal">
     <div className="p-6 max-w-screen-2xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -248,5 +250,6 @@ export default function JournalPage() {
         </div>
       )}
     </div>
+    </AccountingGate>
   );
 }

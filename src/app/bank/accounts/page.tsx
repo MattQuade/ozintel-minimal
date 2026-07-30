@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AccountingGate from '@/components/AccountingGate';
 
 type BankAccount = {
   id: string;
@@ -60,6 +61,7 @@ export default function BankAccountsPage() {
   }, []);
 
   return (
+    <AccountingGate section="Bank">
     <div className="p-6 max-w-screen-2xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -98,5 +100,6 @@ export default function BankAccountsPage() {
         </table>
       </div>
     </div>
+    </AccountingGate>
   );
 }

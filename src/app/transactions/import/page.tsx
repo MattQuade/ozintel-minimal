@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
+import AccountingGate from '@/components/AccountingGate';
 
 const bankAccounts = [
   { id: '1', name: 'NAB Credit Card', number: 'NAB-CC-XXXX' },
@@ -107,6 +108,7 @@ export default function BankImport() {
   };
 
   return (
+    <AccountingGate section="Transactions">
     <div className="p-10 max-w-6xl mx-auto">
       <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
       <p className="text-gray-600 mb-8">Upload quarterly statements → Select Account → Auto-classify → Save</p>
@@ -208,5 +210,6 @@ export default function BankImport() {
         )}
       </div>
     </div>
+    </AccountingGate>
   );
 }
