@@ -381,8 +381,71 @@ export async function readRules(): Promise<BankRule[]> {
   );
   const raw = await fs.readFile(getAccountingRulesFilePath(), "utf8");
   const parsed = JSON.parse(raw || '{"rules":[]}');
-  if (Array.isArray(parsed)) return parsed as BankRule[];
-  return Array.isArray(parsed.rules) ? parsed.rules : [];
+  const existing: BankRule[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed.rules)
+      ? parsed.rules
+      : [];
+
+  // Merge any missing seed rules by id (keeps Restore defaults from being required
+  // every time we ship new bank rules).
+  let seedRules: BankRule[] = [];
+  try {
+    const seedRaw = await fs.readFile(getRepoSeedRulesPath(), "utf8");
+    const seedParsed = JSON.parse(seedRaw || '{"rules":[]}');
+    seedRules = Array.isArray(seedParsed)
+      ? seedParsed
+      : Array.isArray(seedParsed.rules)
+        ? seedParsed.rules
+        : [];
+  } catch {
+    seedRules = [];
+  }
+
+  const byId = new Map<number, BankRule>();
+  for (const r of existing) {
+    if (r && typeof r.id === "number") byId.set(r.id, r);
+  }
+  let added = 0;
+  let updated = 0;
+  for (const s of seedRules) {
+    if (!s || typeof s.id !== "number") continue;
+    const prev = byId.get(s.id);
+    if (!prev) {
+      byId.set(s.id, s);
+      added += 1;
+      continue;
+    }
+    // Prefer seed when match/account fields changed for the same id
+    const changed =
+      prev.matchValue !== s.matchValue ||
+      prev.accountCode !== s.accountCode ||
+      prev.direction !== s.direction ||
+      prev.bankAccountId !== s.bankAccountId ||
+      JSON.stringify(prev.matchValues || []) !==
+        JSON.stringify(s.matchValues || []);
+    if (changed) {
+      byId.set(s.id, { ...prev, ...s });
+      updated += 1;
+    }
+  }
+
+  // Keep any custom live-only rules (ids not in seed)
+  const seedIds = new Set(seedRules.map((r) => r.id));
+  for (const r of existing) {
+    if (r && typeof r.id === "number" && !seedIds.has(r.id)) {
+      byId.set(r.id, r);
+    }
+  }
+
+  const merged = [...byId.values()].sort((a, b) => a.id - b.id);
+  if (added > 0 || updated > 0) {
+    await writeRules(merged);
+    console.log(
+      `[accounting] Merged bank rules from seed (+${added} new, ~${updated} updated)`
+    );
+  }
+  return merged;
 }
 
 export async function writeRules(rules: BankRule[]) {
