@@ -234,21 +234,12 @@ export async function readCoa(): Promise<CoaAccount[]> {
   return merged;
 }
 
-/** Refresh seed-defined accounts (name/type/flags) while keeping custom codes. */
+/** Replace live COA with the repo seed chart (full sync from Xero export). */
 export async function syncCoaFromSeed(): Promise<{
   accounts: CoaAccount[];
   added: number;
   updated: number;
 }> {
-  await seedFileIfMissing(
-    getCoaFilePath(),
-    getRepoSeedCoaPath(),
-    "[]",
-    path.join(process.cwd(), "data", "coa.json")
-  );
-  const raw = await fs.readFile(getCoaFilePath(), "utf8");
-  const parsed = JSON.parse(raw || "[]");
-  const existing: CoaAccount[] = Array.isArray(parsed) ? parsed : [];
   let seedAccounts: CoaAccount[] = [];
   try {
     const seedRaw = await fs.readFile(getRepoSeedCoaPath(), "utf8");
@@ -258,36 +249,16 @@ export async function syncCoaFromSeed(): Promise<{
     seedAccounts = [];
   }
 
-  const byCode = new Map<string, CoaAccount>();
-  for (const a of existing) {
-    if (a?.code) byCode.set(String(a.code), a);
-  }
-  let added = 0;
-  let updated = 0;
-  for (const s of seedAccounts) {
-    if (!s?.code) continue;
-    const code = String(s.code);
-    const prev = byCode.get(code);
-    if (!prev) {
-      byCode.set(code, s);
-      added += 1;
-    } else {
-      byCode.set(code, {
-        ...prev,
-        name: s.name,
-        type: s.type,
-        isBank: s.isBank,
-        noGST: s.noGST,
-        isCapital: s.isCapital,
-      });
-      updated += 1;
-    }
-  }
-  const accounts = [...byCode.values()].sort((a, b) =>
+  const existing = await readCoa();
+  const accounts = [...seedAccounts].sort((a, b) =>
     String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
   );
   await writeCoa(accounts);
-  return { accounts, added, updated };
+  return {
+    accounts,
+    added: Math.max(0, accounts.length - existing.length),
+    updated: accounts.length,
+  };
 }
 
 export async function writeCoa(accounts: CoaAccount[]) {

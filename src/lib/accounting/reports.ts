@@ -113,8 +113,12 @@ export function resolveAccountName(entry: LedgerEntry, coaByCode?: Map<string, C
 function isCogs(code: string, name: string): boolean {
   const n = name.toLowerCase();
   if (n.includes("cost of goods") || n === "cogs" || n.includes("cogs ")) return true;
-  // Only the dedicated COGS code — other 5xxx accounts in this COA are opex
-  return code === "5000";
+  if (n.startsWith("purchases -") || n.includes("opening stock") || n.includes("closing stock")) {
+    return true;
+  }
+  // Xero direct-cost / stock ranges from London Aussie COA
+  if (/^11\d{2}$/.test(code) || /^12\d{2}$/.test(code)) return true;
+  return code === "5000" || code === "0100";
 }
 
 function bump(
@@ -394,10 +398,11 @@ export function buildBasSummary(
     const name = resolveAccountName(entry, coaByCode).toLowerCase();
     const isWages =
       type === "Expense" &&
-      (code === "5001" ||
+      (code === "1965" ||
+        code === "5001" ||
         name.includes("wage") ||
         name.includes("salary") ||
-        name.includes("superannuation expense"));
+        name.includes("superannuation"));
 
     if (isWages) {
       wagesTotal += abs;

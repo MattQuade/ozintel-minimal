@@ -62,7 +62,7 @@ export default function COAPage() {
   const syncDefaults = async () => {
     if (
       !confirm(
-        'Restore / update default pub accounts from the seed chart? Custom extra codes are kept; seed codes get standard names and flags.'
+        'Replace the Chart of Accounts with the London Aussie / Xero chart from the app seed? This overwrites the current account list on the server.'
       )
     ) {
       return;
