@@ -157,38 +157,11 @@ async function ensureStore() {
 }
 export async function readUsers(): Promise<User[]> {
   await ensureStore();
-  let seeded = await maybeSeedFromRepo(true);
-  if (seeded) {
-    // #region agent log
-    console.log(
-      "[debug-943e70]",
-      JSON.stringify({
-        hypothesisId: "B",
-        location: "users.ts:readUsers",
-        message: "reseeded empty persistent store from repo",
-      })
-    );
-    // #endregion
-  }
+  await maybeSeedFromRepo(true);
   const usersFile = getUsersFilePath();
   const raw = await fs.readFile(usersFile, "utf8");
   const parsed = JSON.parse(raw || '{"users":[]}');
   const { users, wasLegacyArray } = extractUsersArray(parsed);
-  // #region agent log
-  console.log(
-    "[debug-943e70]",
-    JSON.stringify({
-      hypothesisId: "B",
-      location: "users.ts:readUsers",
-      dataDir: getDataDir(),
-      ozintelDataDir: process.env.OZINTEL_DATA_DIR || null,
-      usersFile,
-      wasLegacyArray,
-      rawUserCount: users.length,
-      emails: users.map((u) => u.email),
-    })
-  );
-  // #endregion
   const month = currentMonthKey();
   let changed = wasLegacyArray;
   const normalized = users.map((u: Partial<User> & { email: string }) => {
