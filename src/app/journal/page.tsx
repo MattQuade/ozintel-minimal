@@ -35,6 +35,7 @@ export default function JournalPage() {
   const [coa, setCoa] = useState<CoaOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const loadTransactions = async () => {
     const [ledRes, coaRes] = await Promise.all([
@@ -131,6 +132,51 @@ export default function JournalPage() {
     loadTransactions();
   };
 
+  const handleClearAll = async () => {
+    if (!filtered.length) {
+      alert('There are no visible journal transactions to clear.');
+      return;
+    }
+    if (
+      !confirm(
+        `Clear all ${filtered.length} visible journal transactions on this page? Hidden entries outside the current filters will be kept.`
+      )
+    ) {
+      return;
+    }
+    setClearingAll(true);
+    // #region agent log
+    fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'journal-clear-all',hypothesisId:'H1',location:'journal/page.tsx:handleClearAll',message:'clear all requested',data:{transactionCount:transactions.length,filteredCount:filtered.length,period:activePeriod,reconFilter,searchTermLength:searchTerm.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    try {
+      const results = await Promise.all(
+        filtered.map(async (tx) => {
+          const res = await fetch('/api/ledger/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: tx.id }),
+          });
+          return { id: tx.id, ok: res.ok };
+        })
+      );
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length > 0) {
+        throw new Error(`Failed to clear ${failed.length} journal transactions`);
+      }
+      // #region agent log
+      fetch('http://127.0.0.1:7620/ingest/58ed654d-f6dd-4cb2-bdd8-01209344e92b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d182b0'},body:JSON.stringify({sessionId:'d182b0',runId:'journal-clear-all',hypothesisId:'H2',location:'journal/page.tsx:handleClearAll',message:'clear all succeeded',data:{deletedCount:filtered.length,remainingCount:transactions.length-filtered.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      const visibleIds = new Set(filtered.map((tx) => tx.id));
+      setTransactions((prev) => prev.filter((tx) => !visibleIds.has(tx.id)));
+      setEditingTx(null);
+      alert(`Cleared ${filtered.length} visible journal transactions.`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to clear all transactions');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   const openCount = transactions.filter((t) => !t.reconciled).length;
 
   return (
@@ -144,12 +190,22 @@ export default function JournalPage() {
               {loading ? ' • loading…' : ''}
             </p>
           </div>
-          <Link
-            href="/journal/new"
-            className="bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700"
-          >
-            + New Entry
-          </Link>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={clearingAll || loading || filtered.length === 0}
+              className="border border-red-300 text-red-700 px-6 py-3 rounded-2xl hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {clearingAll ? 'Clearing…' : 'Clear All'}
+            </button>
+            <Link
+              href="/journal/new"
+              className="bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700"
+            >
+              + New Entry
+            </Link>
+          </div>
         </div>
 
         <input
