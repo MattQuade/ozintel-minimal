@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { resetLedger } from "@/lib/accounting/store";
+import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(req: Request) {
+  const access = await requireAccountingAccess(req);
+  if (!access.ok) return access.response;
+
   try {
     await resetLedger();
     return NextResponse.json({ success: true, message: "Ledger cleared" });

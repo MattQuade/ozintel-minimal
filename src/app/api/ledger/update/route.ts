@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { updateLedgerEntry } from "@/lib/accounting/store";
+import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const access = await requireAccountingAccess(req);
+  if (!access.ok) return access.response;
+
   try {
     const body = await req.json();
     const id = String(body.id || "").trim();
