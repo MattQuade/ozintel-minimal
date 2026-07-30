@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
-import { formatAuDate } from '@/lib/accounting/dates';
+import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
+import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
 
 type BankAccountOption = {
   id: string;
@@ -66,9 +67,15 @@ export default function BankImport() {
       header: false,
       skipEmptyLines: true,
       complete: (result) => {
-        const data = result.data as any[];
+        const raw = result.data as unknown[][];
+        const data = normalizeBankImportRows(raw);
         setPreview(data);
-        setStatus(`✅ Parsed ${data.length} transactions`);
+        const skipped = raw.length - data.length;
+        setStatus(
+          skipped > 0
+            ? `✅ Parsed ${data.length} transactions (${skipped} header/blank rows skipped)`
+            : `✅ Parsed ${data.length} transactions`
+        );
       },
       error: (err) => setStatus('❌ Parse error: ' + err.message),
     });
@@ -79,7 +86,7 @@ export default function BankImport() {
     const toSave = rows
       .filter((item) => item.type !== 'Uncategorized')
       .map((item) => ({
-        date: item.original[0],
+        date: toIsoDateInput(item.original[0]) || item.original[0],
         amount: parseFloat(item.original[1] || 0),
         description: item.original[2] || '',
         type: item.type,

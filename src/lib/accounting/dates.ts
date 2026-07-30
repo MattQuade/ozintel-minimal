@@ -25,6 +25,32 @@ export function parseFlexibleDate(
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
+  const dmyShort = trimmed.match(/^(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})$/);
+  if (dmyShort) {
+    const months: Record<string, string> = {
+      jan: "01",
+      feb: "02",
+      mar: "03",
+      apr: "04",
+      may: "05",
+      jun: "06",
+      jul: "07",
+      aug: "08",
+      sep: "09",
+      oct: "10",
+      nov: "11",
+      dec: "12",
+    };
+    const mon = months[dmyShort[2].toLowerCase().slice(0, 3)];
+    if (mon) {
+      let y = dmyShort[3];
+      if (y.length === 2) y = `20${y}`;
+      const iso = `${y}-${mon}-${dmyShort[1].padStart(2, "0")}`;
+      const d = new Date(iso + "T12:00:00");
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+  }
+
   const d = new Date(trimmed);
   return Number.isNaN(d.getTime()) ? null : d;
 }
