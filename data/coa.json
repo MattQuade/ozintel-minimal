@@ -72,6 +72,7 @@
   {"code":"2000","name":"Cash at Bank","type":"Asset","isBank":true,"noGST":true},
   {"code":"2010","name":"NAB Credit Card #9497old 3436new","type":"Asset","isBank":true,"noGST":true},
   {"code":"2020","name":"NAB Business Account #4091","type":"Asset","isBank":true,"noGST":true},
+  {"code":"2030","name":"ANZ Business Account","type":"Asset","isBank":true,"noGST":true},
   {"code":"2050","name":"Cash on Hand","type":"Asset","isBank":true,"noGST":true},
   {"code":"2051","name":"Cash - Float, Till and ATM","type":"Asset","isBank":true,"noGST":true},
   {"code":"2101","name":"Accounts Receivable","type":"Asset","noGST":true},

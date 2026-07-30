@@ -35,7 +35,12 @@ export default function BankImport() {
         const accounts = await coaRes.json();
         const bankList = Array.isArray(banks) ? banks : [];
         setBankAccounts(bankList);
-        if (bankList[0]?.id) setSelectedAccount(bankList[0].id);
+        const nabBiz = bankList.find(
+          (acc: BankAccountOption) =>
+            acc.id === '2020' || String(acc.accountNumber || '').endsWith('4091')
+        );
+        if (nabBiz?.id) setSelectedAccount(nabBiz.id);
+        else if (bankList[0]?.id) setSelectedAccount(bankList[0].id);
         setCoa(Array.isArray(accounts) ? accounts : []);
       })
       .catch(() => setStatus('Failed to load bank accounts / COA'));
@@ -133,7 +138,11 @@ export default function BankImport() {
     try {
       const res = await fetch('/api/rules');
       const rules = (await res.json()) as BankRule[];
-      const results = classifyBatch(preview, Array.isArray(rules) ? rules : []);
+      const results = classifyBatch(
+        preview,
+        Array.isArray(rules) ? rules : [],
+        selectedAccount || undefined
+      );
       setClassified(results);
       const matched = results.filter((r) => r.type !== 'Uncategorized').length;
       setStatus(`✅ ${matched} matched out of ${results.length} — saving to ledger…`);

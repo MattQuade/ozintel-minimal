@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { readRules, writeRules, type BankRule } from "@/lib/accounting/store";
+import {
+  readRules,
+  writeRules,
+  syncRulesFromSeed,
+  type BankRule,
+} from "@/lib/accounting/store";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -24,6 +29,16 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+
+    if (body?.action === "syncSeed") {
+      const result = await syncRulesFromSeed();
+      return NextResponse.json({
+        success: true,
+        count: result.count,
+        rules: result.rules,
+      });
+    }
+
     const newRules = (Array.isArray(body) ? body : body.rules) as BankRule[];
     if (!Array.isArray(newRules)) {
       return NextResponse.json(

@@ -45,6 +45,12 @@ export type BankRule = {
   id: number;
   name: string;
   matchValue: string;
+  matchValues?: string[];
+  matchField?: "description" | "any" | "payee" | "reference" | string;
+  matchType?: "contains" | "equals" | string;
+  /** When set, rule only applies to this bank account (e.g. NAB Business #4091 → "2020"). */
+  bankAccountId?: string;
+  direction?: "receive" | "spend" | "transfer" | "any" | string;
   accountCode: string;
   accountName: string;
   type: string;
@@ -291,21 +297,42 @@ export async function writeRules(rules: BankRule[]) {
   );
 }
 
+/** Replace live bank rules with repo seed (Xero export mapping). */
+export async function syncRulesFromSeed(): Promise<{
+  rules: BankRule[];
+  count: number;
+}> {
+  let seedRules: BankRule[] = [];
+  try {
+    const raw = await fs.readFile(getRepoSeedRulesPath(), "utf8");
+    const parsed = JSON.parse(raw || '{"rules":[]}');
+    seedRules = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.rules)
+        ? parsed.rules
+        : [];
+  } catch {
+    seedRules = [];
+  }
+  await writeRules(seedRules);
+  return { rules: seedRules, count: seedRules.length };
+}
+
 const DEFAULT_BANKS: BankAccount[] = [
   {
-    id: "1",
-    name: "NAB Credit Card",
-    accountNumber: "NAB-CC-XXXX",
+    id: "2010",
+    name: "NAB Credit Card #9497 / 3436",
+    accountNumber: "9497/3436",
     bsb: "",
     openingBalance: 0,
     openingAsAt: "2025-07-01",
     type: "Credit Card",
   },
   {
-    id: "2",
-    name: "NAB Business Account",
-    accountNumber: "NAB-BIZ-XXXX",
-    bsb: "084-XXX",
+    id: "2020",
+    name: "NAB Business Account #4091",
+    accountNumber: "4091",
+    bsb: "",
     openingBalance: 0,
     openingAsAt: "2025-07-01",
     type: "Cheque",

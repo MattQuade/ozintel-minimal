@@ -9,6 +9,9 @@ interface BankRule {
   matchField?: string;
   matchType?: string;
   matchValue: string;
+  matchValues?: string[];
+  bankAccountId?: string;
+  direction?: "receive" | "spend" | "transfer" | "any" | string;
   accountCode: string;
   accountName: string;
   type: 'Revenue' | 'Expense' | 'Asset' | 'Liability' | 'Equity' | string;
@@ -17,15 +20,21 @@ interface BankRule {
 }
 
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
+type BankOption = { id: string; name: string; accountNumber?: string };
+
+const NAB_BIZ_4091 = '2020';
 
 export default function RulesManagement() {
   const [rules, setRules] = useState<BankRule[]>([]);
   const [coa, setCoa] = useState<CoaOption[]>([]);
+  const [banks, setBanks] = useState<BankOption[]>([]);
   const [newRule, setNewRule] = useState({
     name: '',
     matchField: 'description',
     matchType: 'contains',
     matchValue: '',
+    bankAccountId: NAB_BIZ_4091,
+    direction: 'spend' as 'spend' | 'receive' | 'transfer' | 'any',
     accountCode: '',
     accountName: '',
     type: 'Expense' as const,
@@ -34,12 +43,14 @@ export default function RulesManagement() {
   });
 
   useEffect(() => {
-    Promise.all([fetch('/api/rules'), fetch('/api/coa')])
-      .then(async ([rulesRes, coaRes]) => {
+    Promise.all([fetch('/api/rules'), fetch('/api/coa'), fetch('/api/bank-accounts')])
+      .then(async ([rulesRes, coaRes, banksRes]) => {
         const rulesData = await rulesRes.json();
         const coaData = await coaRes.json();
+        const banksData = await banksRes.json();
         setRules(Array.isArray(rulesData) ? rulesData : []);
         setCoa(Array.isArray(coaData) ? coaData : []);
+        setBanks(Array.isArray(banksData) ? banksData : []);
       })
       .catch(() => {});
   }, []);
@@ -68,6 +79,8 @@ export default function RulesManagement() {
       matchField: 'description',
       matchType: 'contains',
       matchValue: '',
+      bankAccountId: NAB_BIZ_4091,
+      direction: 'spend',
       accountCode: '',
       accountName: '',
       type: 'Expense',
@@ -88,6 +101,44 @@ export default function RulesManagement() {
     }
   };
 
+  const restoreDefaults = async () => {
+    if (
+      !confirm(
+        'Replace all bank rules with the Xero-mapped defaults? Custom rules will be lost.'
+      )
+    ) {
+      return;
+    }
+    const res = await fetch('/api/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'syncSeed' }),
+    });
+    const data = await res.json();
+    if (data?.success && Array.isArray(data.rules)) {
+      setRules(data.rules);
+      alert(`Restored ${data.count} default bank rules.`);
+    } else {
+      alert('Failed to restore default rules.');
+    }
+  };
+
+  const matchSummary = (rule: BankRule) => {
+    const extras = rule.matchValues?.length
+      ? ` or ${rule.matchValues.length} other`
+      : '';
+    const field = rule.matchField || 'description';
+    const type = rule.matchType || 'contains';
+    return `${field} ${type} ‘${rule.matchValue}’${extras}`;
+  };
+
+  const bankLabel = (id?: string) => {
+    if (!id) return 'All accounts';
+    const b = banks.find((x) => x.id === id);
+    if (!b) return id;
+    return b.accountNumber ? `${b.name} (${b.accountNumber})` : b.name;
+  };
+
   return (
     <AccountingGate
       section="Transactions"
@@ -95,11 +146,20 @@ export default function RulesManagement() {
       backLabel="← Back to Transactions"
     >
       <div className="p-10 max-w-5xl mx-auto">
-        <div className="flex justify-between items-center mb-10">
+        <div className="flex justify-between items-center mb-10 gap-4">
           <div>
             <h1 className="text-4xl font-bold">Bank Rules Editor</h1>
-            <p className="text-gray-600">Create and manage auto-reconciliation rules</p>
+            <p className="text-gray-600">
+              Rules are scoped per bank account (NAB #4091, NAB Credit Card, ANZ). Restore defaults after deploy to load the full set.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={restoreDefaults}
+            className="shrink-0 border border-gray-300 px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50"
+          >
+            Restore defaults
+          </button>
         </div>
 
         <div className="bg-white rounded-3xl shadow p-10 mb-12">
@@ -142,6 +202,42 @@ export default function RulesManagement() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-2">Bank account</label>
+              <select
+                value={newRule.bankAccountId}
+                onChange={(e) => setNewRule({ ...newRule, bankAccountId: e.target.value })}
+                className="w-full border border-gray-300 rounded-xl px-4 py-3"
+              >
+                <option value="">All accounts</option>
+                {banks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                    {b.accountNumber ? ` (${b.accountNumber})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Direction</label>
+              <select
+                value={newRule.direction}
+                onChange={(e) =>
+                  setNewRule({
+                    ...newRule,
+                    direction: e.target.value as typeof newRule.direction,
+                  })
+                }
+                className="w-full border border-gray-300 rounded-xl px-4 py-3"
+              >
+                <option value="spend">Spend money</option>
+                <option value="receive">Receive money</option>
+                <option value="transfer">Transfer money</option>
+                <option value="any">Either</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-2">Match Field</label>
               <select
                 value={newRule.matchField}
@@ -149,7 +245,9 @@ export default function RulesManagement() {
                 className="w-full border border-gray-300 rounded-xl px-4 py-3"
               >
                 <option value="description">Description</option>
-                <option value="amount">Amount</option>
+                <option value="any">Any text field</option>
+                <option value="payee">Payee</option>
+                <option value="reference">Reference</option>
               </select>
             </div>
 
@@ -161,7 +259,6 @@ export default function RulesManagement() {
                 className="w-full border border-gray-300 rounded-xl px-4 py-3"
               >
                 <option value="contains">Contains</option>
-                <option value="startsWith">Starts with</option>
                 <option value="equals">Equals</option>
               </select>
             </div>
@@ -219,6 +316,8 @@ export default function RulesManagement() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-left">Rule Name</th>
+                <th className="px-6 py-4 text-left">Bank</th>
+                <th className="px-6 py-4 text-left">Dir</th>
                 <th className="px-6 py-4 text-left">Match Value</th>
                 <th className="px-6 py-4 text-left">Account</th>
                 <th className="px-6 py-4 text-left">Type</th>
@@ -230,7 +329,17 @@ export default function RulesManagement() {
               {rules.map((rule) => (
                 <tr key={rule.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium">{rule.name}</td>
-                  <td className="px-6 py-4 text-gray-600">{rule.matchValue}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">{bankLabel(rule.bankAccountId)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {rule.direction === 'receive'
+                      ? 'In'
+                      : rule.direction === 'transfer'
+                        ? 'Xfer'
+                        : rule.direction === 'spend'
+                          ? 'Out'
+                          : 'Any'}
+                  </td>
+                  <td className="px-6 py-4 text-gray-600 text-sm">{matchSummary(rule)}</td>
                   <td className="px-6 py-4 font-mono">
                     {rule.accountCode} — {rule.accountName}
                   </td>
