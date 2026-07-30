@@ -19,7 +19,7 @@ const quickActions = [
   },
   { 
     title: "Expenses & Purchases", 
-    href: "/transactions/expenses", 
+    href: "/transactions/purchases", 
     icon: "📤", 
     color: "bg-orange-600",
     desc: "Suppliers & overheads"

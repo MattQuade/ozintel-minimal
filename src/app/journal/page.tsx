@@ -83,21 +83,31 @@ export default function JournalPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return;
-    await fetch('/api/ledger/delete', { 
+    const res = await fetch('/api/ledger/delete', { 
       method: 'POST', 
       body: JSON.stringify({ id }), 
       headers: {'Content-Type': 'application/json'} 
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Failed to delete entry');
+      return;
+    }
     loadTransactions();
   };
 
   const handleEditSave = async () => {
     if (!editingTx) return;
-    await fetch('/api/ledger/update', { 
+    const res = await fetch('/api/ledger/update', { 
       method: 'POST', 
       body: JSON.stringify(editingTx), 
       headers: {'Content-Type': 'application/json'} 
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Failed to update entry');
+      return;
+    }
     setEditingTx(null);
     loadTransactions();
   };

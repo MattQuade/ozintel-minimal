@@ -53,3 +53,36 @@ export function getForestryReportsFilePath(): string {
 export function getForestryPhotosDir(): string {
   return path.join(getForestryDataDir(), "photos");
 }
+
+/**
+ * Accounting data folder — separate from pub ops / forestry / alerts users.
+ * Lives on OZINTEL_DATA_DIR when set (Render disk).
+ */
+export function getAccountingDataDir(): string {
+  return path.join(getDataDir(), "accounting");
+}
+
+export function getLedgerFilePath(): string {
+  return path.join(getAccountingDataDir(), "ledger.json");
+}
+
+export function getCoaFilePath(): string {
+  return path.join(getAccountingDataDir(), "coa.json");
+}
+
+export function getAccountingRulesFilePath(): string {
+  return path.join(getAccountingDataDir(), "rules.json");
+}
+
+/** Repo seeds used once when persistent accounting files are missing. */
+export function getRepoSeedLedgerPath(): string {
+  return path.join(process.cwd(), "data", "ledger.json");
+}
+
+export function getRepoSeedCoaPath(): string {
+  return path.join(process.cwd(), "data", "coa.json");
+}
+
+export function getRepoSeedRulesPath(): string {
+  return path.join(process.cwd(), "src", "core", "rules", "rules.json");
+}

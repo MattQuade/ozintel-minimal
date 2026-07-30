@@ -1,17 +1,15 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextResponse } from "next/server";
+import { resetLedger } from "@/lib/accounting/store";
 
-const dataDir = path.join(process.cwd(), 'data');
-const ledgerPath = path.join(dataDir, 'ledger.json');
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    if (fs.existsSync(ledgerPath)) {
-      fs.writeFileSync(ledgerPath, JSON.stringify([], null, 2));
-    }
+    await resetLedger();
     return NextResponse.json({ success: true, message: "Ledger cleared" });
   } catch (err) {
+    console.error(err);
     return NextResponse.json({ error: "Failed to reset" }, { status: 500 });
   }
 }

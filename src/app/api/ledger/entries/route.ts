@@ -1,18 +1,12 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextResponse } from "next/server";
+import { readLedger } from "@/lib/accounting/store";
 
-const ledgerPath = path.join(process.cwd(), 'data', 'ledger.json');
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    if (!fs.existsSync(ledgerPath)) {
-      return NextResponse.json([]);
-    }
-
-    const raw = fs.readFileSync(ledgerPath, 'utf8');
-    let entries = JSON.parse(raw || '[]');
-
+    const entries = await readLedger();
     return NextResponse.json(entries);
   } catch (err) {
     console.error("Entries API Error:", err);

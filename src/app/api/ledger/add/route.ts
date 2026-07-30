@@ -1,9 +1,8 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextResponse } from "next/server";
+import { appendLedgerEntries } from "@/lib/accounting/store";
 
-const dataDir = path.join(process.cwd(), 'data');
-const ledgerPath = path.join(dataDir, 'ledger.json');
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
@@ -11,43 +10,27 @@ export async function POST(req: Request) {
     const entries = Array.isArray(body.entries) ? body.entries : body;
 
     if (!entries || entries.length === 0) {
-      return NextResponse.json({ error: 'No entries received' }, { status: 400 });
+      return NextResponse.json({ error: "No entries received" }, { status: 400 });
     }
 
-    // Ensure data folder exists
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
+    const result = await appendLedgerEntries(entries);
+    console.log(
+      `Saved ${result.saved} transactions. Total now: ${result.total}`
+    );
 
-    // Load existing ledger
-    let ledger = [];
-    if (fs.existsSync(ledgerPath)) {
-      const raw = fs.readFileSync(ledgerPath, 'utf8');
-      ledger = JSON.parse(raw);
-    }
-
-    // Add new entries
-    const newEntries = entries.map((e: any) => ({
-      ...e,
-      timestamp: new Date().toISOString()
-    }));
-
-    ledger = [...ledger, ...newEntries];
-
-    // Save
-    fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2));
-
-    console.log(`💾 Saved ${newEntries.length} transactions. Total now: ${ledger.length}`);
-
-    return NextResponse.json({ 
-      success: true, 
-      saved: newEntries.length,
-      total: ledger.length 
+    return NextResponse.json({
+      success: true,
+      saved: result.saved,
+      total: result.total,
     });
-  } catch (err: any) {
-    console.error('Save Error:', err);
-    return NextResponse.json({ 
-      error: err.message || 'Failed to save to ledger' 
-    }, { status: 500 });
+  } catch (err: unknown) {
+    console.error("Save Error:", err);
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error ? err.message : "Failed to save to ledger",
+      },
+      { status: 500 }
+    );
   }
 }

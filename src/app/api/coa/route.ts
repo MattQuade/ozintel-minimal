@@ -1,16 +1,13 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextResponse } from "next/server";
+import { readCoa, writeCoa, type CoaAccount } from "@/lib/accounting/store";
 
-const coaPath = path.join(process.cwd(), 'data', 'coa.json');
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    if (!fs.existsSync(coaPath)) {
-      return NextResponse.json([]);
-    }
-    const data = fs.readFileSync(coaPath, 'utf8');
-    return NextResponse.json(JSON.parse(data));
+    const accounts = await readCoa();
+    return NextResponse.json(accounts);
   } catch {
     return NextResponse.json([]);
   }
@@ -19,9 +16,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    fs.writeFileSync(coaPath, JSON.stringify(body, null, 2));
+    const accounts = (Array.isArray(body) ? body : body.accounts) as CoaAccount[];
+    if (!Array.isArray(accounts)) {
+      return NextResponse.json(
+        { success: false, error: "Expected an accounts array" },
+        { status: 400 }
+      );
+    }
+    await writeCoa(accounts);
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error(err);
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }

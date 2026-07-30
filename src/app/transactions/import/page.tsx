@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Papa from 'papaparse';
-import { rulesEngine } from '../../../core/rules/rulesEngine';
+import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 
 const bankAccounts = [
   { id: '1', name: 'NAB Credit Card', number: 'NAB-CC-XXXX' },
@@ -42,18 +42,24 @@ export default function BankImport() {
     });
   };
 
-  const handleClassify = () => {
+  const handleClassify = async () => {
     if (preview.length === 0) return;
     setIsProcessing(true);
     setStatus('Classifying using Bank Rules...');
 
-    setTimeout(() => {
-      const results = rulesEngine.classifyBatch(preview);
+    try {
+      const res = await fetch('/api/rules');
+      const rules = (await res.json()) as BankRule[];
+      const results = classifyBatch(preview, Array.isArray(rules) ? rules : []);
       setClassified(results);
       const matched = results.filter(r => r.type !== 'Uncategorized').length;
       setStatus(`✅ ${matched} matched out of ${results.length} • ${quarter}`);
+    } catch (err) {
+      console.error(err);
+      setStatus('❌ Failed to load bank rules');
+    } finally {
       setIsProcessing(false);
-    }, 700);
+    }
   };
 
   const updateType = (index: number, newType: string) => {
