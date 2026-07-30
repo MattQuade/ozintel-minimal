@@ -28,11 +28,11 @@
     {
       "id": 3,
       "name": "ACCOUNT FEES A.K.F. LONDON AUSSI",
-      "matchValue": "SERVICE FEE",
+      "matchValue": "ACCOUNT FEES",
       "matchValues": [
-        "ACCOUNT SERVICING FEE",
-        "ACCOUNT FEES",
-        "A.K.F. LONDON"
+        "SERVICE FEE",
+        "A.K.F. LONDON",
+        "ACCOUNT SERVICING FEE"
       ],
       "matchField": "any",
       "matchType": "contains",
@@ -61,12 +61,13 @@
       "name": "INTERNET BPAY OPTUS BILLING",
       "matchValue": "Optus billing",
       "matchValues": [
-        "OPTUS BILLING"
+        "OPTUS BILLING",
+        "OPTUS"
       ],
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1462",
-      "accountName": "Telephone & Fax",
+      "accountCode": "1371",
+      "accountName": "Internet",
       "type": "Expense",
       "bankAccountId": "2020",
       "direction": "spend"
@@ -243,23 +244,28 @@
       "matchValue": "OPTUS",
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1462",
-      "accountName": "Telephone & Fax",
+      "accountCode": "1371",
+      "accountName": "Internet",
       "type": "Expense",
       "bankAccountId": "2020",
-      "direction": "spend"
+      "direction": "spend",
+      "matchValues": [
+        "OPTUS BILLING"
+      ]
     },
     {
       "id": 21,
       "name": "OPTUS BILLING PAY MY B MACQUARIE PAR",
       "matchValue": "OPTUS BILLING PAY MY B",
       "matchValues": [
-        "MACQUARIE PAR"
+        "MACQUARIE PAR",
+        "OPTUS BILLING",
+        "OPTUS"
       ],
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1462",
-      "accountName": "Telephone & Fax",
+      "accountCode": "1371",
+      "accountName": "Internet",
       "type": "Expense",
       "bankAccountId": "2020",
       "direction": "spend"
@@ -530,7 +536,9 @@
       "direction": "spend",
       "matchValues": [
         "THI AI LE TRAN",
-        "THI MY THI HUYNH"
+        "THI MY THI HUYNH",
+        "Thi My Thi Huynh",
+        "THI MY THI HUYNHW"
       ]
     },
     {
@@ -555,16 +563,17 @@
       "matchValues": [
         "CC Rpymnt",
         "CC Rpymnt LONDON AUSSI",
-        "CC PYMNTS"
+        "CC PYMNTS",
+        "CC RPYMNT 2"
       ],
-      "matchField": "description",
+      "matchField": "any",
       "matchType": "contains",
-      "accountCode": "2010",
-      "accountName": "NAB Credit Card #9497old 3436new",
+      "accountCode": "2475",
+      "accountName": "Suspense",
       "type": "Asset",
       "noGST": true,
       "bankAccountId": "2020",
-      "direction": "transfer"
+      "direction": "spend"
     },
     {
       "id": 77,
@@ -842,10 +851,10 @@
     {
       "id": 110,
       "name": "Cash ATM",
-      "matchValue": "ANZ ATM",
+      "matchValue": "NABATM",
       "matchValues": [
-        "NABATM",
-        "NABATM DEP"
+        "NABATM DEP",
+        "NAB ATM"
       ],
       "matchField": "any",
       "matchType": "contains",
@@ -866,12 +875,7 @@
       "type": "Liability",
       "noGST": true,
       "direction": "receive",
-      "bankAccountId": "2020",
-      "matchValues": [
-        "MR MATTHEW JOHN QUAD",
-        "MATTHEW JOHN QUAD",
-        "Transfer bw bus. acc"
-      ]
+      "bankAccountId": "2020"
     },
     {
       "id": 204,
@@ -3443,8 +3447,8 @@
       "matchValue": "STARLINK",
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "1462",
-      "accountName": "Telephone & Fax",
+      "accountCode": "1371",
+      "accountName": "Internet",
       "type": "Expense",
       "bankAccountId": "2020",
       "direction": "spend",
@@ -3458,8 +3462,8 @@
       "matchValue": "TF bw Bus Accts",
       "matchField": "any",
       "matchType": "contains",
-      "accountCode": "3",
-      "accountName": "ANZ Business Account",
+      "accountCode": "2000",
+      "accountName": "Cash at Bank",
       "type": "Asset",
       "bankAccountId": "2020",
       "direction": "any",
@@ -3467,8 +3471,11 @@
         "TF bw bus. accounts",
         "bw Bus Accts",
         "bw bus. accounts",
+        "Transfer bw bus",
         "MQTF bw",
-        "LAS ANZ"
+        "LAS ANZ",
+        "INTERNET TRANSFER TF",
+        "MR MATTHEW JOHN QUAD"
       ],
       "noGST": true
     },
@@ -3479,7 +3486,8 @@
       "matchValues": [
         "REVERSAL CREDIT",
         "THI MY THI HUYNH",
-        "THI AI LE TRAN"
+        "THI AI LE TRAN",
+        "Thi My Thi Huynh"
       ],
       "matchField": "any",
       "matchType": "contains",
