@@ -19,6 +19,15 @@ export default function COAPage() {
   const [status, setStatus] = useState('Loading accounts...');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newAccount, setNewAccount] = useState({
+    code: '',
+    name: '',
+    type: 'Expense' as string,
+    isBank: false,
+    noGST: false,
+    isCapital: false,
+  });
 
   const loadAccounts = async () => {
     try {
@@ -128,20 +137,50 @@ export default function COAPage() {
   };
 
   const addAccount = async () => {
-    const code = window.prompt('New account code (e.g. 5030)?');
-    if (!code?.trim()) return;
-    if (accounts.some((a) => a.code === code.trim())) {
+    setShowNewForm(true);
+  };
+
+  const saveNewAccount = async () => {
+    const code = newAccount.code.trim();
+    const name = newAccount.name.trim();
+    if (!code || !name) {
+      alert('Code and Account Name are required');
+      return;
+    }
+    if (accounts.some((a) => a.code === code)) {
       alert('That account code already exists.');
       return;
     }
-    const name = window.prompt('Account name?') || 'New Account';
     const next: COAAccount = {
-      code: code.trim(),
-      name: name.trim(),
-      type: 'Expense',
+      code,
+      name,
+      type: newAccount.type,
+      isBank: newAccount.isBank || undefined,
+      noGST: newAccount.noGST || undefined,
+      isCapital: newAccount.isCapital || undefined,
     };
     await saveToServer([...accounts, next]);
-    startEdit(next);
+    setNewAccount({
+      code: '',
+      name: '',
+      type: 'Expense',
+      isBank: false,
+      noGST: false,
+      isCapital: false,
+    });
+    setShowNewForm(false);
+  };
+
+  const cancelNewAccount = () => {
+    setShowNewForm(false);
+    setNewAccount({
+      code: '',
+      name: '',
+      type: 'Expense',
+      isBank: false,
+      noGST: false,
+      isCapital: false,
+    });
   };
 
   const q = search.trim().toLowerCase();
@@ -169,8 +208,8 @@ export default function COAPage() {
           <div>
             <h1 className="text-4xl font-bold">Chart of Accounts</h1>
             <p className="text-gray-600">
-              Edit names/flags • Capital = BAS G10{saving ? ' (saving...)' : ''} •{' '}
-              {status}
+              Manage your account structure
+              {saving ? ' · saving…' : ''} · {status}
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
@@ -188,6 +227,102 @@ export default function COAPage() {
             </button>
           </div>
         </div>
+
+        {showNewForm && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-8">
+            <h2 className="text-lg font-semibold mb-6">New Account</h2>
+            <div className="grid grid-cols-1 md:grid-cols-[140px_1fr_180px] gap-4 mb-6">
+              <input
+                type="text"
+                placeholder="Code e.g. 1000"
+                value={newAccount.code}
+                onChange={(e) =>
+                  setNewAccount({ ...newAccount, code: e.target.value })
+                }
+                className="w-full border border-gray-300 rounded-xl px-4 py-3"
+              />
+              <input
+                type="text"
+                placeholder="Account Name"
+                value={newAccount.name}
+                onChange={(e) =>
+                  setNewAccount({ ...newAccount, name: e.target.value })
+                }
+                className="w-full border border-gray-300 rounded-xl px-4 py-3"
+              />
+              <select
+                value={newAccount.type}
+                onChange={(e) =>
+                  setNewAccount({ ...newAccount, type: e.target.value })
+                }
+                className="w-full border border-gray-300 rounded-xl px-4 py-3"
+              >
+                <option value="Asset">Asset</option>
+                <option value="Liability">Liability</option>
+                <option value="Equity">Equity</option>
+                <option value="Revenue">Revenue</option>
+                <option value="Expense">Expense</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap gap-6 mb-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newAccount.isBank}
+                  onChange={(e) =>
+                    setNewAccount({ ...newAccount, isBank: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-blue-600"
+                />
+                <span className="text-sm">
+                  Bank/Cash account (used in reconciliation)
+                </span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newAccount.noGST}
+                  onChange={(e) =>
+                    setNewAccount({ ...newAccount, noGST: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-blue-600"
+                />
+                <span className="text-sm">No GST (GST-free by default)</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newAccount.isCapital}
+                  onChange={(e) =>
+                    setNewAccount({
+                      ...newAccount,
+                      isCapital: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-blue-600"
+                />
+                <span className="text-sm">Capital purchase (BAS G10)</span>
+              </label>
+            </div>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={saveNewAccount}
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-8 py-3 rounded-xl font-semibold"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={cancelNewAccount}
+                className="text-gray-600 hover:text-gray-900 px-4 py-3 font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <input
           type="search"

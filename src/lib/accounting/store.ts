@@ -46,8 +46,10 @@ export type BankRule = {
   name: string;
   matchValue: string;
   matchValues?: string[];
-  matchField?: "description" | "any" | "payee" | "reference" | string;
-  matchType?: "contains" | "equals" | string;
+  matchField?: "description" | "amount" | "any" | "payee" | "reference" | string;
+  matchType?: "contains" | "equals" | "startsWith" | string;
+  /** Optional replacement description when the rule matches. */
+  descriptionOverride?: string;
   /** When set, rule only applies to this bank account (e.g. NAB Business #4091 → "2020"). */
   bankAccountId?: string;
   direction?: "receive" | "spend" | "transfer" | "any" | string;

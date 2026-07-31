@@ -88,7 +88,7 @@ export default function BankImport() {
       .map((item) => ({
         date: toIsoDateInput(item.original[0]) || item.original[0],
         amount: parseFloat(item.original[1] || 0),
-        description: item.original[2] || '',
+        description: item.descriptionOverride || item.original[2] || '',
         type: item.type,
         accountCode: item.accountCode || '',
         accountName: item.accountName || '',

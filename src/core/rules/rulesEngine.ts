@@ -4,8 +4,10 @@ export interface BankRule {
   matchValue: string;
   /** Extra OR match strings (Xero "or N other conditions") */
   matchValues?: string[];
-  matchField?: "description" | "any" | "payee" | "reference";
-  matchType?: "contains" | "equals";
+  matchField?: "description" | "amount" | "any" | "payee" | "reference";
+  matchType?: "contains" | "equals" | "startsWith";
+  /** Optional replacement description when the rule matches. */
+  descriptionOverride?: string;
   /** When set, only applies when importing that bank account. */
   bankAccountId?: string;
   /**
@@ -46,6 +48,8 @@ export interface ClassifiedTransaction {
   accountCode: string;
   accountName: string;
   noGST?: boolean;
+  /** Present when a matching rule sets descriptionOverride. */
+  descriptionOverride?: string;
   confidence: number;
   needsReview: boolean;
 }
@@ -98,6 +102,21 @@ function extractSearchText(tx: unknown): string {
   return "";
 }
 
+function matchTextValues(
+  haystack: string,
+  values: string[],
+  mode: string
+): boolean {
+  if (!haystack || values.length === 0) return false;
+  if (mode === "equals") {
+    return values.some((v) => haystack === v);
+  }
+  if (mode === "startsWith") {
+    return values.some((v) => haystack.startsWith(v));
+  }
+  return values.some((v) => haystack.includes(v));
+}
+
 function ruleMatches(rule: BankRule, text: string, amount: number): boolean {
   const dir = rule.direction || "any";
   if (dir === "receive" && !(amount > 0)) return false;
@@ -108,13 +127,26 @@ function ruleMatches(rule: BankRule, text: string, amount: number): boolean {
   const values = [rule.matchValue, ...(rule.matchValues || [])]
     .map((v) => String(v || "").toLowerCase().trim())
     .filter(Boolean);
-  if (values.length === 0 || !text) return false;
+  if (values.length === 0) return false;
 
   const mode = rule.matchType || "contains";
-  if (mode === "equals") {
-    return values.some((v) => text === v);
+  const field = rule.matchField || "description";
+
+  if (field === "amount") {
+    const absAmount = Math.abs(amount);
+    const amountStr = String(absAmount);
+    // Prefer numeric equals when match values parse as numbers.
+    if (mode === "equals") {
+      return values.some((v) => {
+        const n = parseFloat(v.replace(/,/g, ""));
+        if (Number.isFinite(n)) return Math.abs(n) === absAmount;
+        return amountStr === v || String(amount).toLowerCase() === v;
+      });
+    }
+    return matchTextValues(amountStr, values, mode);
   }
-  return values.some((v) => text.includes(v));
+
+  return matchTextValues(text, values, mode);
 }
 
 export function classifyTransaction(
@@ -133,6 +165,7 @@ export function classifyTransaction(
         accountCode: rule.accountCode,
         accountName: rule.accountName,
         noGST: Boolean(rule.noGST),
+        descriptionOverride: rule.descriptionOverride || undefined,
         confidence: 0.9,
         needsReview: false,
       };
