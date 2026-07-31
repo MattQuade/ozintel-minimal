@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatAuDate } from '@/lib/accounting/dates';
+import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
 
 type CoaOption = {
   code: string;
@@ -20,6 +21,7 @@ type LedgerRow = {
   accountCode?: string;
   accountName?: string;
   reconciled?: boolean;
+  receiptIds?: string[];
 };
 
 type Props = {
@@ -45,6 +47,7 @@ export default function LedgerQuickEntry({
   const [amount, setAmount] = useState('');
   const [accountCode, setAccountCode] = useState('');
   const [hasGST, setHasGST] = useState(true);
+  const [receiptIds, setReceiptIds] = useState<string[]>([]);
 
   const typeAccounts = coa.filter((a) => a.type === entryType);
 
@@ -111,6 +114,7 @@ export default function LedgerQuickEntry({
               source: entryType === 'Revenue' ? 'sales' : 'purchases',
               reconciled: false,
               timestamp: new Date().toISOString(),
+              ...(receiptIds.length > 0 ? { receiptIds } : {}),
             },
           ],
         }),
@@ -118,7 +122,12 @@ export default function LedgerQuickEntry({
       if (!res.ok) throw new Error('Save failed');
       setDescription('');
       setAmount('');
-      setStatus('Saved to ledger');
+      setReceiptIds([]);
+      setStatus(
+        receiptIds.length
+          ? 'Saved to ledger with receipt'
+          : 'Saved to ledger'
+      );
       await load();
     } catch {
       setStatus('Failed to save');
@@ -128,11 +137,11 @@ export default function LedgerQuickEntry({
   };
 
   return (
-    <div className="p-10 max-w-5xl mx-auto">
-      <h1 className="text-4xl font-bold mb-2">{title}</h1>
+    <div className="p-6 sm:p-10 max-w-5xl mx-auto">
+      <h1 className="text-3xl sm:text-4xl font-bold mb-2">{title}</h1>
       <p className="text-gray-600 mb-8">{subtitle}</p>
 
-      <div className="bg-white rounded-3xl shadow p-8 mb-10">
+      <div className="bg-white rounded-3xl shadow p-6 sm:p-8 mb-10">
         <h2 className="text-xl font-semibold mb-6">New {entryType} entry</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -190,12 +199,19 @@ export default function LedgerQuickEntry({
               <span>Includes GST</span>
             </label>
           </div>
+          <div className="md:col-span-2">
+            <ReceiptAttach
+              receiptIds={receiptIds}
+              onChange={setReceiptIds}
+              label={entryType === 'Expense' ? 'Receipt evidence (ATO)' : 'Receipt / attachment'}
+            />
+          </div>
         </div>
         <button
           type="button"
           onClick={save}
           disabled={saving}
-          className={`mt-6 ${accentClass} text-white px-8 py-3 rounded-2xl disabled:bg-gray-400`}
+          className={`mt-6 ${accentClass} text-white px-8 py-3 rounded-2xl disabled:bg-gray-400 w-full sm:w-auto`}
         >
           {saving ? 'Saving…' : `Save ${entryType}`}
         </button>
@@ -211,30 +227,36 @@ export default function LedgerQuickEntry({
         ) : rows.length === 0 ? (
           <p className="p-8 text-gray-400">No {entryType.toLowerCase()} entries yet</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left p-4">Date</th>
-                <th className="text-left p-4">Description</th>
-                <th className="text-left p-4">Account</th>
-                <th className="text-right p-4">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="p-4 whitespace-nowrap">{formatAuDate(r.date)}</td>
-                  <td className="p-4">{r.description}</td>
-                  <td className="p-4 font-mono text-xs">
-                    {r.accountCode} {r.accountName ? `— ${r.accountName}` : ''}
-                  </td>
-                  <td className="p-4 text-right font-medium">
-                    ${Math.abs(r.amount).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-4">Date</th>
+                  <th className="text-left p-4">Description</th>
+                  <th className="text-left p-4">Account</th>
+                  <th className="text-left p-4">Receipt</th>
+                  <th className="text-right p-4">Amount</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td className="p-4 whitespace-nowrap">{formatAuDate(r.date)}</td>
+                    <td className="p-4">{r.description}</td>
+                    <td className="p-4 font-mono text-xs">
+                      {r.accountCode} {r.accountName ? `— ${r.accountName}` : ''}
+                    </td>
+                    <td className="p-4">
+                      <ReceiptBadge receiptIds={r.receiptIds} />
+                    </td>
+                    <td className="p-4 text-right font-medium">
+                      ${Math.abs(r.amount).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

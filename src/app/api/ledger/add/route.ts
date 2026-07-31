@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { appendLedgerEntries } from "@/lib/accounting/store";
+import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -18,6 +19,14 @@ export async function POST(req: Request) {
     }
 
     const result = await appendLedgerEntries(entries);
+
+    // Keep receipt metadata in sync when entries arrive with receiptIds
+    for (const entry of result.savedEntries) {
+      if (Array.isArray(entry.receiptIds) && entry.receiptIds.length > 0) {
+        await registerLedgerEntryOnReceipts(entry.receiptIds, entry.id);
+      }
+    }
+
     console.log(
       `Saved ${result.saved} transactions. Total now: ${result.total}`
     );
@@ -26,6 +35,7 @@ export async function POST(req: Request) {
       success: true,
       saved: result.saved,
       total: result.total,
+      savedEntries: result.savedEntries,
     });
   } catch (err: unknown) {
     console.error("Save Error:", err);

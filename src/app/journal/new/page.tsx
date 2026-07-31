@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
+import ReceiptAttach from '@/components/ReceiptAttach';
 
 type CoaOption = {
   code: string;
@@ -28,6 +29,7 @@ export default function NewJournalEntry() {
   const [lines, setLines] = useState<LineItem[]>([
     { id: '1', accountCode: '', description: '', debit: 0, credit: 0, hasGST: true },
   ]);
+  const [receiptIds, setReceiptIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/coa')
@@ -79,7 +81,7 @@ export default function NewJournalEntry() {
 
     const entries = lines
       .filter((line) => line.debit > 0 || line.credit > 0)
-      .map((line) => {
+      .map((line, index) => {
         const acc = coa.find((a) => a.code === line.accountCode);
         const isDebit = line.debit > 0;
         return {
@@ -96,6 +98,9 @@ export default function NewJournalEntry() {
           reconciled: false,
           source: 'journal',
           timestamp: new Date().toISOString(),
+          // Attach receipt evidence to the first expense-like (debit) line primarily;
+          // also stamp all lines so the journal set stays linked.
+          ...(receiptIds.length > 0 && index === 0 ? { receiptIds } : {}),
         };
       });
 
@@ -220,7 +225,7 @@ export default function NewJournalEntry() {
             </tbody>
           </table>
 
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
             <button
               onClick={addLine}
               className="text-blue-600 hover:text-blue-700 font-medium"
@@ -233,7 +238,15 @@ export default function NewJournalEntry() {
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="mb-8">
+            <ReceiptAttach
+              receiptIds={receiptIds}
+              onChange={setReceiptIds}
+              label="Receipt evidence (ATO)"
+            />
+          </div>
+
+          <div className="flex gap-4 flex-col sm:flex-row">
             <button
               onClick={handleSave}
               className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-medium hover:bg-blue-700"

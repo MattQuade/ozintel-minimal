@@ -38,6 +38,8 @@ export type LedgerEntry = {
   hasGST?: boolean;
   noGST?: boolean;
   reconciled?: boolean;
+  /** Receipt evidence ids stored under data/accounting/receipts/ */
+  receiptIds?: string[];
   [key: string]: unknown;
 };
 
@@ -235,22 +237,38 @@ export async function writeLedger(entries: LedgerEntry[]) {
 
 export async function appendLedgerEntries(
   incoming: Array<Partial<LedgerEntry>>
-): Promise<{ saved: number; total: number; entries: LedgerEntry[] }> {
+): Promise<{
+  saved: number;
+  total: number;
+  entries: LedgerEntry[];
+  savedEntries: LedgerEntry[];
+}> {
   return withLedgerLock(async () => {
     const ledger = await readLedgerUnlocked();
-    const stamped = incoming.map((e, index) =>
-      ensureEntryId(
+    const stamped = incoming.map((e, index) => {
+      const receiptIds = Array.isArray(e.receiptIds)
+        ? e.receiptIds.filter(
+            (x): x is string => typeof x === "string" && Boolean(x.trim())
+          )
+        : undefined;
+      return ensureEntryId(
         {
           ...e,
+          ...(receiptIds && receiptIds.length > 0 ? { receiptIds } : {}),
           timestamp: e.timestamp || new Date().toISOString(),
           id: e.id || `LE${Date.now()}-${index}`,
         },
         ledger.length + index
-      )
-    );
+      );
+    });
     const next = [...ledger, ...stamped];
     await writeLedgerUnlocked(next);
-    return { saved: stamped.length, total: next.length, entries: next };
+    return {
+      saved: stamped.length,
+      total: next.length,
+      entries: next,
+      savedEntries: stamped,
+    };
   });
 }
 

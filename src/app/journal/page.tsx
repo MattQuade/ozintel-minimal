@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
 import { formatAuDate, parseFlexibleDate, toIsoDateInput } from '@/lib/accounting/dates';
 
 const periods = [
@@ -25,6 +26,7 @@ type Transaction = {
   accountCode?: string;
   accountName?: string;
   reconciled?: boolean;
+  receiptIds?: string[];
 };
 
 export default function JournalPage() {
@@ -285,6 +287,7 @@ export default function JournalPage() {
                   <th className="text-left p-5 font-medium">Account</th>
                   <th className="text-right p-5 font-medium">Amount</th>
                   <th className="text-center p-5 font-medium">Type</th>
+                  <th className="text-center p-5 font-medium">Receipt</th>
                   <th className="text-center p-5 font-medium">Reconciled</th>
                   <th className="w-40 text-center">Actions</th>
                 </tr>
@@ -311,6 +314,9 @@ export default function JournalPage() {
                       >
                         {tx.type}
                       </span>
+                    </td>
+                    <td className="p-5 text-center">
+                      <ReceiptBadge receiptIds={tx.receiptIds} />
                     </td>
                     <td className="p-5 text-center">
                       <input
@@ -431,6 +437,19 @@ export default function JournalPage() {
                 />
                 Reconciled to bank statement
               </label>
+
+              <div className="mb-6">
+                <ReceiptAttach
+                  receiptIds={
+                    Array.isArray(editingTx.receiptIds) ? editingTx.receiptIds : []
+                  }
+                  onChange={(ids) =>
+                    setEditingTx({ ...editingTx, receiptIds: ids })
+                  }
+                  ledgerEntryId={editingTx.id}
+                  label="Receipt evidence (ATO)"
+                />
+              </div>
 
               <div className="flex gap-4">
                 <button

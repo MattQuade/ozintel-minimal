@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateLedgerEntry } from "@/lib/accounting/store";
+import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
     const updated = await updateLedgerEntry({ ...body, id });
+    if (Array.isArray(updated.receiptIds) && updated.receiptIds.length > 0) {
+      await registerLedgerEntryOnReceipts(updated.receiptIds, updated.id);
+    }
     return NextResponse.json({ success: true, entry: updated });
   } catch (err) {
     console.error(err);

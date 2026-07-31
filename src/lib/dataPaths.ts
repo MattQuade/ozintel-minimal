@@ -78,6 +78,19 @@ export function getBankAccountsFilePath(): string {
   return path.join(getAccountingDataDir(), "bank-accounts.json");
 }
 
+/** Receipt evidence files + metadata (ATO-justifiable expense attachments). */
+export function getReceiptsDir(): string {
+  return path.join(getAccountingDataDir(), "receipts");
+}
+
+export function getReceiptsMetaFilePath(): string {
+  return path.join(getReceiptsDir(), "receipts.json");
+}
+
+export function getReceiptFilesDir(): string {
+  return path.join(getReceiptsDir(), "files");
+}
+
 /** Repo seeds used once when persistent accounting files are missing. */
 export function getRepoSeedLedgerPath(): string {
   return path.join(process.cwd(), "data", "ledger.json");
