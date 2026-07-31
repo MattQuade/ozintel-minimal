@@ -6,6 +6,8 @@ import { checkAccountingAccess } from "@/lib/accounting/access";
 const previewLinks = [
   { href: "/accounting/pending?section=Bank", label: "Bank" },
   { href: "/accounting/pending?section=Chart%20of%20Accounts", label: "Chart of Accounts" },
+  { href: "/accounting/pending?section=Invoices", label: "Invoices" },
+  { href: "/accounting/pending?section=Customers", label: "Customers" },
   { href: "/accounting/pending?section=Journal", label: "Journal" },
   { href: "/accounting/pending?section=Transactions", label: "Transactions" },
   { href: "/accounting/pending?section=Employees", label: "Employees" },
@@ -15,6 +17,8 @@ const previewLinks = [
 const fullLinks = [
   { href: "/bank/accounts", label: "Bank" },
   { href: "/coa", label: "Chart of Accounts" },
+  { href: "/invoices", label: "Invoices" },
+  { href: "/customers", label: "Customers" },
   { href: "/journal", label: "Journal" },
   { href: "/transactions", label: "Transactions" },
   { href: "/employees", label: "Employees" },

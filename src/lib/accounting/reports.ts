@@ -408,6 +408,23 @@ export function buildBasSummary(
       wagesTotal += abs;
     }
 
+    // Invoice authorise posts tax-exclusive revenue + separate 820 GST.
+    // Convert to inclusive equivalent so existing G1 (÷11) math stays valid.
+    const gstExclusive = entry.gstExclusive === true;
+    if (gstExclusive && type === "Revenue") {
+      const gstAmt =
+        typeof entry.gstAmount === "number" && Number.isFinite(entry.gstAmount)
+          ? Math.abs(Number(entry.gstAmount))
+          : abs * 0.1;
+      const incl = abs + gstAmt;
+      // Credits (authorise) are negative amounts; voids reverse as positive.
+      const sign = (Number(entry.amount) || 0) < 0 ? 1 : -1;
+      g1Inc += sign * incl;
+      gstCollected += sign * gstAmt;
+      if (sign > 0) taxableSalesCount += 1;
+      continue;
+    }
+
     if (type !== "Revenue" && type !== "Expense") continue;
     if (isGstFree(entry, coaByCode)) continue;
 

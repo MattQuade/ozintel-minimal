@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server";
+import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
+import { authoriseInvoice } from "@/lib/accounting/invoices";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function POST(req: Request, { params }: Params) {
+  const access = await requireAccountingAccess(req);
+  if (!access.ok) return access.response;
+
+  try {
+    const { id } = await params;
+    const invoice = await authoriseInvoice(id);
+    return NextResponse.json({ success: true, invoice });
+  } catch (error) {
+    console.error("Invoice authorise error:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Authorise failed",
+      },
+      { status: 400 }
+    );
+  }
+}

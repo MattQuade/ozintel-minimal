@@ -12,6 +12,13 @@ const quickActions = [
     desc: "ANZ CSV → Auto classify"
   },
   { 
+    title: "Invoices (AR)", 
+    href: "/invoices", 
+    icon: "🧾", 
+    color: "bg-teal-700",
+    desc: "Customer invoices & payments"
+  },
+  { 
     title: "Sales & Revenue", 
     href: "/transactions/sales", 
     icon: "💰", 

@@ -1,0 +1,421 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import AccountingGate from '@/components/AccountingGate';
+
+type InvoiceLine = {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  accountCode: string;
+  accountName: string;
+  hasGST: boolean;
+};
+
+type InvoicePayment = {
+  id: string;
+  date: string;
+  amount: number;
+  bankAccountName: string;
+  note: string;
+};
+
+type Invoice = {
+  id: string;
+  number: string;
+  customerId: string;
+  customerName: string;
+  issueDate: string;
+  dueDate: string;
+  lines: InvoiceLine[];
+  status: string;
+  subtotal: number;
+  gstTotal: number;
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  notes: string;
+  ledgerEntryIds: string[];
+  journalRef: string;
+  payments: InvoicePayment[];
+  authorisedAt?: string;
+  voidedAt?: string;
+};
+
+type BankAccount = { id: string; name: string };
+
+function money(n: number) {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+  }).format(n || 0);
+}
+
+const statusClass: Record<string, string> = {
+  draft: 'bg-slate-100 text-slate-700',
+  authorised: 'bg-blue-100 text-blue-800',
+  paid: 'bg-green-100 text-green-800',
+  void: 'bg-red-100 text-red-700',
+};
+
+export default function InvoiceDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = String(params.id || '');
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [banks, setBanks] = useState<BankAccount[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [payAmount, setPayAmount] = useState('');
+  const [payDate, setPayDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [payBankId, setPayBankId] = useState('');
+  const [payNote, setPayNote] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/invoices/${id}`);
+      if (!res.ok) throw new Error('Not found');
+      const data = await res.json();
+      setInvoice(data);
+      setPayAmount(
+        data.amountDue > 0 ? String(data.amountDue) : ''
+      );
+    } catch {
+      setError('Invoice not found');
+    }
+  }, [id]);
+
+  useEffect(() => {
+    load();
+    fetch('/api/bank-accounts')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = Array.isArray(d) ? d : [];
+        setBanks(list);
+        if (list[0]) setPayBankId(list[0].id);
+      })
+      .catch(() => {});
+  }, [load]);
+
+  const runAction = async (
+    path: string,
+    body?: Record<string, unknown>,
+    confirmMsg?: string
+  ) => {
+    if (confirmMsg && !confirm(confirmMsg)) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Action failed');
+      setInvoice(data.invoice);
+      if (data.invoice?.amountDue != null) {
+        setPayAmount(
+          data.invoice.amountDue > 0 ? String(data.invoice.amountDue) : ''
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteDraft = async () => {
+    if (!confirm('Delete this draft invoice?')) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
+      router.push('/invoices');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+      setBusy(false);
+    }
+  };
+
+  if (!invoice && !error) {
+    return (
+      <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
+        <div className="p-8 text-slate-500">Loading…</div>
+      </AccountingGate>
+    );
+  }
+
+  if (!invoice) {
+    return (
+      <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
+        <div className="p-8 text-red-600">{error}</div>
+      </AccountingGate>
+    );
+  }
+
+  const canPay =
+    (invoice.status === 'authorised' || invoice.status === 'paid') &&
+    invoice.amountDue > 0.009;
+
+  return (
+    <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-3xl font-bold">{invoice.number}</h1>
+              <span
+                className={`px-2.5 py-0.5 rounded-md text-xs font-medium capitalize ${
+                  statusClass[invoice.status] || 'bg-slate-100'
+                }`}
+              >
+                {invoice.status}
+              </span>
+            </div>
+            <p className="text-slate-600">{invoice.customerName}</p>
+            {invoice.journalRef && (
+              <p className="text-xs text-slate-400 mt-1">
+                Journal: {invoice.journalRef}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/invoices/${invoice.id}/print`}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium"
+            >
+              Print / PDF
+            </Link>
+            {invoice.status === 'draft' && (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    runAction(
+                      `/api/invoices/${id}/authorise`,
+                      undefined,
+                      'Authorise this invoice? This posts AR, revenue, and GST to the ledger.'
+                    )
+                  }
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  Authorise
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={deleteDraft}
+                  className="bg-white border border-red-200 text-red-700 px-4 py-2 rounded-xl text-sm"
+                >
+                  Delete
+                </button>
+              </>
+            )}
+            {(invoice.status === 'authorised' || invoice.status === 'draft') && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  runAction(
+                    `/api/invoices/${id}/void`,
+                    undefined,
+                    invoice.status === 'authorised'
+                      ? 'Void this invoice? A reversing journal will be posted.'
+                      : 'Void this draft?'
+                  )
+                }
+                className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm disabled:opacity-50"
+              >
+                Void
+              </button>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-6">
+            <div>
+              <div className="text-slate-500">Issue date</div>
+              <div className="font-medium">{invoice.issueDate}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Due date</div>
+              <div className="font-medium">{invoice.dueDate}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Amount paid</div>
+              <div className="font-medium">{money(invoice.amountPaid)}</div>
+            </div>
+            <div>
+              <div className="text-slate-500">Amount due</div>
+              <div className="font-medium">{money(invoice.amountDue)}</div>
+            </div>
+          </div>
+
+          <table className="w-full text-sm mb-4">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500">
+                <th className="text-left py-2 font-medium">Description</th>
+                <th className="text-right py-2 font-medium">Qty</th>
+                <th className="text-right py-2 font-medium">Unit</th>
+                <th className="text-left py-2 font-medium pl-4">Account</th>
+                <th className="text-center py-2 font-medium">GST</th>
+                <th className="text-right py-2 font-medium">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.lines.map((line) => {
+                const excl = line.quantity * line.unitPrice;
+                return (
+                  <tr key={line.id} className="border-b border-slate-100">
+                    <td className="py-2">{line.description}</td>
+                    <td className="py-2 text-right">{line.quantity}</td>
+                    <td className="py-2 text-right">{money(line.unitPrice)}</td>
+                    <td className="py-2 pl-4 text-slate-600">
+                      {line.accountCode} {line.accountName}
+                    </td>
+                    <td className="py-2 text-center">
+                      {line.hasGST ? '10%' : '—'}
+                    </td>
+                    <td className="py-2 text-right">{money(excl)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="flex justify-end">
+            <div className="text-sm space-y-1 w-48">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Subtotal</span>
+                <span>{money(invoice.subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">GST</span>
+                <span>{money(invoice.gstTotal)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-base border-t border-slate-200 pt-1">
+                <span>Total</span>
+                <span>{money(invoice.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {invoice.notes && (
+            <p className="mt-4 text-sm text-slate-600 border-t border-slate-100 pt-4">
+              {invoice.notes}
+            </p>
+          )}
+        </div>
+
+        {canPay && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+            <h2 className="font-semibold text-lg mb-4">Record payment</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Posts Dr Bank / Cr Accounts Receivable (2101). Ledger lines are tagged with{' '}
+              <code className="text-xs bg-slate-100 px-1 rounded">invoiceId</code> for
+              bank-import allocation later.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Bank account</label>
+                <select
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  value={payBankId}
+                  onChange={(e) => setPayBankId(e.target.value)}
+                >
+                  {banks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Note</label>
+                <input
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  value={payNote}
+                  onChange={(e) => setPayNote(e.target.value)}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={busy || !payBankId}
+              onClick={() =>
+                runAction(`/api/invoices/${id}/payment`, {
+                  amount: parseFloat(payAmount),
+                  date: payDate,
+                  bankAccountId: payBankId,
+                  note: payNote,
+                })
+              }
+              className="mt-4 bg-green-700 hover:bg-green-800 text-white font-medium px-5 py-2 rounded-xl disabled:opacity-50"
+            >
+              Post payment
+            </button>
+          </div>
+        )}
+
+        {invoice.payments?.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h2 className="font-semibold mb-3">Payments</h2>
+            <ul className="text-sm space-y-2">
+              {invoice.payments.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-2"
+                >
+                  <span>
+                    {p.date} · {p.bankAccountName}
+                    {p.note ? ` — ${p.note}` : ''}
+                  </span>
+                  <span className="font-medium">{money(p.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </AccountingGate>
+  );
+}
