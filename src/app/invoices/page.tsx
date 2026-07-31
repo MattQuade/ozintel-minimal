@@ -31,9 +31,14 @@ function money(n: number) {
   }).format(n || 0);
 }
 
+function canHardDelete(status: string) {
+  return status === 'draft' || status === 'void';
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filter, setFilter] = useState('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   const load = async () => {
     try {
@@ -48,6 +53,34 @@ export default function InvoicesPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const remove = async (inv: Invoice) => {
+    if (!canHardDelete(inv.status)) {
+      setError(
+        `${inv.number} is ${inv.status} — void it first, then delete`
+      );
+      return;
+    }
+    if (!confirm(`Delete ${inv.number}?`)) return;
+    setBusyId(inv.id);
+    setError('');
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: inv.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Delete failed');
+      }
+      setInvoices((prev) => prev.filter((i) => i.id !== inv.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const visible = invoices.filter(
     (inv) => filter === 'all' || inv.status === filter
@@ -96,6 +129,12 @@ export default function InvoicesPage() {
           ))}
         </div>
 
+        {error && (
+          <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2">
+            {error}
+          </p>
+        )}
+
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
@@ -107,12 +146,13 @@ export default function InvoicesPage() {
                 <th className="text-left p-3 font-medium">Status</th>
                 <th className="text-right p-3 font-medium">Total</th>
                 <th className="text-right p-3 font-medium">Due</th>
+                <th className="text-right p-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={8} className="p-8 text-center text-slate-400">
                     No invoices — create one to get started
                   </td>
                 </tr>
@@ -142,6 +182,25 @@ export default function InvoicesPage() {
                   <td className="p-3 text-right font-medium">{money(inv.total)}</td>
                   <td className="p-3 text-right text-slate-600">
                     {money(inv.amountDue)}
+                  </td>
+                  <td className="p-3 text-right">
+                    {canHardDelete(inv.status) ? (
+                      <button
+                        type="button"
+                        disabled={busyId === inv.id}
+                        onClick={() => remove(inv)}
+                        className="text-red-600 hover:underline disabled:opacity-40"
+                      >
+                        Delete
+                      </button>
+                    ) : (
+                      <span
+                        className="text-slate-400 text-xs"
+                        title="Authorised/paid invoices post to the ledger — void first, then delete"
+                      >
+                        Void first
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

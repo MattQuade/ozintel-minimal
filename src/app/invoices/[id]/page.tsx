@@ -193,7 +193,8 @@ export default function InvoiceDetailPage() {
   };
 
   const deleteDraft = async () => {
-    if (!confirm('Delete this draft invoice?')) return;
+    if (!invoice) return;
+    if (!confirm(`Delete ${invoice.number}?`)) return;
     setBusy(true);
     try {
       const res = await fetch('/api/invoices', {
@@ -307,6 +308,16 @@ export default function InvoiceDetailPage() {
                   Delete
                 </button>
               </>
+            )}
+            {invoice.status === 'void' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={deleteDraft}
+                className="bg-white border border-red-200 text-red-700 px-4 py-2 rounded-xl text-sm"
+              >
+                Delete
+              </button>
             )}
             {(invoice.status === 'authorised' || invoice.status === 'draft') && (
               <button

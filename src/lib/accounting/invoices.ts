@@ -350,8 +350,12 @@ export async function deleteInvoice(id: string): Promise<boolean> {
     const invoices = await readInvoicesUnlocked();
     const inv = invoices.find((i) => i.id === id);
     if (!inv) return false;
-    if (inv.status !== "draft") {
-      throw new Error("Only draft invoices can be deleted");
+    // Draft: never posted. Void: ledger already reversed — safe to remove record.
+    // Authorised/paid keep AR postings; void first so balances are not orphaned.
+    if (inv.status !== "draft" && inv.status !== "void") {
+      throw new Error(
+        "Only draft or void invoices can be deleted — void authorised invoices first"
+      );
     }
     const next = invoices.filter((i) => i.id !== id);
     await writeInvoicesUnlocked(next);
