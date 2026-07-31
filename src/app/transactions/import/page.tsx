@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
+import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
 
@@ -15,12 +16,27 @@ type BankAccountOption = {
 
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
 
+/** Classified import row with optional receipt draft + post-save ledger link. */
+type ClassifiedImportRow = {
+  original: unknown[];
+  rule?: unknown;
+  type: string;
+  accountCode?: string;
+  accountName?: string;
+  noGST?: boolean;
+  descriptionOverride?: string;
+  receiptIds?: string[];
+  /** Set after row is written to ledger — enables immediate receipt linking. */
+  ledgerEntryId?: string;
+  [key: string]: unknown;
+};
+
 export default function BankImport() {
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [coa, setCoa] = useState<CoaOption[]>([]);
   const [selectedAccount, setSelectedAccount] = useState('');
   const [preview, setPreview] = useState<any[]>([]);
-  const [classified, setClassified] = useState<any[]>([]);
+  const [classified, setClassified] = useState<ClassifiedImportRow[]>([]);
   const [status, setStatus] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState('');
@@ -81,14 +97,20 @@ export default function BankImport() {
     });
   };
 
-  const persistClassified = async (rows: any[]) => {
+  const persistClassified = async (rows: ClassifiedImportRow[]) => {
     const selectedBank = bankAccounts.find((acc) => acc.id === selectedAccount);
-    const toSave = rows
-      .filter((item) => item.type !== 'Uncategorized')
-      .map((item) => ({
-        date: toIsoDateInput(item.original[0]) || item.original[0],
-        amount: parseFloat(item.original[1] || 0),
-        description: item.descriptionOverride || item.original[2] || '',
+    const saveable = rows
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.type !== 'Uncategorized');
+
+    const toSave = saveable.map(({ item }) => {
+      const receiptIds = Array.isArray(item.receiptIds)
+        ? item.receiptIds.filter((id) => typeof id === 'string' && id.trim())
+        : [];
+      return {
+        date: toIsoDateInput(String(item.original[0] ?? '')) || item.original[0],
+        amount: parseFloat(String(item.original[1] || 0)),
+        description: item.descriptionOverride || String(item.original[2] || ''),
         type: item.type,
         accountCode: item.accountCode || '',
         accountName: item.accountName || '',
@@ -96,12 +118,17 @@ export default function BankImport() {
         hasGST: !item.noGST,
         reconciled: false,
         category:
-          typeof item.rule === 'object' ? item.rule?.name || 'Manual' : item.rule || 'Manual',
+          typeof item.rule === 'object' && item.rule && 'name' in (item.rule as object)
+            ? String((item.rule as { name?: string }).name || 'Manual')
+            : String(item.rule || 'Manual'),
         bankAccountId: selectedAccount,
         bankAccountName: selectedBank?.name || 'Unknown',
         timestamp: new Date().toISOString(),
         quarter,
-      }));
+        source: 'bank-import' as const,
+        ...(receiptIds.length > 0 ? { receiptIds } : {}),
+      };
+    });
 
     if (toSave.length === 0) {
       setStatus('Nothing to save — all rows are Uncategorized');
@@ -126,6 +153,28 @@ export default function BankImport() {
       }
       const data = await res.json();
       const count = data.saved || toSave.length;
+      const savedEntries = Array.isArray(data.savedEntries) ? data.savedEntries : [];
+
+      // Stamp ledger ids onto draft rows so later receipt uploads link immediately
+      setClassified(() => {
+        const next = rows.map((r) => ({ ...r }));
+        saveable.forEach(({ index }, i) => {
+          const saved = savedEntries[i] as
+            | { id?: string; receiptIds?: string[] }
+            | undefined;
+          if (!saved?.id || !next[index]) return;
+          next[index] = {
+            ...next[index],
+            ledgerEntryId: String(saved.id),
+            receiptIds:
+              Array.isArray(saved.receiptIds) && saved.receiptIds.length > 0
+                ? saved.receiptIds
+                : next[index].receiptIds || [],
+          };
+        });
+        return next;
+      });
+
       setSavedCount(count);
       setLedgerSaved(true);
       setStatus(`💾 Saved to Ledger — ${count} transactions → ${selectedBank?.name}`);
@@ -154,7 +203,11 @@ export default function BankImport() {
         preview,
         Array.isArray(rules) ? rules : [],
         selectedAccount || undefined
-      );
+      ).map((r) => ({
+        ...r,
+        original: Array.isArray(r.original) ? r.original : [],
+        receiptIds: [] as string[],
+      })) as ClassifiedImportRow[];
       setClassified(results);
       const matched = results.filter((r) => r.type !== 'Uncategorized').length;
       setStatus(`✅ ${matched} matched out of ${results.length} — saving to ledger…`);
@@ -199,6 +252,20 @@ export default function BankImport() {
     setLedgerSaved(false);
   };
 
+  const updateReceiptIds = (index: number, ids: string[]) => {
+    const updated = [...classified];
+    updated[index] = {
+      ...updated[index],
+      receiptIds: ids,
+    };
+    setClassified(updated);
+    // If already saved with ledgerEntryId, ReceiptAttach links on upload —
+    // no need to mark ledger dirty. Otherwise keep draft ids for next save.
+    if (!updated[index].ledgerEntryId) {
+      setLedgerSaved(false);
+    }
+  };
+
   return (
     <AccountingGate
       section="Transactions"
@@ -208,7 +275,8 @@ export default function BankImport() {
       <div className="p-10 max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
-          Upload → Classify (auto-saves matched rows) → Adjust Type/Account if needed → save updates
+          Upload → Classify (auto-saves matched rows) → Attach receipts / adjust Type/Account →
+          save updates
         </p>
 
         <div className="bg-white rounded-3xl shadow-xl p-10">
@@ -306,24 +374,32 @@ export default function BankImport() {
                       <th className="px-4 py-3 text-left">Rule</th>
                       <th className="px-4 py-3 text-left">Type</th>
                       <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-3 py-3 text-left w-[140px]">Receipt</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {classified.map((item, i) => {
                       const row = item.original;
                       const ruleName =
-                        typeof item.rule === 'object' && item.rule?.name
-                          ? item.rule.name
-                          : item.rule || 'Manual';
+                        typeof item.rule === 'object' &&
+                        item.rule &&
+                        'name' in (item.rule as object)
+                          ? String((item.rule as { name?: string }).name || 'Manual')
+                          : String(item.rule || 'Manual');
                       const typeAccounts = accountsForType(item.type);
+                      const receiptIds = Array.isArray(item.receiptIds)
+                        ? item.receiptIds
+                        : [];
 
                       return (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-4 py-3 whitespace-nowrap">
-                            {formatAuDate(row[0])}
+                            {formatAuDate(String(row[0] ?? ''))}
                           </td>
-                          <td className="px-4 py-3 font-medium">{row[1]}</td>
-                          <td className="px-4 py-3 max-w-xs truncate">{row[2] || '—'}</td>
+                          <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
+                          <td className="px-4 py-3 max-w-xs truncate">
+                            {String(row[2] || '—')}
+                          </td>
                           <td className="px-4 py-3 text-gray-600">{ruleName}</td>
                           <td className="px-4 py-3">
                             <select
@@ -357,6 +433,19 @@ export default function BankImport() {
                                 </option>
                               ))}
                             </select>
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            <div className="flex flex-col gap-1 min-w-[120px]">
+                              {receiptIds.length > 0 && (
+                                <ReceiptBadge receiptIds={receiptIds} />
+                              )}
+                              <ReceiptAttach
+                                compact
+                                receiptIds={receiptIds}
+                                onChange={(ids) => updateReceiptIds(i, ids)}
+                                ledgerEntryId={item.ledgerEntryId}
+                              />
+                            </div>
                           </td>
                         </tr>
                       );
