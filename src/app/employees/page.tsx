@@ -1,316 +1,1163 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
-import { formatAuDate } from '@/lib/accounting/dates';
+import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
+import { SUPER_GUARANTEE_PERCENT } from '@/lib/payroll/constants';
+
+type EmploymentStatus = 'full-time' | 'part-time' | 'casual' | 'terminated';
+type PayBasis = 'salary' | 'hourly';
+type ResidencyStatus = 'resident' | 'foreign';
+type PayFrequency = 'weekly' | 'fortnightly';
+type PayRunStatus = 'draft' | 'posted' | 'stp_submitted';
 
 type Employee = {
-  id: number;
-  firstName: string;
-  lastName: string;
+  id: string;
+  legalFirstName: string;
+  legalLastName: string;
+  preferredName: string;
   email: string;
   phone: string;
+  addressStreet: string;
+  addressSuburb: string;
+  addressState: string;
+  addressPostcode: string;
+  dateOfBirth: string;
+  startDate: string;
+  employmentStatus: EmploymentStatus;
   position: string;
   department: string;
-  address1: string;
-  suburb: string;
-  state: string;
-  postcode: string;
+  tfn: string;
+  residencyStatus: ResidencyStatus;
+  taxFreeThreshold: boolean;
+  payBasis: PayBasis;
+  ordinaryRate: number;
+  standardHoursPerWeek: number;
   bankAccountName: string;
   bsb: string;
   accountNumber: string;
-  superFund: string;
-  memberNumber: string;
-  tfn: string;
-  residencyStatus: string;
-  taxFreeThreshold: boolean;
-  payRate: number;
-  status: string;
+  superFundName: string;
+  superUsi: string;
+  superAbn: string;
+  superMemberNumber: string;
+  sgPercent: number;
+  leaveAnnualHours: number;
+  leaveSickHours: number;
+};
+
+type PayRunLine = {
+  employeeId: string;
+  employeeName: string;
+  ordinaryEarnings: number;
+  allowances: number;
+  overtime: number;
+  gross: number;
+  ote: number;
+  paygWithheld: number;
+  superAmount: number;
+  net: number;
+  hours: number;
+  ordinaryRate: number;
 };
 
 type PayRun = {
-  id: number;
-  period: string;
-  date: string;
-  employeesCount: number;
-  grossPay: number;
-  superGuarantee: number;
-  paygWithheld: number;
-  netPay: number;
-  status: 'Draft' | 'Finalised' | 'Submitted';
+  id: string;
+  number: string;
+  periodStart: string;
+  periodEnd: string;
+  paymentDate: string;
+  frequency: PayFrequency;
+  status: PayRunStatus;
+  employeeIds: string[];
+  lines: PayRunLine[];
+  totals: {
+    gross: number;
+    paygWithheld: number;
+    superAmount: number;
+    net: number;
+    employeeCount: number;
+  };
+  ledgerEntryIds: string[];
+  journalRef?: string;
+  postedAt?: string;
+  notes: string;
 };
 
-export default function EmployeesPage() {
-  const [activeTab, setActiveTab] = useState<'employees' | 'payruns' | 'payslips'>('employees');
-  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
-  const [showPayRunModal, setShowPayRunModal] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+const emptyEmployeeForm: Omit<Employee, 'id'> = {
+  legalFirstName: '',
+  legalLastName: '',
+  preferredName: '',
+  email: '',
+  phone: '',
+  addressStreet: '',
+  addressSuburb: '',
+  addressState: 'NSW',
+  addressPostcode: '',
+  dateOfBirth: '',
+  startDate: '',
+  employmentStatus: 'full-time',
+  position: '',
+  department: '',
+  tfn: '',
+  residencyStatus: 'resident',
+  taxFreeThreshold: true,
+  payBasis: 'salary',
+  ordinaryRate: 0,
+  standardHoursPerWeek: 38,
+  bankAccountName: '',
+  bsb: '',
+  accountNumber: '',
+  superFundName: '',
+  superUsi: '',
+  superAbn: '',
+  superMemberNumber: '',
+  sgPercent: SUPER_GUARANTEE_PERCENT,
+  leaveAnnualHours: 0,
+  leaveSickHours: 0,
+};
 
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: 1,
-      firstName: "Emily",
-      lastName: "Lam",
-      email: "lamthingocgiau201098@gmail.com",
-      phone: "0455447513",
-      position: "Bar Staff",
-      department: "Front of House",
-      address1: "10 Lockhart Road",
-      suburb: "Collingullie",
-      state: "NSW",
-      postcode: "2650",
-      bankAccountName: "Thi Ngoc Giau Lam",
-      bsb: "014-111",
-      accountNumber: "669453132",
-      superFund: "Australian Retirement Trust Super Savings",
-      memberNumber: "904257498",
-      tfn: "675480772",
-      residencyStatus: "Foreign Resident",
-      taxFreeThreshold: true,
-      payRate: 400,
-      status: "Active"
-    },
-    {
-      id: 2,
-      firstName: "Automne",
-      lastName: "Quade",
-      email: "automnequade1234@gmail.com",
-      phone: "0493456384",
-      position: "Wait Staff",
-      department: "Front of House",
-      address1: "",
-      suburb: "",
-      state: "NSW",
-      postcode: "",
-      bankAccountName: "",
-      bsb: "",
-      accountNumber: "",
-      superFund: "",
-      memberNumber: "",
-      tfn: "",
-      residencyStatus: "Australian Resident",
-      taxFreeThreshold: true,
-      payRate: 380,
-      status: "Active"
-    }
-  ]);
-
-  const [payRuns, setPayRuns] = useState<PayRun[]>([]);
-
-  const [form, setForm] = useState<any>({
-    firstName: '', lastName: '', email: '', phone: '', position: '', department: '',
-    address1: '', suburb: '', state: 'NSW', postcode: '',
-    bankAccountName: '', bsb: '', accountNumber: '',
-    superFund: 'Australian Retirement Trust Super Savings', memberNumber: '',
-    tfn: '', residencyStatus: 'Foreign Resident', taxFreeThreshold: true,
-    payRate: 400, status: 'Active'
+function money(n: number) {
+  return (Number(n) || 0).toLocaleString('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
   });
+}
+
+function maskTfn(tfn: string) {
+  const digits = String(tfn || '').replace(/\D/g, '');
+  if (!digits) return '—';
+  if (digits.length <= 3) return '***';
+  return `***${digits.slice(-3)}`;
+}
+
+function displayName(e: Employee) {
+  return (
+    e.preferredName?.trim() ||
+    `${e.legalFirstName} ${e.legalLastName}`.trim() ||
+    e.id
+  );
+}
+
+function statusLabel(s: PayRunStatus) {
+  if (s === 'draft') return 'Draft';
+  if (s === 'posted') return 'Posted';
+  return 'STP ready (not lodged)';
+}
+
+function statusClass(s: PayRunStatus) {
+  if (s === 'draft') return 'bg-yellow-100 text-yellow-800';
+  if (s === 'posted') return 'bg-green-100 text-green-800';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function fortnightDefaults() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 13);
+  return {
+    periodStart: toIsoDateInput(start),
+    periodEnd: toIsoDateInput(end),
+    paymentDate: toIsoDateInput(end),
+    frequency: 'fortnightly' as PayFrequency,
+  };
+}
+
+export default function EmployeesPage() {
+  const [activeTab, setActiveTab] = useState<'employees' | 'payruns' | 'payslips'>(
+    'employees'
+  );
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [payRuns, setPayRuns] = useState<PayRun[]>([]);
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyEmployeeForm);
+  const [saving, setSaving] = useState(false);
+
+  const [showPayRunModal, setShowPayRunModal] = useState(false);
+  const [payForm, setPayForm] = useState(fortnightDefaults);
+  const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [empRes, runRes] = await Promise.all([
+        fetch('/api/employees'),
+        fetch('/api/payruns'),
+      ]);
+      const empData = await empRes.json();
+      const runData = await runRes.json();
+      setEmployees(Array.isArray(empData) ? empData : []);
+      setPayRuns(Array.isArray(runData) ? runData : []);
+    } catch {
+      setStatus('Failed to load employment data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const activeEmployees = useMemo(
+    () => employees.filter((e) => e.employmentStatus !== 'terminated'),
+    [employees]
+  );
+
+  const selectedRun = useMemo(
+    () => payRuns.find((r) => r.id === selectedRunId) || null,
+    [payRuns, selectedRunId]
+  );
+
+  const payslipRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      payRunId: string;
+      payRunNumber: string;
+      employeeId: string;
+      employeeName: string;
+      paymentDate: string;
+      gross: number;
+      net: number;
+      status: PayRunStatus;
+    }> = [];
+    for (const run of payRuns) {
+      for (const line of run.lines) {
+        rows.push({
+          key: `${run.id}-${line.employeeId}`,
+          payRunId: run.id,
+          payRunNumber: run.number,
+          employeeId: line.employeeId,
+          employeeName: line.employeeName,
+          paymentDate: run.paymentDate,
+          gross: line.gross,
+          net: line.net,
+          status: run.status,
+        });
+      }
+    }
+    return rows;
+  }, [payRuns]);
 
   const openEmployeeModal = (emp?: Employee) => {
     if (emp) {
-      setEditingEmployee(emp);
-      setForm(emp);
+      setEditingId(emp.id);
+      const { id: _id, ...rest } = emp;
+      setForm({ ...emptyEmployeeForm, ...rest });
     } else {
-      setEditingEmployee(null);
-      setForm({ firstName: '', lastName: '', email: '', phone: '', position: '', department: '', address1: '', suburb: '', state: 'NSW', postcode: '', bankAccountName: '', bsb: '', accountNumber: '', superFund: 'Australian Retirement Trust Super Savings', memberNumber: '', tfn: '', residencyStatus: 'Foreign Resident', taxFreeThreshold: true, payRate: 400, status: 'Active' });
+      setEditingId(null);
+      setForm({ ...emptyEmployeeForm });
     }
     setShowEmployeeModal(true);
   };
 
-  const saveEmployee = () => {
-    if (!form.firstName || !form.lastName) return alert("First and Last Name required");
-
-    if (editingEmployee) {
-      setEmployees(employees.map(e => e.id === editingEmployee.id ? { ...form, id: e.id } : e));
-    } else {
-      setEmployees([...employees, { ...form, id: Date.now() }]);
+  const saveEmployee = async () => {
+    if (!form.legalFirstName.trim() || !form.legalLastName.trim()) {
+      setStatus('Legal first and last name are required');
+      return;
     }
-    setShowEmployeeModal(false);
+    setSaving(true);
+    setStatus('');
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingId ? { ...form, id: editingId } : form),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed');
+      setShowEmployeeModal(false);
+      await load();
+      setStatus('Employee saved');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const deleteEmployee = (id: number) => {
-    if (confirm("Delete employee?")) setEmployees(employees.filter(e => e.id !== id));
+  const deleteEmployee = async (id: string) => {
+    if (!confirm('Delete this employee?')) return;
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
+      await load();
+      setStatus('Employee deleted');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Delete failed');
+    }
   };
 
-  const createPayRun = () => {
-    const gross = employees.reduce((sum, e) => sum + e.payRate * 2, 0); // 2 weeks
-    const superG = Math.round(gross * 0.115);
-    const payg = Math.round(gross * 0.25);
-
-    const newRun: PayRun = {
-      id: Date.now(),
-      period: `Fortnight ending ${formatAuDate(new Date())}`,
-      date: formatAuDate(new Date()),
-      employeesCount: employees.length,
-      grossPay: gross,
-      superGuarantee: superG,
-      paygWithheld: payg,
-      netPay: gross - payg - superG,
-      status: 'Draft'
-    };
-
-    setPayRuns([newRun, ...payRuns]);
-    setShowPayRunModal(false);
-    alert(`Pay Run created for ${employees.length} employees. Total Gross: $${gross}`);
+  const openPayRunModal = () => {
+    setPayForm(fortnightDefaults());
+    setSelectedEmpIds(activeEmployees.map((e) => e.id));
+    setShowPayRunModal(true);
   };
+
+  const createPayRun = async () => {
+    if (!selectedEmpIds.length) {
+      setStatus('Select at least one employee');
+      return;
+    }
+    setSaving(true);
+    setStatus('');
+    try {
+      const res = await fetch('/api/payruns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payForm,
+          employeeIds: selectedEmpIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Create failed');
+      setShowPayRunModal(false);
+      setSelectedRunId(data.payRun.id);
+      setActiveTab('payruns');
+      await load();
+      setStatus(`Pay run ${data.payRun.number} created (draft)`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const postPayRun = async (id: string) => {
+    if (
+      !confirm(
+        'Post this pay run to the ledger? This creates wages, PAYG and super journals and cannot be undone in MVP.'
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/payruns/${id}/post`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Post failed');
+      await load();
+      setStatus(`Pay run ${data.payRun.number} posted to ledger`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Post failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markStpReady = async (id: string) => {
+    try {
+      const res = await fetch(`/api/payruns/${id}/stp-ready`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed');
+      await load();
+      setStatus('Marked STP-ready (lodgement not implemented yet)');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const deletePayRun = async (id: string) => {
+    if (!confirm('Delete this draft pay run?')) return;
+    try {
+      const res = await fetch('/api/payruns', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
+      if (selectedRunId === id) setSelectedRunId(null);
+      await load();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Delete failed');
+    }
+  };
+
+  const field = (label: string, children: ReactNode) => (
+    <div>
+      <label className="block text-sm text-gray-600 mb-1">{label}</label>
+      {children}
+    </div>
+  );
+
+  const inputCls = 'w-full border rounded-xl px-4 py-3';
 
   return (
     <AccountingGate section="Employees">
-    <div className="p-10 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-10">
-        <div>
-          <h1 className="text-4xl font-bold">Employment</h1>
-          <p className="text-gray-600">{employees.length} employees</p>
+      <div className="p-10 max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-4xl font-bold">Employment</h1>
+            <p className="text-gray-600">
+              {employees.length} employees · payroll posts to ledger on finalise
+            </p>
+          </div>
+          <div className="flex gap-3">
+            {activeTab === 'payruns' ? (
+              <button
+                type="button"
+                onClick={openPayRunModal}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700"
+              >
+                + Create Pay Run
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openEmployeeModal()}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700"
+              >
+                + Add Employee
+              </button>
+            )}
+          </div>
         </div>
-        <button onClick={() => openEmployeeModal()} className="bg-blue-600 text-white px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-blue-700">
-          + Add Employee
-        </button>
-      </div>
 
-      <div className="flex gap-2 mb-10 border-b pb-1">
-        {['employees', 'payruns', 'payslips'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab as any)}
-            className={`px-8 py-3 rounded-t-2xl font-medium transition-all ${activeTab === tab ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
-          >
-            {tab === 'employees' ? 'Employees' : tab === 'payruns' ? 'Pay Runs' : 'Payslips'}
-          </button>
-        ))}
-      </div>
+        {status && (
+          <div className="mb-6 rounded-2xl bg-slate-50 border px-4 py-3 text-sm text-slate-700">
+            {status}
+          </div>
+        )}
 
-      {/* Employees Tab */}
-      {activeTab === 'employees' && (
-        <div className="bg-white rounded-3xl shadow overflow-hidden">
-          {employees.map(emp => (
-            <div key={emp.id} className="p-8 border-b flex justify-between items-center hover:bg-gray-50">
-              <div>
-                <h2 className="text-2xl font-semibold">{emp.firstName} {emp.lastName}</h2>
-                <p className="text-gray-600">{emp.position} • ${emp.payRate}/week</p>
-                <p className="text-sm text-gray-500">{emp.email} • {emp.phone}</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => openEmployeeModal(emp)} className="px-6 py-2 border rounded-xl hover:bg-gray-50">Edit</button>
-                <button onClick={() => deleteEmployee(emp.id)} className="px-6 py-2 border border-red-300 text-red-600 rounded-xl hover:bg-red-50">Delete</button>
-              </div>
-            </div>
+        <div className="flex gap-2 mb-8 border-b pb-1">
+          {(
+            [
+              ['employees', 'Employees'],
+              ['payruns', 'Pay Runs'],
+              ['payslips', 'Payslips'],
+            ] as const
+          ).map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-8 py-3 rounded-t-2xl font-medium transition-all ${
+                activeTab === tab ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'
+              }`}
+            >
+              {label}
+            </button>
           ))}
         </div>
-      )}
 
-      {/* Pay Runs Tab - ATO style */}
-      {activeTab === 'payruns' && (
-        <div className="bg-white rounded-3xl shadow p-10">
-          <div className="flex justify-between mb-8">
-            <h2 className="text-3xl font-semibold">Pay Runs</h2>
-            <button onClick={() => setShowPayRunModal(true)} className="bg-blue-600 text-white px-8 py-4 rounded-2xl hover:bg-blue-700">
-              + Create New Pay Run
-            </button>
+        {loading ? (
+          <p className="text-center py-20 text-gray-500">Loading…</p>
+        ) : null}
+
+        {!loading && activeTab === 'employees' && (
+          <div className="bg-white rounded-3xl shadow overflow-hidden">
+            {employees.length === 0 ? (
+              <p className="text-center py-20 text-gray-500">
+                No employees yet. Add employment records to run payroll.
+              </p>
+            ) : (
+              employees.map((emp) => (
+                <div
+                  key={emp.id}
+                  className="p-6 border-b flex flex-wrap justify-between items-center gap-4 hover:bg-gray-50"
+                >
+                  <div>
+                    <h2 className="text-xl font-semibold">{displayName(emp)}</h2>
+                    <p className="text-gray-600">
+                      {emp.position || 'No position'} · {emp.employmentStatus}
+                      {emp.payBasis === 'salary'
+                        ? ` · ${money(emp.ordinaryRate)}/yr`
+                        : ` · ${money(emp.ordinaryRate)}/hr`}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {emp.email || 'No email'} · TFN {maskTfn(emp.tfn)} · SG{' '}
+                      {emp.sgPercent}%
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openEmployeeModal(emp)}
+                      className="px-5 py-2 border rounded-xl hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteEmployee(emp.id)}
+                      className="px-5 py-2 border border-red-300 text-red-600 rounded-xl hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
+        )}
 
-          {payRuns.length === 0 ? (
-            <p className="text-center py-20 text-gray-500">No pay runs created yet.</p>
-          ) : (
-            payRuns.map(run => (
-              <div key={run.id} className="border rounded-2xl p-6 mb-4 flex justify-between items-center">
-                <div>
-                  <p className="font-semibold">{run.period}</p>
-                  <p className="text-sm text-gray-500">{run.date}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">${run.grossPay}</p>
-                  <p className="text-sm text-gray-500">{run.employeesCount} employees</p>
-                </div>
-                <div className={`px-5 py-2 rounded-full text-sm ${run.status === 'Draft' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
-                  {run.status}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Payslips Tab */}
-      {activeTab === 'payslips' && (
-        <div className="bg-white rounded-3xl shadow p-12 text-center">
-          <h2 className="text-3xl font-semibold mb-4">Payslips</h2>
-          <p className="text-gray-500">Payslips will be generated from finalised Pay Runs.</p>
-        </div>
-      )}
-
-      {/* Employee Modal - Full Xero-style */}
-      {showEmployeeModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-auto">
-            <div className="p-10">
-              <h2 className="text-3xl font-bold mb-8">{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                {/* Personal Details */}
-                <div>
-                  <h3 className="font-semibold mb-4">Personal Details</h3>
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div><label>First Name *</label><input className="w-full border rounded-xl px-4 py-3 mt-1" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} /></div>
-                      <div><label>Last Name *</label><input className="w-full border rounded-xl px-4 py-3 mt-1" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} /></div>
+        {!loading && activeTab === 'payruns' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-3xl shadow p-6">
+              <h2 className="text-2xl font-semibold mb-4">Pay runs</h2>
+              {payRuns.length === 0 ? (
+                <p className="text-center py-12 text-gray-500">
+                  No pay runs yet. Create a fortnightly or weekly run.
+                </p>
+              ) : (
+                payRuns.map((run) => (
+                  <button
+                    key={run.id}
+                    type="button"
+                    onClick={() => setSelectedRunId(run.id)}
+                    className={`w-full text-left border rounded-2xl p-4 mb-3 hover:bg-gray-50 ${
+                      selectedRunId === run.id ? 'border-blue-500 bg-blue-50/40' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          {run.number} · {run.frequency}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {formatAuDate(run.periodStart)} – {formatAuDate(run.periodEnd)}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Pay {formatAuDate(run.paymentDate)} ·{' '}
+                          {run.totals.employeeCount} employees
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">{money(run.totals.gross)}</p>
+                        <span
+                          className={`inline-block mt-1 px-3 py-1 rounded-full text-xs ${statusClass(
+                            run.status
+                          )}`}
+                        >
+                          {statusLabel(run.status)}
+                        </span>
+                      </div>
                     </div>
-                    <div><label>Email</label><input type="email" className="w-full border rounded-xl px-4 py-3 mt-1" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-                    <div><label>Phone</label><input type="tel" className="w-full border rounded-xl px-4 py-3 mt-1" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="bg-white rounded-3xl shadow p-6">
+              {!selectedRun ? (
+                <p className="text-center py-16 text-gray-500">
+                  Select a pay run to view lines and post to the ledger.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-2xl font-semibold">{selectedRun.number}</h2>
+                      <p className="text-sm text-gray-500">
+                        Gross {money(selectedRun.totals.gross)} · PAYG{' '}
+                        {money(selectedRun.totals.paygWithheld)} · Super{' '}
+                        {money(selectedRun.totals.superAmount)} · Net{' '}
+                        {money(selectedRun.totals.net)}
+                      </p>
+                      {selectedRun.journalRef && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Journal {selectedRun.journalRef}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedRun.status === 'draft' && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => postPayRun(selectedRun.id)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Post / Finalise
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deletePayRun(selectedRun.id)}
+                            className="border border-red-300 text-red-600 px-4 py-2 rounded-xl"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                      {selectedRun.status === 'posted' && (
+                        <button
+                          type="button"
+                          onClick={() => markStpReady(selectedRun.id)}
+                          className="border px-4 py-2 rounded-xl hover:bg-gray-50"
+                          title="Placeholder for future STP lodgement"
+                        >
+                          Mark STP-ready
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b">
+                          <th className="py-2 pr-2">Employee</th>
+                          <th className="py-2 pr-2 text-right">Gross</th>
+                          <th className="py-2 pr-2 text-right">PAYG</th>
+                          <th className="py-2 pr-2 text-right">Super</th>
+                          <th className="py-2 pr-2 text-right">Net</th>
+                          <th className="py-2">Payslip</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRun.lines.map((line) => (
+                          <tr key={line.employeeId} className="border-b last:border-0">
+                            <td className="py-3 pr-2 font-medium">{line.employeeName}</td>
+                            <td className="py-3 pr-2 text-right">{money(line.gross)}</td>
+                            <td className="py-3 pr-2 text-right">
+                              {money(line.paygWithheld)}
+                            </td>
+                            <td className="py-3 pr-2 text-right">
+                              {money(line.superAmount)}
+                            </td>
+                            <td className="py-3 pr-2 text-right">{money(line.net)}</td>
+                            <td className="py-3">
+                              <Link
+                                href={`/employees/payruns/${selectedRun.id}/payslip/${line.employeeId}`}
+                                className="text-blue-600 hover:underline"
+                              >
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!loading && activeTab === 'payslips' && (
+          <div className="bg-white rounded-3xl shadow overflow-hidden">
+            {payslipRows.length === 0 ? (
+              <p className="text-center py-20 text-gray-500">
+                Payslips appear after you create a pay run.
+              </p>
+            ) : (
+              payslipRows.map((row) => (
+                <div
+                  key={row.key}
+                  className="p-5 border-b flex flex-wrap justify-between items-center gap-3 hover:bg-gray-50"
+                >
+                  <div>
+                    <p className="font-semibold">{row.employeeName}</p>
+                    <p className="text-sm text-gray-500">
+                      {row.payRunNumber} · Pay {formatAuDate(row.paymentDate)} ·{' '}
+                      {statusLabel(row.status)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right text-sm">
+                      <p>Gross {money(row.gross)}</p>
+                      <p className="text-gray-500">Net {money(row.net)}</p>
+                    </div>
+                    <Link
+                      href={`/employees/payruns/${row.payRunId}/payslip/${row.employeeId}`}
+                      className="px-5 py-2 border rounded-xl hover:bg-white"
+                    >
+                      Open payslip
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {showEmployeeModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-auto">
+              <div className="p-8">
+                <h2 className="text-3xl font-bold mb-6">
+                  {editingId ? 'Edit Employee' : 'Add Employee'}
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Personal</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Legal first name *',
+                        <input
+                          className={inputCls}
+                          value={form.legalFirstName}
+                          onChange={(e) =>
+                            setForm({ ...form, legalFirstName: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Legal last name *',
+                        <input
+                          className={inputCls}
+                          value={form.legalLastName}
+                          onChange={(e) =>
+                            setForm({ ...form, legalLastName: e.target.value })
+                          }
+                        />
+                      )}
+                    </div>
+                    {field(
+                      'Preferred name',
+                      <input
+                        className={inputCls}
+                        value={form.preferredName}
+                        onChange={(e) =>
+                          setForm({ ...form, preferredName: e.target.value })
+                        }
+                      />
+                    )}
+                    {field(
+                      'Email',
+                      <input
+                        type="email"
+                        className={inputCls}
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      />
+                    )}
+                    {field(
+                      'Phone',
+                      <input
+                        className={inputCls}
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Date of birth',
+                        <input
+                          type="date"
+                          className={inputCls}
+                          value={toIsoDateInput(form.dateOfBirth)}
+                          onChange={(e) =>
+                            setForm({ ...form, dateOfBirth: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Start date',
+                        <input
+                          type="date"
+                          className={inputCls}
+                          value={toIsoDateInput(form.startDate)}
+                          onChange={(e) =>
+                            setForm({ ...form, startDate: e.target.value })
+                          }
+                        />
+                      )}
+                    </div>
+                    {field(
+                      'Street address',
+                      <input
+                        className={inputCls}
+                        value={form.addressStreet}
+                        onChange={(e) =>
+                          setForm({ ...form, addressStreet: e.target.value })
+                        }
+                      />
+                    )}
+                    <div className="grid grid-cols-3 gap-3">
+                      {field(
+                        'Suburb',
+                        <input
+                          className={inputCls}
+                          value={form.addressSuburb}
+                          onChange={(e) =>
+                            setForm({ ...form, addressSuburb: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'State',
+                        <input
+                          className={inputCls}
+                          value={form.addressState}
+                          onChange={(e) =>
+                            setForm({ ...form, addressState: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Postcode',
+                        <input
+                          className={inputCls}
+                          value={form.addressPostcode}
+                          onChange={(e) =>
+                            setForm({ ...form, addressPostcode: e.target.value })
+                          }
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Employment & pay</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Status',
+                        <select
+                          className={inputCls}
+                          value={form.employmentStatus}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              employmentStatus: e.target.value as EmploymentStatus,
+                            })
+                          }
+                        >
+                          <option value="full-time">Full-time</option>
+                          <option value="part-time">Part-time</option>
+                          <option value="casual">Casual</option>
+                          <option value="terminated">Terminated</option>
+                        </select>
+                      )}
+                      {field(
+                        'Pay basis',
+                        <select
+                          className={inputCls}
+                          value={form.payBasis}
+                          onChange={(e) =>
+                            setForm({ ...form, payBasis: e.target.value as PayBasis })
+                          }
+                        >
+                          <option value="salary">Salary (annual)</option>
+                          <option value="hourly">Hourly</option>
+                        </select>
+                      )}
+                    </div>
+                    {field(
+                      'Position',
+                      <input
+                        className={inputCls}
+                        value={form.position}
+                        onChange={(e) => setForm({ ...form, position: e.target.value })}
+                      />
+                    )}
+                    {field(
+                      'Department',
+                      <input
+                        className={inputCls}
+                        value={form.department}
+                        onChange={(e) =>
+                          setForm({ ...form, department: e.target.value })
+                        }
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        form.payBasis === 'salary' ? 'Annual salary' : 'Hourly rate',
+                        <input
+                          type="number"
+                          className={inputCls}
+                          value={form.ordinaryRate || ''}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              ordinaryRate: Number(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Standard hours / week',
+                        <input
+                          type="number"
+                          className={inputCls}
+                          value={form.standardHoursPerWeek || ''}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              standardHoursPerWeek: Number(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      )}
+                    </div>
+
+                    <h3 className="font-semibold pt-2">Tax</h3>
+                    {field(
+                      'TFN (stored locally — masked in lists)',
+                      <input
+                        className={inputCls}
+                        value={form.tfn}
+                        onChange={(e) => setForm({ ...form, tfn: e.target.value })}
+                        autoComplete="off"
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Residency',
+                        <select
+                          className={inputCls}
+                          value={form.residencyStatus}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              residencyStatus: e.target.value as ResidencyStatus,
+                            })
+                          }
+                        >
+                          <option value="resident">Australian resident</option>
+                          <option value="foreign">Foreign resident</option>
+                        </select>
+                      )}
+                      {field(
+                        'Tax-free threshold',
+                        <select
+                          className={inputCls}
+                          value={form.taxFreeThreshold ? 'yes' : 'no'}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              taxFreeThreshold: e.target.value === 'yes',
+                            })
+                          }
+                        >
+                          <option value="yes">Claimed</option>
+                          <option value="no">Not claimed</option>
+                        </select>
+                      )}
+                    </div>
+
+                    <h3 className="font-semibold pt-2">Bank</h3>
+                    {field(
+                      'Account name',
+                      <input
+                        className={inputCls}
+                        value={form.bankAccountName}
+                        onChange={(e) =>
+                          setForm({ ...form, bankAccountName: e.target.value })
+                        }
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'BSB',
+                        <input
+                          className={inputCls}
+                          value={form.bsb}
+                          onChange={(e) => setForm({ ...form, bsb: e.target.value })}
+                        />
+                      )}
+                      {field(
+                        'Account number',
+                        <input
+                          className={inputCls}
+                          value={form.accountNumber}
+                          onChange={(e) =>
+                            setForm({ ...form, accountNumber: e.target.value })
+                          }
+                        />
+                      )}
+                    </div>
+
+                    <h3 className="font-semibold pt-2">Superannuation</h3>
+                    {field(
+                      'Fund name',
+                      <input
+                        className={inputCls}
+                        value={form.superFundName}
+                        onChange={(e) =>
+                          setForm({ ...form, superFundName: e.target.value })
+                        }
+                      />
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'USI',
+                        <input
+                          className={inputCls}
+                          value={form.superUsi}
+                          onChange={(e) =>
+                            setForm({ ...form, superUsi: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Fund ABN',
+                        <input
+                          className={inputCls}
+                          value={form.superAbn}
+                          onChange={(e) =>
+                            setForm({ ...form, superAbn: e.target.value })
+                          }
+                        />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Member number',
+                        <input
+                          className={inputCls}
+                          value={form.superMemberNumber}
+                          onChange={(e) =>
+                            setForm({ ...form, superMemberNumber: e.target.value })
+                          }
+                        />
+                      )}
+                      {field(
+                        'SG %',
+                        <input
+                          type="number"
+                          className={inputCls}
+                          value={form.sgPercent || ''}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              sgPercent: Number(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Bank, Super, Tax, Pay, Address fields - all included */}
-                {/* (Condensed for space but all categories are present) */}
-                <div>
-                  <h3 className="font-semibold mb-4">Bank Details</h3>
-                  <input className="w-full border rounded-xl px-4 py-3 mb-4" placeholder="Account Name" value={form.bankAccountName} onChange={e => setForm({...form, bankAccountName: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <input className="border rounded-xl px-4 py-3" placeholder="BSB" value={form.bsb} onChange={e => setForm({...form, bsb: e.target.value})} />
-                    <input className="border rounded-xl px-4 py-3" placeholder="Account Number" value={form.accountNumber} onChange={e => setForm({...form, accountNumber: e.target.value})} />
-                  </div>
+                <div className="flex gap-4 mt-10">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={saveEmployee}
+                    className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-semibold disabled:opacity-50"
+                  >
+                    {saving ? 'Saving…' : 'Save Employee'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmployeeModal(false)}
+                    className="flex-1 border py-4 rounded-2xl font-semibold"
+                  >
+                    Cancel
+                  </button>
                 </div>
-
-                <div>
-                  <h3 className="font-semibold mb-4">Superannuation</h3>
-                  <input className="w-full border rounded-xl px-4 py-3 mb-4" placeholder="Super Fund" value={form.superFund} onChange={e => setForm({...form, superFund: e.target.value})} />
-                  <input className="w-full border rounded-xl px-4 py-3" placeholder="Member Number" value={form.memberNumber} onChange={e => setForm({...form, memberNumber: e.target.value})} />
-                </div>
-
-                <div>
-                  <h3 className="font-semibold mb-4">Tax</h3>
-                  <input className="w-full border rounded-xl px-4 py-3 mb-4" placeholder="TFN" value={form.tfn} onChange={e => setForm({...form, tfn: e.target.value})} />
-                  <select className="w-full border rounded-xl px-4 py-3" value={form.residencyStatus} onChange={e => setForm({...form, residencyStatus: e.target.value})}>
-                    <option>Australian Resident</option>
-                    <option>Foreign Resident</option>
-                  </select>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold mb-4">Pay</h3>
-                  <input type="number" className="w-full border rounded-xl px-4 py-3" placeholder="Weekly Pay Rate" value={form.payRate} onChange={e => setForm({...form, payRate: Number(e.target.value)})} />
-                </div>
-              </div>
-
-              <div className="flex gap-4 mt-12">
-                <button onClick={saveEmployee} className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-semibold">Save Employee</button>
-                <button onClick={() => setShowEmployeeModal(false)} className="flex-1 border py-4 rounded-2xl font-semibold">Cancel</button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Create Pay Run Modal */}
-      {showPayRunModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl p-10 w-full max-w-lg">
-            <h2 className="text-2xl font-bold mb-6">Create New Pay Run</h2>
-            <button onClick={createPayRun} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-semibold mb-4">Create Fortnightly Pay Run</button>
-            <button onClick={() => setShowPayRunModal(false)} className="w-full border py-4 rounded-2xl">Cancel</button>
+        {showPayRunModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-lg max-h-[90vh] overflow-auto">
+              <h2 className="text-2xl font-bold mb-6">Create Pay Run</h2>
+              <div className="space-y-4">
+                {field(
+                  'Frequency',
+                  <select
+                    className={inputCls}
+                    value={payForm.frequency}
+                    onChange={(e) =>
+                      setPayForm({
+                        ...payForm,
+                        frequency: e.target.value as PayFrequency,
+                      })
+                    }
+                  >
+                    <option value="fortnightly">Fortnightly</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                )}
+                {field(
+                  'Period start',
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={payForm.periodStart}
+                    onChange={(e) =>
+                      setPayForm({ ...payForm, periodStart: e.target.value })
+                    }
+                  />
+                )}
+                {field(
+                  'Period end',
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={payForm.periodEnd}
+                    onChange={(e) =>
+                      setPayForm({ ...payForm, periodEnd: e.target.value })
+                    }
+                  />
+                )}
+                {field(
+                  'Payment date',
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={payForm.paymentDate}
+                    onChange={(e) =>
+                      setPayForm({ ...payForm, paymentDate: e.target.value })
+                    }
+                  />
+                )}
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Employees</p>
+                  <div className="max-h-48 overflow-auto border rounded-xl p-3 space-y-2">
+                    {activeEmployees.length === 0 ? (
+                      <p className="text-sm text-gray-500">No active employees</p>
+                    ) : (
+                      activeEmployees.map((emp) => (
+                        <label key={emp.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmpIds.includes(emp.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedEmpIds([...selectedEmpIds, emp.id]);
+                              } else {
+                                setSelectedEmpIds(
+                                  selectedEmpIds.filter((id) => id !== emp.id)
+                                );
+                              }
+                            }}
+                          />
+                          {displayName(emp)}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={createPayRun}
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-semibold mt-6 disabled:opacity-50"
+              >
+                {saving ? 'Creating…' : 'Create draft pay run'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPayRunModal(false)}
+                className="w-full border py-4 rounded-2xl mt-3"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </AccountingGate>
   );
 }

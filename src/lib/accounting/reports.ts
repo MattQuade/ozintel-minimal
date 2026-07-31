@@ -364,7 +364,7 @@ function isGstFree(
 /**
  * Simple BAS-style GST summary (GST-inclusive amounts ÷ 11).
  * G1 = taxable sales (ex GST), G10 = capital, G11 = non-capital purchases (ex GST).
- * PAYG estimate = 15% of wages-like expenses (indicative only).
+ * PAYG: prefer credits to 909 PAYGW Payable from payroll; else 15% of wages (indicative).
  */
 export function buildBasSummary(
   entries: LedgerEntry[],
@@ -380,6 +380,7 @@ export function buildBasSummary(
   let g10Inc = 0;
   let g11Inc = 0;
   let wagesTotal = 0;
+  let paygFromLedger = 0;
   let taxableSalesCount = 0;
   let taxablePurchaseCount = 0;
   let entryCount = 0;
@@ -390,12 +391,19 @@ export function buildBasSummary(
     entryCount += 1;
 
     const type = String(entry.type || "");
-    const abs = Math.abs(Number(entry.amount) || 0);
+    const amount = Number(entry.amount) || 0;
+    const abs = Math.abs(amount);
     if (abs < 0.005) continue;
 
     const code = resolveAccountCode(entry);
     const coaAcc = code ? coaByCode.get(code) : undefined;
     const name = resolveAccountName(entry, coaByCode).toLowerCase();
+
+    // Payroll posts Cr 909 (negative amount) = PAYG withheld
+    if (code === "909") {
+      paygFromLedger += amount < 0 ? abs : -abs;
+    }
+
     const isWages =
       type === "Expense" &&
       (code === "1965" ||
@@ -448,7 +456,10 @@ export function buildBasSummary(
   }
 
   const netGst = round2(gstCollected - gstPaid);
-  const paygWithheldEstimate = round2(wagesTotal * 0.15);
+  const paygLedger = round2(Math.max(0, paygFromLedger));
+  const paygFallback = round2(wagesTotal * 0.15);
+  const useLedgerPayg = paygLedger > 0.009;
+  const paygWithheldEstimate = useLedgerPayg ? paygLedger : paygFallback;
 
   return {
     period: {
@@ -470,7 +481,9 @@ export function buildBasSummary(
     taxableSalesCount,
     taxablePurchaseCount,
     entryCount,
-    note: "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG estimate = 15% of wages (indicative only).",
+    note: useLedgerPayg
+      ? "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG from ledger account 909 (payroll)."
+      : "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG estimate = 15% of wages (no 909 payroll postings in period).",
   };
 }
 

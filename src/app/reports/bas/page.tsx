@@ -73,7 +73,7 @@ export default function BasReportPage() {
       ['G10 Capital purchases ex GST', moneyCsv(report.g10CapitalPurchases)],
       ['G11 Non-capital purchases ex GST', moneyCsv(report.g11NonCapitalPurchases)],
       ['Wages total', moneyCsv(report.wagesTotal)],
-      ['PAYG estimate (15%)', moneyCsv(report.paygWithheldEstimate)],
+      ['PAYG withheld (909 / estimate)', moneyCsv(report.paygWithheldEstimate)],
     ]);
   };
 
@@ -197,7 +197,7 @@ export default function BasReportPage() {
                 <span className="font-medium">{money(report.wagesTotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span>PAYG withheld estimate (15%)</span>
+                <span>PAYG withheld (ledger 909 or estimate)</span>
                 <span className="font-medium">{money(report.paygWithheldEstimate)}</span>
               </div>
             </div>

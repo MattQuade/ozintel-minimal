@@ -86,6 +86,14 @@ export function getInvoicesFilePath(): string {
   return path.join(getAccountingDataDir(), "invoices.json");
 }
 
+export function getEmployeesFilePath(): string {
+  return path.join(getAccountingDataDir(), "employees.json");
+}
+
+export function getPayRunsFilePath(): string {
+  return path.join(getAccountingDataDir(), "payruns.json");
+}
+
 /** Receipt evidence files + metadata (ATO-justifiable expense attachments). */
 export function getReceiptsDir(): string {
   return path.join(getAccountingDataDir(), "receipts");
