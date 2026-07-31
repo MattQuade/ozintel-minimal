@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type Customer = { id: string; name: string };
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
@@ -177,13 +178,18 @@ export default function NewInvoicePage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">Issue date</label>
+              <label className="block text-sm text-slate-600 mb-1">
+                Issue date
+              </label>
               <input
                 type="date"
                 className="w-full border border-slate-300 rounded-xl px-3 py-2"
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
               />
+              <p className="text-xs text-slate-400 mt-1">
+                {formatAuDate(issueDate) || 'DD/MM/YYYY'}
+              </p>
             </div>
             <div>
               <label className="block text-sm text-slate-600 mb-1">Due date</label>
@@ -193,6 +199,9 @@ export default function NewInvoicePage() {
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
+              <p className="text-xs text-slate-400 mt-1">
+                {formatAuDate(dueDate) || 'DD/MM/YYYY'}
+              </p>
             </div>
           </div>
 
@@ -239,14 +248,21 @@ export default function NewInvoicePage() {
                     <label className="block text-xs text-slate-500 mb-1">Qty</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="1"
+                      min="0"
                       className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
                       value={line.quantity}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          updateLine(line.id, { quantity: 1 });
+                          return;
+                        }
+                        const n = parseFloat(raw);
                         updateLine(line.id, {
-                          quantity: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                          quantity: Number.isFinite(n) ? n : 1,
+                        });
+                      }}
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -255,14 +271,21 @@ export default function NewInvoicePage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="1"
+                      min="0"
                       className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
                       value={line.unitPrice}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          updateLine(line.id, { unitPrice: 0 });
+                          return;
+                        }
+                        const n = parseFloat(raw);
                         updateLine(line.id, {
-                          unitPrice: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                          unitPrice: Number.isFinite(n) ? n : 0,
+                        });
+                      }}
                     />
                   </div>
                   <div className="md:col-span-3">
@@ -317,12 +340,12 @@ export default function NewInvoicePage() {
               className="w-full border border-slate-300 rounded-xl px-3 py-2"
               value={matchKeyword}
               onChange={(e) => setMatchKeyword(e.target.value)}
-              placeholder="e.g. Katarina"
+              placeholder="e.g. job name or reference"
             />
             <p className="text-xs text-slate-500 mt-1">
-              Used with bank deposits for auto-reconcile (e.g. Katarina). When a
-              deposit amount matches amount due and the bank description contains
-              this keyword, the payment is applied automatically.
+              Used with bank deposits for auto-reconcile. When a deposit amount
+              matches amount due and the bank description contains this keyword,
+              the payment is applied automatically.
             </p>
           </div>
 

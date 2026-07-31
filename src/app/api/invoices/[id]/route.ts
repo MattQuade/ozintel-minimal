@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-/** Update notes / matchKeyword (including on authorised invoices). */
+/** Update notes / matchKeyword (any status); number editable while draft. */
 export async function PATCH(req: Request, { params }: Params) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
@@ -35,11 +35,15 @@ export async function PATCH(req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const invoice = await upsertInvoice({
+    const patch: Parameters<typeof upsertInvoice>[0] = {
       id,
       notes: body.notes,
       matchKeyword: body.matchKeyword,
-    });
+    };
+    if (body.number !== undefined) {
+      patch.number = body.number;
+    }
+    const invoice = await upsertInvoice(patch);
     return NextResponse.json({ success: true, invoice });
   } catch (error) {
     console.error("Invoice PATCH error:", error);

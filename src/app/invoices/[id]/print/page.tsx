@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type InvoiceLine = {
   id: string;
@@ -107,8 +108,12 @@ export default function InvoicePrintPage() {
             </div>
             <div className="text-right text-sm">
               <div className="text-xl font-semibold">{invoice.number}</div>
-              <div className="text-slate-600 mt-1">Issue: {invoice.issueDate}</div>
-              <div className="text-slate-600">Due: {invoice.dueDate}</div>
+              <div className="text-slate-600 mt-1">
+                Issue: {formatAuDate(invoice.issueDate)}
+              </div>
+              <div className="text-slate-600">
+                Due: {formatAuDate(invoice.dueDate)}
+              </div>
               <div className="capitalize mt-1 text-slate-500">{invoice.status}</div>
             </div>
           </header>

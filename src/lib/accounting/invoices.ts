@@ -61,7 +61,7 @@ export type Invoice = {
   amountDue: number;
   notes: string;
   /**
-   * Optional bank-deposit auto-reconcile keyword (e.g. "Katarina").
+   * Optional bank-deposit auto-reconcile keyword (e.g. job name or reference).
    * Case-insensitive contains match against bank description when amountDue matches.
    */
   matchKeyword: string;
@@ -181,6 +181,23 @@ function nextInvoiceNumber(invoices: Invoice[]): string {
   return `INV-${String(max + 1).padStart(4, "0")}`;
 }
 
+function assertUniqueInvoiceNumber(
+  invoices: Invoice[],
+  number: string,
+  excludeId?: string
+) {
+  const normalized = number.trim().toLowerCase();
+  if (!normalized) throw new Error("Invoice number is required");
+  const clash = invoices.find(
+    (inv) =>
+      inv.id !== excludeId &&
+      String(inv.number || "").trim().toLowerCase() === normalized
+  );
+  if (clash) {
+    throw new Error(`Invoice number "${number.trim()}" is already in use`);
+  }
+}
+
 function normalizeLine(input: Partial<InvoiceLine>, index: number): InvoiceLine {
   const description = String(input.description || "").trim();
   const accountCode = String(input.accountCode || "").trim();
@@ -280,9 +297,15 @@ export async function upsertInvoice(
     const totals = computeInvoiceTotals(lines);
     const now = new Date().toISOString();
 
+    const requestedNumber = String(
+      input.number !== undefined ? input.number : existing?.number || ""
+    ).trim();
+    const number = requestedNumber || nextInvoiceNumber(invoices);
+    assertUniqueInvoiceNumber(invoices, number, existing?.id);
+
     const base: Invoice = {
       id: existing?.id || `INV-${Date.now()}`,
-      number: existing?.number || nextInvoiceNumber(invoices),
+      number,
       customerId,
       customerName: customer.name,
       issueDate: String(

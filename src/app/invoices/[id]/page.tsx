@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type InvoiceLine = {
   id: string;
@@ -78,6 +79,8 @@ export default function InvoiceDetailPage() {
   const [payNote, setPayNote] = useState('');
   const [matchKeyword, setMatchKeyword] = useState('');
   const [keywordDirty, setKeywordDirty] = useState(false);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [numberDirty, setNumberDirty] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +90,8 @@ export default function InvoiceDetailPage() {
       setInvoice(data);
       setMatchKeyword(String(data.matchKeyword || ''));
       setKeywordDirty(false);
+      setInvoiceNumber(String(data.number || ''));
+      setNumberDirty(false);
       setPayAmount(
         data.amountDue > 0 ? String(data.amountDue) : ''
       );
@@ -124,6 +129,10 @@ export default function InvoiceDetailPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Action failed');
       setInvoice(data.invoice);
+      if (data.invoice?.number) {
+        setInvoiceNumber(String(data.invoice.number));
+        setNumberDirty(false);
+      }
       if (data.invoice?.amountDue != null) {
         setPayAmount(
           data.invoice.amountDue > 0 ? String(data.invoice.amountDue) : ''
@@ -150,6 +159,32 @@ export default function InvoiceDetailPage() {
       setInvoice(data.invoice);
       setMatchKeyword(String(data.invoice.matchKeyword || ''));
       setKeywordDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveNumber = async () => {
+    const next = invoiceNumber.trim();
+    if (!next) {
+      setError('Invoice number is required');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/invoices/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: next }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed');
+      setInvoice(data.invoice);
+      setInvoiceNumber(String(data.invoice.number || ''));
+      setNumberDirty(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
@@ -194,14 +229,37 @@ export default function InvoiceDetailPage() {
   const canPay =
     (invoice.status === 'authorised' || invoice.status === 'paid') &&
     invoice.amountDue > 0.009;
+  const canEditNumber = invoice.status === 'draft';
 
   return (
     <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
       <div className="p-8 max-w-4xl mx-auto">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-3xl font-bold">{invoice.number}</h1>
+            <div className="flex flex-wrap items-center gap-3 mb-1">
+              {canEditNumber ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="text-3xl font-bold border border-slate-300 rounded-xl px-3 py-1 max-w-[220px]"
+                    value={invoiceNumber}
+                    onChange={(e) => {
+                      setInvoiceNumber(e.target.value);
+                      setNumberDirty(true);
+                    }}
+                    aria-label="Invoice number"
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || !numberDirty}
+                    onClick={saveNumber}
+                    className="bg-slate-800 hover:bg-slate-900 text-white text-sm px-3 py-2 rounded-xl disabled:opacity-40"
+                  >
+                    Save number
+                  </button>
+                </div>
+              ) : (
+                <h1 className="text-3xl font-bold">{invoice.number}</h1>
+              )}
               <span
                 className={`px-2.5 py-0.5 rounded-md text-xs font-medium capitalize ${
                   statusClass[invoice.status] || 'bg-slate-100'
@@ -281,11 +339,11 @@ export default function InvoiceDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-6">
             <div>
               <div className="text-slate-500">Issue date</div>
-              <div className="font-medium">{invoice.issueDate}</div>
+              <div className="font-medium">{formatAuDate(invoice.issueDate)}</div>
             </div>
             <div>
               <div className="text-slate-500">Due date</div>
-              <div className="font-medium">{invoice.dueDate}</div>
+              <div className="font-medium">{formatAuDate(invoice.dueDate)}</div>
             </div>
             <div>
               <div className="text-slate-500">Amount paid</div>
@@ -365,7 +423,7 @@ export default function InvoiceDetailPage() {
                     setMatchKeyword(e.target.value);
                     setKeywordDirty(true);
                   }}
-                  placeholder="e.g. Katarina"
+                  placeholder="e.g. job name or reference"
                   disabled={invoice.status === 'void'}
                 />
                 <button
@@ -378,9 +436,9 @@ export default function InvoiceDetailPage() {
                 </button>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Used with bank deposits for auto-reconcile (e.g. Katarina). Deposit
-                amount must match amount due and description must contain this
-                keyword.
+                Used with bank deposits for auto-reconcile. When a deposit amount
+                matches amount due and the bank description contains this keyword,
+                the payment is applied automatically.
               </p>
             </div>
           )}
@@ -413,6 +471,9 @@ export default function InvoiceDetailPage() {
                   value={payDate}
                   onChange={(e) => setPayDate(e.target.value)}
                 />
+                <p className="text-xs text-slate-400 mt-1">
+                  {formatAuDate(payDate)}
+                </p>
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Bank account</label>
@@ -465,7 +526,7 @@ export default function InvoiceDetailPage() {
                   className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-2"
                 >
                   <span>
-                    {p.date} · {p.bankAccountName}
+                    {formatAuDate(p.date)} · {p.bankAccountName}
                     {p.note ? ` — ${p.note}` : ''}
                   </span>
                   <span className="font-medium">{money(p.amount)}</span>

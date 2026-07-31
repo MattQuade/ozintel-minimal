@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/accounting/dates';
 
 type Invoice = {
   id: string;
@@ -127,8 +128,8 @@ export default function InvoicesPage() {
                     </Link>
                   </td>
                   <td className="p-3">{inv.customerName}</td>
-                  <td className="p-3 text-slate-600">{inv.issueDate}</td>
-                  <td className="p-3 text-slate-600">{inv.dueDate}</td>
+                  <td className="p-3 text-slate-600">{formatAuDate(inv.issueDate)}</td>
+                  <td className="p-3 text-slate-600">{formatAuDate(inv.dueDate)}</td>
                   <td className="p-3">
                     <span
                       className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium capitalize ${
