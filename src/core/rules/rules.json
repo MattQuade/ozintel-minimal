@@ -3528,6 +3528,37 @@
       "type": "Expense",
       "bankAccountId": "3",
       "direction": "spend"
+    },
+    {
+      "id": 3268,
+      "name": "Reddy Express Wyalong",
+      "matchValue": "REDDY EXPRESS",
+      "matchValues": [
+        "REDDY EXPRESS 1654"
+      ],
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1385",
+      "accountName": "MV - Fuel & Oil",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
+    },
+    {
+      "id": 3269,
+      "name": "Clarks Auto Repairs",
+      "matchValue": "CLARKS AUTO",
+      "matchValues": [
+        "CLARKS AUTO REPAIRS",
+        "CLARK'S AUTO"
+      ],
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1389",
+      "accountName": "MV - Repairs & Maintenance",
+      "type": "Expense",
+      "bankAccountId": "2010",
+      "direction": "spend"
     }
   ]
 }
