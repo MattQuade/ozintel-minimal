@@ -3497,6 +3497,37 @@
       "bankAccountId": "2020",
       "direction": "receive",
       "noGST": true
+    },
+    {
+      "id": 3266,
+      "name": "Reddy Express Wyalong",
+      "matchValue": "REDDY EXPRESS",
+      "matchValues": [
+        "REDDY EXPRESS 1654"
+      ],
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1385",
+      "accountName": "MV - Fuel & Oil",
+      "type": "Expense",
+      "bankAccountId": "3",
+      "direction": "spend"
+    },
+    {
+      "id": 3267,
+      "name": "Clarks Auto Repairs",
+      "matchValue": "CLARKS AUTO",
+      "matchValues": [
+        "CLARKS AUTO REPAIRS",
+        "CLARK'S AUTO"
+      ],
+      "matchField": "any",
+      "matchType": "contains",
+      "accountCode": "1389",
+      "accountName": "MV - Repairs & Maintenance",
+      "type": "Expense",
+      "bankAccountId": "3",
+      "direction": "spend"
     }
   ]
 }
