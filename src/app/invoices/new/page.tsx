@@ -40,6 +40,7 @@ export default function NewInvoicePage() {
     new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
   );
   const [notes, setNotes] = useState('');
+  const [matchKeyword, setMatchKeyword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([
@@ -118,6 +119,7 @@ export default function NewInvoicePage() {
           issueDate,
           dueDate,
           notes,
+          matchKeyword,
           lines: lines
             .filter((l) => l.description.trim())
             .map((l) => ({
@@ -305,6 +307,23 @@ export default function NewInvoicePage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">
+              Bank match keyword
+            </label>
+            <input
+              className="w-full border border-slate-300 rounded-xl px-3 py-2"
+              value={matchKeyword}
+              onChange={(e) => setMatchKeyword(e.target.value)}
+              placeholder="e.g. Katarina"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Used with bank deposits for auto-reconcile (e.g. Katarina). When a
+              deposit amount matches amount due and the bank description contains
+              this keyword, the payment is applied automatically.
+            </p>
           </div>
 
           <div>

@@ -35,6 +35,7 @@ type Invoice = {
   gstTotal: number;
   total: number;
   notes: string;
+  matchKeyword?: string;
 };
 
 function money(n: number) {
@@ -173,6 +174,12 @@ export default function InvoicePrintPage() {
               </div>
             </div>
           </div>
+
+          {invoice.matchKeyword && (
+            <p className="text-xs text-slate-500 mb-4">
+              Payment reference: {invoice.matchKeyword}
+            </p>
+          )}
 
           {invoice.notes && (
             <p className="text-sm text-slate-600 border-t border-slate-200 pt-4">

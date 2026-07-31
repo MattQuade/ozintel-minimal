@@ -7,6 +7,12 @@ import AccountingGate from '@/components/AccountingGate';
 import ReceiptAttach from '@/components/ReceiptAttach';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
+import {
+  findUniqueDepositInvoiceMatch,
+  isDepositAmount,
+  openInvoicesForManualAllocate,
+  type InvoiceMatchCandidate,
+} from '@/lib/accounting/invoiceDepositMatch';
 
 type BankAccountOption = {
   id: string;
@@ -15,6 +21,8 @@ type BankAccountOption = {
 };
 
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
+
+type OpenInvoiceOption = InvoiceMatchCandidate;
 
 /** Classified import row with optional receipt draft + post-save ledger link. */
 type ClassifiedImportRow = {
@@ -28,12 +36,26 @@ type ClassifiedImportRow = {
   receiptIds?: string[];
   /** Set after row is written to ledger — enables immediate receipt linking. */
   ledgerEntryId?: string;
+  /** Linked invoice when deposit allocated */
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceStatus?: string;
+  invoiceAllocated?: boolean;
+  invoiceAutoMatched?: boolean;
   [key: string]: unknown;
 };
+
+function money(n: number) {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+  }).format(n || 0);
+}
 
 export default function BankImport() {
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [coa, setCoa] = useState<CoaOption[]>([]);
+  const [openInvoices, setOpenInvoices] = useState<OpenInvoiceOption[]>([]);
   const [selectedAccount, setSelectedAccount] = useState('');
   const [preview, setPreview] = useState<any[]>([]);
   const [classified, setClassified] = useState<ClassifiedImportRow[]>([]);
@@ -44,12 +66,26 @@ export default function BankImport() {
   const [ledgerSaved, setLedgerSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [quarter, setQuarter] = useState('Q4 FY25/26');
+  const [allocatingIndex, setAllocatingIndex] = useState<number | null>(null);
+
+  const loadOpenInvoices = () =>
+    fetch('/api/invoices/allocate-deposit')
+      .then((r) => r.json())
+      .then((d) => {
+        setOpenInvoices(Array.isArray(d.invoices) ? d.invoices : []);
+      })
+      .catch(() => {});
 
   useEffect(() => {
-    Promise.all([fetch('/api/bank-accounts'), fetch('/api/coa')])
-      .then(async ([banksRes, coaRes]) => {
+    Promise.all([
+      fetch('/api/bank-accounts'),
+      fetch('/api/coa'),
+      fetch('/api/invoices/allocate-deposit'),
+    ])
+      .then(async ([banksRes, coaRes, invRes]) => {
         const banks = await banksRes.json();
         const accounts = await coaRes.json();
+        const invData = await invRes.json().catch(() => ({}));
         const bankList = Array.isArray(banks) ? banks : [];
         setBankAccounts(bankList);
         const nabBiz = bankList.find(
@@ -59,6 +95,7 @@ export default function BankImport() {
         if (nabBiz?.id) setSelectedAccount(nabBiz.id);
         else if (bankList[0]?.id) setSelectedAccount(bankList[0].id);
         setCoa(Array.isArray(accounts) ? accounts : []);
+        setOpenInvoices(Array.isArray(invData.invoices) ? invData.invoices : []);
       })
       .catch(() => setStatus('Failed to load bank accounts / COA'));
   }, []);
@@ -66,6 +103,45 @@ export default function BankImport() {
   const accountsForType = (type: string) => {
     if (!type || type === 'Uncategorized') return coa;
     return coa.filter((a) => a.type === type);
+  };
+
+  const applyInvoiceAutoMatch = (
+    rows: ClassifiedImportRow[],
+    invoices: OpenInvoiceOption[]
+  ): ClassifiedImportRow[] => {
+    const used = new Set<string>();
+    return rows.map((row) => {
+      const amount = parseFloat(String(row.original[1] || 0));
+      if (!isDepositAmount(amount)) return row;
+      if (row.invoiceId) {
+        used.add(row.invoiceId);
+        return row;
+      }
+      const description = String(
+        row.descriptionOverride || row.original[2] || ''
+      );
+      const match = findUniqueDepositInvoiceMatch(invoices, {
+        amount,
+        description,
+        excludeInvoiceIds: used,
+      });
+      if (!match) return row;
+      used.add(match.id);
+      return {
+        ...row,
+        invoiceId: match.id,
+        invoiceNumber: match.number,
+        invoiceStatus: match.status,
+        invoiceAutoMatched: true,
+        invoiceAllocated: false,
+        // Skip expense-style classification — payment journal handles AR
+        type: 'Revenue',
+        accountCode: '2101',
+        accountName: 'Accounts Receivable (invoice allocate)',
+        noGST: true,
+        rule: 'Invoice auto-match',
+      };
+    });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,11 +173,111 @@ export default function BankImport() {
     });
   };
 
+  const allocateRowToInvoice = async (
+    item: ClassifiedImportRow,
+    invoiceId: string,
+    opts?: { autoMatched?: boolean }
+  ): Promise<{ ok: boolean; invoice?: OpenInvoiceOption; error?: string }> => {
+    const amount = parseFloat(String(item.original[1] || 0));
+    const date =
+      toIsoDateInput(String(item.original[0] ?? '')) ||
+      String(item.original[0] ?? '');
+    const description = String(
+      item.descriptionOverride || item.original[2] || ''
+    );
+
+    const res = await fetch('/api/invoices/allocate-deposit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoiceId,
+        amount,
+        date,
+        bankAccountId: selectedAccount,
+        description,
+        replaceLedgerEntryId: item.ledgerEntryId || undefined,
+        autoMatched: Boolean(opts?.autoMatched || item.invoiceAutoMatched),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      return {
+        ok: false,
+        error: data.error || `Allocate failed (${res.status})`,
+      };
+    }
+    const inv = data.invoice as {
+      id: string;
+      number: string;
+      status: string;
+      amountDue: number;
+      matchKeyword?: string;
+      customerName?: string;
+    };
+    return {
+      ok: true,
+      invoice: {
+        id: inv.id,
+        number: inv.number,
+        status: inv.status,
+        amountDue: inv.amountDue,
+        matchKeyword: inv.matchKeyword,
+        customerName: inv.customerName,
+      },
+    };
+  };
+
   const persistClassified = async (rows: ClassifiedImportRow[]) => {
     const selectedBank = bankAccounts.find((acc) => acc.id === selectedAccount);
-    const saveable = rows
+
+    // 1) Allocate invoice-linked deposits via payment journal (not ledger/add)
+    const allocateTargets = rows
       .map((item, index) => ({ item, index }))
-      .filter(({ item }) => item.type !== 'Uncategorized');
+      .filter(
+        ({ item }) =>
+          item.invoiceId &&
+          !item.invoiceAllocated &&
+          isDepositAmount(parseFloat(String(item.original[1] || 0)))
+      );
+
+    let nextRows = rows.map((r) => ({ ...r }));
+    let allocated = 0;
+    let allocateErrors = 0;
+
+    for (const { item, index } of allocateTargets) {
+      const result = await allocateRowToInvoice(item, String(item.invoiceId), {
+        autoMatched: item.invoiceAutoMatched,
+      });
+      if (result.ok && result.invoice) {
+        allocated += 1;
+        nextRows[index] = {
+          ...nextRows[index],
+          invoiceAllocated: true,
+          invoiceId: result.invoice.id,
+          invoiceNumber: result.invoice.number,
+          invoiceStatus: result.invoice.status,
+          // Payment posts its own ledger lines — clear import ledger id if replaced
+          ledgerEntryId: undefined,
+          type: 'Revenue',
+          accountCode: '2101',
+          accountName: 'Accounts Receivable (invoice allocate)',
+          noGST: true,
+        };
+      } else {
+        allocateErrors += 1;
+        console.error('Invoice allocate failed', result.error);
+      }
+    }
+
+    // 2) Save non-invoice rows via normal ledger add
+    const saveable = nextRows
+      .map((item, index) => ({ item, index }))
+      .filter(
+        ({ item }) =>
+          item.type !== 'Uncategorized' &&
+          !item.invoiceId &&
+          !item.invoiceAllocated
+      );
 
     const toSave = saveable.map(({ item }) => {
       const receiptIds = Array.isArray(item.receiptIds)
@@ -130,56 +306,71 @@ export default function BankImport() {
       };
     });
 
-    if (toSave.length === 0) {
+    if (toSave.length === 0 && allocateTargets.length === 0) {
       setStatus('Nothing to save — all rows are Uncategorized');
       setLedgerSaved(false);
+      setClassified(nextRows);
       return false;
     }
 
     setSaving(true);
     try {
-      const res = await fetch('/api/ledger/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: toSave }),
-      });
-      if (!res.ok) {
-        const errorBody = await res.json().catch(() => ({}));
-        setStatus(
-          `❌ Failed to save${errorBody?.error ? `: ${errorBody.error}` : ` (${res.status})`}`
-        );
-        setLedgerSaved(false);
-        return false;
-      }
-      const data = await res.json();
-      const count = data.saved || toSave.length;
-      const savedEntries = Array.isArray(data.savedEntries) ? data.savedEntries : [];
+      let count = allocated;
 
-      // Stamp ledger ids onto draft rows so later receipt uploads link immediately
-      setClassified(() => {
-        const next = rows.map((r) => ({ ...r }));
+      if (toSave.length > 0) {
+        const res = await fetch('/api/ledger/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: toSave }),
+        });
+        if (!res.ok) {
+          const errorBody = await res.json().catch(() => ({}));
+          setClassified(nextRows);
+          setStatus(
+            `❌ Failed to save${errorBody?.error ? `: ${errorBody.error}` : ` (${res.status})`}` +
+              (allocated ? ` (${allocated} invoice payment(s) posted)` : '')
+          );
+          setLedgerSaved(false);
+          await loadOpenInvoices();
+          return false;
+        }
+        const data = await res.json();
+        count += data.saved || toSave.length;
+        const savedEntries = Array.isArray(data.savedEntries)
+          ? data.savedEntries
+          : [];
+
         saveable.forEach(({ index }, i) => {
           const saved = savedEntries[i] as
             | { id?: string; receiptIds?: string[] }
             | undefined;
-          if (!saved?.id || !next[index]) return;
-          next[index] = {
-            ...next[index],
+          if (!saved?.id || !nextRows[index]) return;
+          nextRows[index] = {
+            ...nextRows[index],
             ledgerEntryId: String(saved.id),
             receiptIds:
               Array.isArray(saved.receiptIds) && saved.receiptIds.length > 0
                 ? saved.receiptIds
-                : next[index].receiptIds || [],
+                : nextRows[index].receiptIds || [],
           };
         });
-        return next;
-      });
+      }
 
+      setClassified(nextRows);
       setSavedCount(count);
-      setLedgerSaved(true);
-      setStatus(`💾 Saved to Ledger — ${count} transactions → ${selectedBank?.name}`);
-      return true;
+      setLedgerSaved(allocateErrors === 0);
+      const parts = [
+        count ? `${count} posted` : null,
+        allocated ? `${allocated} invoice payment(s)` : null,
+        allocateErrors ? `${allocateErrors} allocate error(s)` : null,
+      ].filter(Boolean);
+      setStatus(
+        `💾 Saved — ${parts.join(', ')} → ${selectedBank?.name}`
+      );
+      await loadOpenInvoices();
+      return allocateErrors === 0;
     } catch (error) {
+      setClassified(nextRows);
       setStatus(
         `❌ Connection error${error instanceof Error ? `: ${error.message}` : ''}`
       );
@@ -193,12 +384,21 @@ export default function BankImport() {
   const handleClassify = async () => {
     if (preview.length === 0) return;
     setIsProcessing(true);
-    setStatus('Classifying using Bank Rules...');
+    setStatus('Classifying using Bank Rules + invoice match…');
     setLedgerSaved(false);
 
     try {
-      const res = await fetch('/api/rules');
-      const rules = (await res.json()) as BankRule[];
+      const [rulesRes, invRes] = await Promise.all([
+        fetch('/api/rules'),
+        fetch('/api/invoices/allocate-deposit'),
+      ]);
+      const rules = (await rulesRes.json()) as BankRule[];
+      const invData = await invRes.json().catch(() => ({}));
+      const invoices: OpenInvoiceOption[] = Array.isArray(invData.invoices)
+        ? invData.invoices
+        : [];
+      setOpenInvoices(invoices);
+
       const results = classifyBatch(
         preview,
         Array.isArray(rules) ? rules : [],
@@ -208,10 +408,17 @@ export default function BankImport() {
         original: Array.isArray(r.original) ? r.original : [],
         receiptIds: [] as string[],
       })) as ClassifiedImportRow[];
-      setClassified(results);
-      const matched = results.filter((r) => r.type !== 'Uncategorized').length;
-      setStatus(`✅ ${matched} matched out of ${results.length} — saving to ledger…`);
-      await persistClassified(results);
+
+      const withInvoices = applyInvoiceAutoMatch(results, invoices);
+      setClassified(withInvoices);
+      const matched = withInvoices.filter((r) => r.type !== 'Uncategorized').length;
+      const autoInv = withInvoices.filter((r) => r.invoiceAutoMatched).length;
+      setStatus(
+        `✅ ${matched} matched / ${results.length}` +
+          (autoInv ? ` (${autoInv} invoice auto-match)` : '') +
+          ' — saving…'
+      );
+      await persistClassified(withInvoices);
     } catch (err) {
       console.error(err);
       setStatus('❌ Failed to load bank rules');
@@ -223,6 +430,7 @@ export default function BankImport() {
   const updateType = (index: number, newType: string) => {
     const updated = [...classified];
     const current = updated[index];
+    if (current.invoiceAllocated) return;
     const allowed = accountsForType(newType);
     const stillValid = allowed.some((a) => a.code === current.accountCode);
     updated[index] = {
@@ -238,6 +446,8 @@ export default function BankImport() {
   };
 
   const updateAccount = (index: number, code: string) => {
+    const current = classified[index];
+    if (current?.invoiceAllocated) return;
     const account = coa.find((a) => a.code === code);
     const updated = [...classified];
     updated[index] = {
@@ -259,10 +469,76 @@ export default function BankImport() {
       receiptIds: ids,
     };
     setClassified(updated);
-    // If already saved with ledgerEntryId, ReceiptAttach links on upload —
-    // no need to mark ledger dirty. Otherwise keep draft ids for next save.
     if (!updated[index].ledgerEntryId) {
       setLedgerSaved(false);
+    }
+  };
+
+  const setManualInvoiceLink = (index: number, invoiceId: string) => {
+    const updated = [...classified];
+    const current = updated[index];
+    if (current.invoiceAllocated) return;
+
+    if (!invoiceId) {
+      updated[index] = {
+        ...current,
+        invoiceId: undefined,
+        invoiceNumber: undefined,
+        invoiceStatus: undefined,
+        invoiceAutoMatched: false,
+        invoiceAllocated: false,
+      };
+      setClassified(updated);
+      setLedgerSaved(false);
+      return;
+    }
+
+    const inv = openInvoices.find((i) => i.id === invoiceId);
+    updated[index] = {
+      ...current,
+      invoiceId,
+      invoiceNumber: inv?.number,
+      invoiceStatus: inv?.status,
+      invoiceAutoMatched: false,
+      invoiceAllocated: false,
+      type: 'Revenue',
+      accountCode: '2101',
+      accountName: 'Accounts Receivable (invoice allocate)',
+      noGST: true,
+      rule: 'Invoice allocate',
+    };
+    setClassified(updated);
+    setLedgerSaved(false);
+  };
+
+  const allocateNow = async (index: number) => {
+    const item = classified[index];
+    if (!item?.invoiceId || item.invoiceAllocated) return;
+    setAllocatingIndex(index);
+    try {
+      const result = await allocateRowToInvoice(item, item.invoiceId, {
+        autoMatched: item.invoiceAutoMatched,
+      });
+      if (!result.ok) {
+        setStatus(`❌ ${result.error}`);
+        return;
+      }
+      const updated = [...classified];
+      updated[index] = {
+        ...updated[index],
+        invoiceAllocated: true,
+        invoiceId: result.invoice?.id,
+        invoiceNumber: result.invoice?.number,
+        invoiceStatus: result.invoice?.status,
+        ledgerEntryId: undefined,
+      };
+      setClassified(updated);
+      setStatus(
+        `✅ Allocated deposit to ${result.invoice?.number || 'invoice'}`
+      );
+      await loadOpenInvoices();
+    } finally {
+      setAllocatingIndex(null);
     }
   };
 
@@ -275,8 +551,8 @@ export default function BankImport() {
       <div className="p-10 max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
-          Upload → Classify (auto-saves matched rows) → Attach receipts / adjust Type/Account →
-          save updates
+          Upload → Classify (auto-saves matched rows + invoice keyword matches) →
+          Attach receipts / allocate deposits to invoices → save updates
         </p>
 
         <div className="bg-white rounded-3xl shadow-xl p-10">
@@ -331,7 +607,7 @@ export default function BankImport() {
 
           {classified.length > 0 && (
             <>
-              <div className="mt-8 grid grid-cols-2 gap-4">
+              <div className="mt-8 grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center">
                   <p className="text-sm text-emerald-800">Matched (classified)</p>
                   <p className="text-3xl font-bold text-emerald-900">
@@ -342,6 +618,12 @@ export default function BankImport() {
                   <p className="text-sm text-amber-800">Unreconciled (uncategorized)</p>
                   <p className="text-3xl font-bold text-amber-900">
                     {classified.filter((i) => i.type === 'Uncategorized').length}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5 text-center">
+                  <p className="text-sm text-sky-800">Invoice allocations</p>
+                  <p className="text-3xl font-bold text-sky-900">
+                    {classified.filter((i) => i.invoiceAllocated || i.invoiceId).length}
                   </p>
                 </div>
               </div>
@@ -374,12 +656,15 @@ export default function BankImport() {
                       <th className="px-4 py-3 text-left">Rule</th>
                       <th className="px-4 py-3 text-left">Type</th>
                       <th className="px-4 py-3 text-left">Account</th>
+                      <th className="px-3 py-3 text-left min-w-[200px]">Invoice</th>
                       <th className="px-3 py-3 text-left w-[140px]">Receipt</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {classified.map((item, i) => {
                       const row = item.original;
+                      const amount = parseFloat(String(row[1] || 0));
+                      const isDeposit = isDepositAmount(amount);
                       const ruleName =
                         typeof item.rule === 'object' &&
                         item.rule &&
@@ -390,9 +675,20 @@ export default function BankImport() {
                       const receiptIds = Array.isArray(item.receiptIds)
                         ? item.receiptIds
                         : [];
+                      const invoiceChoices = openInvoicesForManualAllocate(
+                        openInvoices,
+                        { preferAmount: amount }
+                      );
 
                       return (
-                        <tr key={i} className="hover:bg-gray-50">
+                        <tr
+                          key={i}
+                          className={
+                            item.invoiceAllocated
+                              ? 'bg-sky-50/80'
+                              : 'hover:bg-gray-50'
+                          }
+                        >
                           <td className="px-4 py-3 whitespace-nowrap">
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
@@ -406,6 +702,7 @@ export default function BankImport() {
                               value={item.type}
                               onChange={(e) => updateType(i, e.target.value)}
                               className="border rounded px-3 py-1 text-sm"
+                              disabled={Boolean(item.invoiceAllocated)}
                             >
                               <option value="Revenue">Revenue</option>
                               <option value="Expense">Expense</option>
@@ -416,32 +713,93 @@ export default function BankImport() {
                             </select>
                           </td>
                           <td className="px-4 py-3 min-w-[220px]">
-                            <select
-                              value={item.accountCode || ''}
-                              onChange={(e) => updateAccount(i, e.target.value)}
-                              className="border rounded px-2 py-1 text-sm w-full"
-                              disabled={item.type === 'Uncategorized'}
-                            >
-                              <option value="">
-                                {item.type === 'Uncategorized'
-                                  ? 'Pick a type first'
-                                  : 'Select account'}
-                              </option>
-                              {typeAccounts.map((a) => (
-                                <option key={a.code} value={a.code}>
-                                  {a.code} — {a.name}
+                            {item.invoiceId ? (
+                              <span className="text-xs text-sky-800">
+                                Via invoice payment (Dr bank / Cr AR)
+                              </span>
+                            ) : (
+                              <select
+                                value={item.accountCode || ''}
+                                onChange={(e) => updateAccount(i, e.target.value)}
+                                className="border rounded px-2 py-1 text-sm w-full"
+                                disabled={item.type === 'Uncategorized'}
+                              >
+                                <option value="">
+                                  {item.type === 'Uncategorized'
+                                    ? 'Pick a type first'
+                                    : 'Select account'}
                                 </option>
-                              ))}
-                            </select>
+                                {typeAccounts.map((a) => (
+                                  <option key={a.code} value={a.code}>
+                                    {a.code} — {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 align-top">
+                            {isDeposit ? (
+                              <div className="flex flex-col gap-1 min-w-[180px]">
+                                {item.invoiceAllocated ? (
+                                  <div className="text-xs text-sky-900">
+                                    <span className="font-semibold">
+                                      {item.invoiceNumber}
+                                    </span>
+                                    <span className="ml-1 capitalize text-sky-700">
+                                      · {item.invoiceStatus}
+                                      {item.invoiceAutoMatched ? ' · auto' : ''}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <select
+                                      value={item.invoiceId || ''}
+                                      onChange={(e) =>
+                                        setManualInvoiceLink(i, e.target.value)
+                                      }
+                                      className="border rounded px-2 py-1 text-xs w-full"
+                                    >
+                                      <option value="">Allocate to invoice…</option>
+                                      {invoiceChoices.map((inv) => (
+                                        <option key={inv.id} value={inv.id}>
+                                          {inv.number} · {money(inv.amountDue)}
+                                          {inv.matchKeyword
+                                            ? ` · ${inv.matchKeyword}`
+                                            : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {item.invoiceId && (
+                                      <button
+                                        type="button"
+                                        disabled={allocatingIndex === i}
+                                        onClick={() => allocateNow(i)}
+                                        className="text-xs bg-sky-700 text-white rounded px-2 py-1 hover:bg-sky-800 disabled:opacity-50"
+                                      >
+                                        {allocatingIndex === i
+                                          ? 'Posting…'
+                                          : item.invoiceAutoMatched
+                                            ? 'Confirm auto-match'
+                                            : 'Apply payment'}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1 min-w-[120px]">
-                              <ReceiptAttach
-                                compact
-                                receiptIds={receiptIds}
-                                onChange={(ids) => updateReceiptIds(i, ids)}
-                                ledgerEntryId={item.ledgerEntryId}
-                              />
+                              {!item.invoiceId && (
+                                <ReceiptAttach
+                                  compact
+                                  receiptIds={receiptIds}
+                                  onChange={(ids) => updateReceiptIds(i, ids)}
+                                  ledgerEntryId={item.ledgerEntryId}
+                                />
+                              )}
                             </div>
                           </td>
                         </tr>

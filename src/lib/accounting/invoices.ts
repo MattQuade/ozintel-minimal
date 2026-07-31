@@ -5,11 +5,19 @@ import {
 } from "@/lib/dataPaths";
 import {
   appendLedgerEntries,
+  deleteLedgerEntry,
   readBankAccounts,
   readCoa,
   type LedgerEntry,
 } from "@/lib/accounting/store";
 import { getCustomerById } from "@/lib/accounting/customers";
+import {
+  amountsMatch,
+  findUniqueDepositInvoiceMatch,
+  isDepositAmount,
+  isOpenForAllocation,
+  type InvoiceMatchCandidate,
+} from "@/lib/accounting/invoiceDepositMatch";
 
 export type InvoiceStatus = "draft" | "authorised" | "paid" | "void";
 
@@ -52,6 +60,11 @@ export type Invoice = {
   amountPaid: number;
   amountDue: number;
   notes: string;
+  /**
+   * Optional bank-deposit auto-reconcile keyword (e.g. "Katarina").
+   * Case-insensitive contains match against bank description when amountDue matches.
+   */
+  matchKeyword: string;
   ledgerEntryIds: string[];
   journalRef: string;
   voidLedgerEntryIds: string[];
@@ -98,7 +111,17 @@ async function readInvoicesUnlocked(): Promise<Invoice[]> {
   try {
     const raw = await fs.readFile(getInvoicesFilePath(), "utf8");
     const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? (parsed as Invoice[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as Invoice[]).map((inv) => ({
+      ...inv,
+      matchKeyword: String(inv.matchKeyword || "").trim(),
+      notes: String(inv.notes || ""),
+      payments: Array.isArray(inv.payments) ? inv.payments : [],
+      ledgerEntryIds: Array.isArray(inv.ledgerEntryIds) ? inv.ledgerEntryIds : [],
+      voidLedgerEntryIds: Array.isArray(inv.voidLedgerEntryIds)
+        ? inv.voidLedgerEntryIds
+        : [],
+    }));
   } catch {
     await writeInvoicesUnlocked([]);
     return [];
@@ -221,14 +244,20 @@ export async function upsertInvoice(
         existing.status === "paid" ||
         existing.status === "void")
     ) {
-      // Allow notes-only style edits? MVP: block structural edits after authorise
+      // Allow notes + matchKeyword after authorise; structural edits blocked
       if (input.status && input.status !== existing.status) {
         // status changes go through authorise/pay/void actions
       }
       const editableNotes = String(input.notes ?? existing.notes ?? "");
+      const editableKeyword = String(
+        input.matchKeyword !== undefined
+          ? input.matchKeyword
+          : existing.matchKeyword ?? ""
+      ).trim();
       const next: Invoice = {
         ...existing,
         notes: editableNotes,
+        matchKeyword: editableKeyword,
         updatedAt: new Date().toISOString(),
       };
       invoices[idx] = next;
@@ -272,6 +301,11 @@ export async function upsertInvoice(
       amountPaid: 0,
       amountDue: totals.total,
       notes: String(input.notes ?? existing?.notes ?? "").trim(),
+      matchKeyword: String(
+        input.matchKeyword !== undefined
+          ? input.matchKeyword
+          : existing?.matchKeyword ?? ""
+      ).trim(),
       ledgerEntryIds: existing?.ledgerEntryIds || [],
       journalRef: existing?.journalRef || "",
       voidLedgerEntryIds: existing?.voidLedgerEntryIds || [],
@@ -608,6 +642,10 @@ export async function recordInvoicePayment(
     date: string;
     bankAccountId: string;
     note?: string;
+    /** When true (bank-import allocate), mark payment ledger lines reconciled */
+    reconciled?: boolean;
+    /** Idempotency key — skip if a payment already has this note fingerprint */
+    bankImportKey?: string;
   }
 ): Promise<Invoice> {
   return withInvoicesLock(async () => {
@@ -618,6 +656,16 @@ export async function recordInvoicePayment(
 
     if (inv.status !== "authorised" && inv.status !== "paid") {
       throw new Error("Only authorised invoices can receive payments");
+    }
+
+    const bankImportKey = String(input.bankImportKey || "").trim();
+    if (bankImportKey) {
+      const already = inv.payments.some(
+        (p) =>
+          p.note.includes(bankImportKey) ||
+          p.note.includes(`bank-import:${bankImportKey}`)
+      );
+      if (already) return inv;
     }
 
     const amount = round2(Number(input.amount) || 0);
@@ -642,6 +690,8 @@ export async function recordInvoicePayment(
     const desc = `Payment ${inv.number} — ${inv.customerName}`;
     const ts = new Date().toISOString();
     const payDate = String(input.date || new Date().toISOString().slice(0, 10));
+    const reconciled = Boolean(input.reconciled);
+    const note = String(input.note || "").trim();
 
     const entries: Partial<LedgerEntry>[] = [
       {
@@ -657,7 +707,7 @@ export async function recordInvoicePayment(
         bankAccountName: bank.name,
         hasGST: false,
         noGST: true,
-        reconciled: false,
+        reconciled,
         source: "invoice-payment",
         invoiceId: inv.id,
         invoiceNumber: inv.number,
@@ -675,7 +725,7 @@ export async function recordInvoicePayment(
         accountName: ar?.name || "Accounts Receivable",
         hasGST: false,
         noGST: true,
-        reconciled: false,
+        reconciled,
         source: "invoice-payment",
         invoiceId: inv.id,
         invoiceNumber: inv.number,
@@ -692,7 +742,7 @@ export async function recordInvoicePayment(
       bankAccountId: bank.id,
       bankAccountName: bank.name,
       ledgerEntryIds: result.savedEntries.map((e) => e.id),
-      note: String(input.note || "").trim(),
+      note,
       createdAt: ts,
     };
 
@@ -711,3 +761,106 @@ export async function recordInvoicePayment(
     return next;
   });
 }
+
+function toMatchCandidate(inv: Invoice): InvoiceMatchCandidate {
+  return {
+    id: inv.id,
+    number: inv.number,
+    status: inv.status,
+    amountDue: inv.amountDue,
+    matchKeyword: inv.matchKeyword,
+    customerName: inv.customerName,
+  };
+}
+
+export async function listOpenInvoicesForAllocation(): Promise<Invoice[]> {
+  const invoices = await readInvoices();
+  return invoices.filter((inv) =>
+    isOpenForAllocation(toMatchCandidate(inv))
+  );
+}
+
+/**
+ * Allocate a bank-import deposit to an invoice via the normal payment journal
+ * (Dr bank / Cr AR). Removes a prior bank-import ledger row if provided to
+ * avoid double-posting the same deposit.
+ */
+export async function allocateBankDepositToInvoice(input: {
+  invoiceId: string;
+  amount: number;
+  date: string;
+  bankAccountId: string;
+  description?: string;
+  /** Prior bank-import ledger entry for this deposit — deleted before payment */
+  replaceLedgerEntryId?: string;
+  autoMatched?: boolean;
+}): Promise<Invoice> {
+  const signed = Number(input.amount) || 0;
+  if (!isDepositAmount(signed)) {
+    throw new Error("Only deposits (positive amounts) can allocate to invoices");
+  }
+  const amount = round2(Math.abs(signed));
+
+  const inv = await getInvoiceById(input.invoiceId);
+  if (!inv) throw new Error("Invoice not found");
+  if (!isOpenForAllocation(toMatchCandidate(inv))) {
+    throw new Error("Invoice is not open for payment");
+  }
+
+  // Cap at amount due (partial OK when deposit equals outstanding or less)
+  const payAmount = round2(Math.min(amount, inv.amountDue));
+  if (payAmount <= 0) throw new Error("Nothing due on this invoice");
+
+  const date = String(input.date || "").trim();
+  const desc = String(input.description || "").trim();
+  const bankImportKey = [
+    input.bankAccountId,
+    date,
+    amount.toFixed(2),
+    desc.slice(0, 80),
+  ].join("|");
+
+  if (input.replaceLedgerEntryId) {
+    await deleteLedgerEntry(String(input.replaceLedgerEntryId));
+  }
+
+  const noteParts = [
+    input.autoMatched ? "Auto-reconciled from bank import" : "Allocated from bank import",
+    desc ? `“${desc.slice(0, 120)}”` : "",
+    `bank-import:${bankImportKey}`,
+  ].filter(Boolean);
+
+  return recordInvoicePayment(input.invoiceId, {
+    amount: payAmount,
+    date,
+    bankAccountId: input.bankAccountId,
+    note: noteParts.join(" · "),
+    reconciled: true,
+    bankImportKey,
+  });
+}
+
+/**
+ * Auto-match one deposit to a unique open invoice (keyword + amountDue).
+ * Returns null when no unique match.
+ */
+export async function autoMatchDepositToInvoice(opts: {
+  amount: number;
+  description: string;
+  excludeInvoiceIds?: string[];
+}): Promise<Invoice | null> {
+  if (!isDepositAmount(opts.amount)) return null;
+  const invoices = await readInvoices();
+  const match = findUniqueDepositInvoiceMatch(
+    invoices.map(toMatchCandidate),
+    {
+      amount: opts.amount,
+      description: opts.description,
+      excludeInvoiceIds: opts.excludeInvoiceIds,
+    }
+  );
+  if (!match) return null;
+  return invoices.find((i) => i.id === match.id) || null;
+}
+
+export { amountsMatch, findUniqueDepositInvoiceMatch };
