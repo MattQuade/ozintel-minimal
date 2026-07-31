@@ -131,9 +131,9 @@ export async function createReceipt(args: {
   if (!args.buffer?.length) {
     throw new Error("Empty file");
   }
-  // Soft cap ~12MB
-  if (args.buffer.length > 12 * 1024 * 1024) {
-    throw new Error("File too large (max 12MB)");
+  // Soft cap ~18MB (client compresses phone photos; PDFs stay as-is)
+  if (args.buffer.length > 18 * 1024 * 1024) {
+    throw new Error("File too large (max 18MB)");
   }
 
   const store = await loadStore();

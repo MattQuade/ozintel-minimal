@@ -247,7 +247,16 @@ export default function LedgerQuickEntry({
                       {r.accountCode} {r.accountName ? `— ${r.accountName}` : ''}
                     </td>
                     <td className="p-4">
-                      <ReceiptBadge receiptIds={r.receiptIds} />
+                      <ReceiptBadge
+                        receiptIds={r.receiptIds}
+                        onChange={(ids) =>
+                          setRows((prev) =>
+                            prev.map((row) =>
+                              row.id === r.id ? { ...row, receiptIds: ids } : row
+                            )
+                          )
+                        }
+                      />
                     </td>
                     <td className="p-4 text-right font-medium">
                       ${Math.abs(r.amount).toLocaleString('en-AU', { minimumFractionDigits: 2 })}

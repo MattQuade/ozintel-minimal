@@ -1,6 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import {
+  prepareReceiptFile,
+  RECEIPT_MAX_BYTES,
+} from '@/lib/client/compressReceiptImage';
 
 export type ReceiptInfo = {
   id: string;
@@ -24,6 +28,14 @@ type Props = {
 const ACCEPT =
   'image/*,.pdf,image/heic,image/heif,application/pdf';
 
+const MAX_MB = Math.round(RECEIPT_MAX_BYTES / (1024 * 1024));
+
+async function deleteReceiptOnServer(id: string) {
+  await fetch(`/api/ledger/receipts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 export default function ReceiptAttach({
   receiptIds,
   onChange,
@@ -33,15 +45,22 @@ export default function ReceiptAttach({
   label = 'Receipt',
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'compressing' | 'uploading'>(
+    'idle'
+  );
   const [error, setError] = useState('');
+  const busy = phase !== 'idle';
 
   const uploadFile = async (file: File) => {
-    setUploading(true);
+    setPhase('compressing');
     setError('');
     try {
+      const prepared = await prepareReceiptFile(file, (status) => {
+        setPhase(status === 'compressing' ? 'compressing' : 'uploading');
+      });
+      setPhase('uploading');
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', prepared);
       if (ledgerEntryId) form.append('ledgerEntryId', ledgerEntryId);
       const res = await fetch('/api/ledger/receipts', {
         method: 'POST',
@@ -59,30 +78,40 @@ export default function ReceiptAttach({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
-      setUploading(false);
+      setPhase('idle');
       if (inputRef.current) inputRef.current.value = '';
     }
   };
 
   const removeReceipt = async (id: string) => {
-    // Detach from UI; delete file only when confirmed (keeps orphan cleanup optional)
-    if (!confirm('Remove this receipt attachment?')) return;
+    if (
+      !confirm(
+        'Remove this receipt photo only? The transaction entry will stay.'
+      )
+    ) {
+      return;
+    }
     try {
-      await fetch(`/api/ledger/receipts/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
+      await deleteReceiptOnServer(id);
     } catch {
       // still remove from local list
     }
     onChange(receiptIds.filter((x) => x !== id));
   };
 
+  const statusLabel =
+    phase === 'compressing'
+      ? 'Compressing…'
+      : phase === 'uploading'
+        ? 'Uploading…'
+        : null;
+
   return (
     <div className={className}>
       {!compact && (
         <label className="block text-sm text-gray-500 mb-1">{label}</label>
       )}
-      <div className={`flex flex-wrap items-center gap-2 ${compact ? '' : ''}`}>
+      <div className="flex flex-wrap items-center gap-2">
         <input
           ref={inputRef}
           type="file"
@@ -96,16 +125,16 @@ export default function ReceiptAttach({
         />
         <button
           type="button"
-          disabled={uploading}
+          disabled={busy}
           onClick={() => inputRef.current?.click()}
           className={
             compact
-              ? 'text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50'
+              ? 'text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 min-h-[36px]'
               : 'border border-gray-300 rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50'
           }
         >
-          {uploading
-            ? 'Uploading…'
+          {statusLabel
+            ? statusLabel
             : compact
               ? receiptIds.length
                 ? 'Add another'
@@ -127,7 +156,7 @@ export default function ReceiptAttach({
             return (
               <li
                 key={id}
-                className="relative group border border-gray-200 rounded-xl overflow-hidden bg-gray-50"
+                className="relative border border-gray-200 rounded-xl overflow-hidden bg-gray-50"
               >
                 <a
                   href={url}
@@ -155,8 +184,9 @@ export default function ReceiptAttach({
                 <button
                   type="button"
                   onClick={() => void removeReceipt(id)}
-                  className="absolute top-0.5 right-0.5 bg-white/90 text-red-600 rounded-full w-5 h-5 text-xs leading-none shadow"
-                  title="Remove"
+                  className="absolute -top-1 -right-1 flex items-center justify-center min-w-[28px] min-h-[28px] bg-white border border-red-200 text-red-600 rounded-full text-sm font-bold shadow-sm hover:bg-red-50"
+                  title="Remove receipt photo only"
+                  aria-label="Remove receipt photo"
                 >
                   ×
                 </button>
@@ -169,32 +199,80 @@ export default function ReceiptAttach({
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {!compact && (
         <p className="mt-1 text-xs text-gray-400">
-          Phone camera or file · JPEG, PNG, WebP, HEIC, PDF · max 12MB
+          Phone camera or file · JPEG, PNG, WebP, HEIC, PDF · photos compressed
+          before upload · max {MAX_MB}MB
         </p>
       )}
     </div>
   );
 }
 
-/** Small badge for list rows when an entry has receipts. */
+/** Badge for list rows — optional onChange enables Remove (receipt only). */
 export function ReceiptBadge({
   receiptIds,
+  onChange,
 }: {
   receiptIds?: string[] | null;
+  /** When provided, shows a Remove control that DELETEs the receipt file only. */
+  onChange?: (ids: string[]) => void;
 }) {
-  const count = Array.isArray(receiptIds) ? receiptIds.length : 0;
-  if (count === 0) return null;
-  const first = receiptIds![0];
+  const ids = Array.isArray(receiptIds)
+    ? receiptIds.filter((x) => typeof x === 'string' && x.trim())
+    : [];
+  if (ids.length === 0) return null;
+
+  const remove = async (id: string) => {
+    if (
+      !confirm(
+        'Remove this receipt photo only? The transaction entry will stay.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteReceiptOnServer(id);
+    } catch {
+      // still update UI
+    }
+    onChange?.(ids.filter((x) => x !== id));
+  };
+
   return (
-    <a
-      href={`/api/ledger/receipts/${encodeURIComponent(first)}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg"
-      title="View receipt"
-      onClick={(e) => e.stopPropagation()}
-    >
-      📎 Receipt{count > 1 ? ` ×${count}` : ''}
-    </a>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {ids.map((id) => (
+        <span
+          key={id}
+          className="inline-flex items-center gap-0.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg pl-2 pr-0.5 py-0.5"
+        >
+          <a
+            href={`/api/ledger/receipts/${encodeURIComponent(id)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-emerald-900 py-1"
+            title="View receipt"
+            onClick={(e) => e.stopPropagation()}
+          >
+            📎 Receipt
+          </a>
+          {onChange && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void remove(id);
+              }}
+              className="inline-flex items-center justify-center min-w-[28px] min-h-[28px] text-red-600 hover:bg-red-50 rounded-md font-bold"
+              title="Remove receipt photo only"
+              aria-label="Remove receipt photo"
+            >
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {!onChange && ids.length > 1 && (
+        <span className="text-xs text-emerald-700">×{ids.length}</span>
+      )}
+    </span>
   );
 }

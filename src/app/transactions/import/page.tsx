@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
-import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
+import ReceiptAttach from '@/components/ReceiptAttach';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
 
@@ -436,9 +436,6 @@ export default function BankImport() {
                           </td>
                           <td className="px-3 py-3 align-top">
                             <div className="flex flex-col gap-1 min-w-[120px]">
-                              {receiptIds.length > 0 && (
-                                <ReceiptBadge receiptIds={receiptIds} />
-                              )}
                               <ReceiptAttach
                                 compact
                                 receiptIds={receiptIds}

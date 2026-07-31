@@ -316,7 +316,21 @@ export default function JournalPage() {
                       </span>
                     </td>
                     <td className="p-5 text-center">
-                      <ReceiptBadge receiptIds={tx.receiptIds} />
+                      <ReceiptBadge
+                        receiptIds={tx.receiptIds}
+                        onChange={(ids) => {
+                          setTransactions((prev) =>
+                            prev.map((t) =>
+                              t.id === tx.id ? { ...t, receiptIds: ids } : t
+                            )
+                          );
+                          setEditingTx((cur) =>
+                            cur?.id === tx.id
+                              ? { ...cur, receiptIds: ids }
+                              : cur
+                          );
+                        }}
+                      />
                     </td>
                     <td className="p-5 text-center">
                       <input
