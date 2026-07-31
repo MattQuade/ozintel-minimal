@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
 
 type Contact = {
   name: string;
@@ -446,25 +447,6 @@ export default function HomePage() {
     saveContacts(safeContacts, updated);
   };
 
-  const getLocationOnce = async (): Promise<{ lat: number | null; lng: number | null }> => {
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      return { lat: null, lng: null };
-    }
-    try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000,
-        });
-      });
-      return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    } catch (geoErr) {
-      console.warn("Geolocation failed:", geoErr);
-      return { lat: null, lng: null };
-    }
-  };
-
   const sendSMSViaMessageMedia = async (
     recipientPhone: string,
     messageBody: string,
@@ -533,7 +515,9 @@ export default function HomePage() {
     const label = alertType === 'SAFE ARRIVAL' ? 'Safe Arrival' : 'Emergency';
     setStatus(`Sending ${label} alert...`);
 
-    const { lat, lng } = await getLocationOnce();
+    const loc = await getAlertLocation();
+    const lat = loc?.lat ?? null;
+    const lng = loc?.lng ?? null;
     let pending = [...contacts];
     let attempt = 1;
 

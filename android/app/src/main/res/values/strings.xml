@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OzIntel Alerts</string>
+    <string name="title_activity_main">OzIntel Alerts</string>
+    <string name="package_name">com.ozintel.alerts</string>
+    <string name="custom_url_scheme">com.ozintel.alerts</string>
+</resources>

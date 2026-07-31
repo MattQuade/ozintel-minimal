@@ -1,1 +1,18 @@
 .vercel
+node_modules
+.next
+.env
+.env.local
+.env.*.local
+
+# Capacitor / native build artifacts
+android/.gradle
+android/app/build
+android/build
+android/captures
+android/local.properties
+ios/App/Pods
+ios/App/build
+ios/DerivedData
+*.keystore
+*.jks
