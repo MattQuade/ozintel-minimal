@@ -35,7 +35,7 @@ export default function AccountingGate({
       if (cancelled) return;
       if (!ok) {
         router.replace(
-          `/accounting/pending?section=${encodeURIComponent(section)}`
+          `/accounting/pending?module=${encodeURIComponent("Accounting")}&section=${encodeURIComponent(section)}`
         );
         setAllowed(false);
         return;

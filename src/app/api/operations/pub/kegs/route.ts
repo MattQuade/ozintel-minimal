@@ -7,11 +7,14 @@ import {
   updateKegEntry,
   type KegType,
 } from "@/lib/operations/pub/kegs";
+import { requireOpsAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
   try {
     const { store, totals, archivedPrevious } = await loadCurrentMonth();
     const archives = await listArchiveMonths();
@@ -33,6 +36,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
   try {
     const body = await req.json();
     const type = String(body.type || "").toLowerCase() as KegType;
@@ -66,6 +71,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
   try {
     const body = await req.json();
     const id = String(body.id || "").trim();
@@ -95,6 +102,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
   try {
     const { searchParams } = new URL(req.url);
     let id = searchParams.get("id") || "";

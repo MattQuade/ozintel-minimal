@@ -931,7 +931,7 @@ export default function HomePage() {
           Pub Operations
         </a>
         <a href="/operations/forestry" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#15803d', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Forestry Operations - Pending Approval
+          Forestry Operations
         </a>
       </div>
 

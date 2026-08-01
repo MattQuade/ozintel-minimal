@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import OpsGate from "@/components/OpsGate";
 
 type KegTotals = {
   totalIn: number;
@@ -215,6 +216,7 @@ export default function PubOperationsPage() {
   };
 
   return (
+    <OpsGate permission="pubOps" section="Pub Operations">
     <main
       style={{
         fontFamily: "system-ui",
@@ -533,5 +535,6 @@ export default function PubOperationsPage() {
         )}
       </div>
     </main>
+    </OpsGate>
   );
 }

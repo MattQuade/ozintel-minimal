@@ -3,11 +3,14 @@ import {
   createForestryReport,
   listForestryReports,
 } from "@/lib/operations/forestry/reports";
+import { requireOpsAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const access = await requireOpsAccess(req, "forestryOps");
+  if (!access.ok) return access.response;
   try {
     const reports = await listForestryReports();
     return NextResponse.json({ success: true, reports });
@@ -21,6 +24,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const access = await requireOpsAccess(req, "forestryOps");
+  if (!access.ok) return access.response;
   try {
     const form = await req.formData();
     const clientName = String(form.get("clientName") || "").trim();

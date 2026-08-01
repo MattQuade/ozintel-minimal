@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import { checkAccountingAccess } from "@/lib/accounting/access";
 
 const previewLinks = [
-  { href: "/accounting/pending?section=Bank", label: "Bank" },
-  { href: "/accounting/pending?section=Chart%20of%20Accounts", label: "Chart of Accounts" },
-  { href: "/accounting/pending?section=Invoices", label: "Invoices" },
-  { href: "/accounting/pending?section=Customers", label: "Customers" },
-  { href: "/accounting/pending?section=Journal", label: "Journal" },
-  { href: "/accounting/pending?section=Transactions", label: "Transactions" },
-  { href: "/accounting/pending?section=Employees", label: "Employees" },
-  { href: "/accounting/pending?section=Reports", label: "Reports" },
+  { href: "/accounting/pending?module=Accounting&section=Bank", label: "Bank" },
+  { href: "/accounting/pending?module=Accounting&section=Chart%20of%20Accounts", label: "Chart of Accounts" },
+  { href: "/accounting/pending?module=Accounting&section=Invoices", label: "Invoices" },
+  { href: "/accounting/pending?module=Accounting&section=Customers", label: "Customers" },
+  { href: "/accounting/pending?module=Accounting&section=Journal", label: "Journal" },
+  { href: "/accounting/pending?module=Accounting&section=Transactions", label: "Transactions" },
+  { href: "/accounting/pending?module=Accounting&section=Employees", label: "Employees" },
+  { href: "/accounting/pending?module=Accounting&section=Reports", label: "Reports" },
 ];
 
 const fullLinks = [

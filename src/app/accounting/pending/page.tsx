@@ -5,7 +5,15 @@ import { Suspense } from "react";
 
 function PendingContent() {
   const searchParams = useSearchParams();
+  const moduleTitle =
+    searchParams.get("module") || searchParams.get("section") || "Accounting";
   const section = searchParams.get("section");
+  const showSection =
+    Boolean(section) &&
+    section!.toLowerCase() !== moduleTitle.toLowerCase();
+  const backHref = searchParams.get("back") || "/accounting";
+  const backLabel =
+    backHref === "/" ? "← Back to Alerts" : "← Back to Accounting";
 
   return (
     <main
@@ -20,7 +28,7 @@ function PendingContent() {
     >
       <p style={{ margin: "0 0 16px" }}>
         <a
-          href="/accounting"
+          href={backHref}
           style={{
             display: "inline-block",
             color: "#0f172a",
@@ -31,11 +39,11 @@ function PendingContent() {
             borderRadius: 10,
           }}
         >
-          ← Back to Accounting
+          {backLabel}
         </a>
       </p>
-      <h1 style={{ color: "#f97316", marginBottom: 8 }}>Accounting</h1>
-      {section && (
+      <h1 style={{ color: "#f97316", marginBottom: 8 }}>{moduleTitle}</h1>
+      {showSection && (
         <p style={{ color: "#cbd5e1", marginTop: 0, fontSize: "1.1rem" }}>
           {section}
         </p>

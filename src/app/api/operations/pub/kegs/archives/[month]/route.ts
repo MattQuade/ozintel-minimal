@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readArchive } from "@/lib/operations/pub/kegs";
+import { requireOpsAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ month: string }> };
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
   try {
     const { month } = await params;
     const snapshot = await readArchive(month);

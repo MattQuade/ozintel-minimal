@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, type User } from "@/lib/users";
+import { findUserByEmail, type User, type UserPermissions } from "@/lib/users";
 
 const COOKIE_NAME = "ozintel_user_email";
 
@@ -21,19 +21,17 @@ function readEmailFromRequest(req: Request): string {
   }
 }
 
-/**
- * Server-side gate for accounting APIs.
- * Requires restored cookie + approved user + permissions.accounting.
- */
-export async function requireAccountingAccess(
-  req: Request
+async function requirePermission(
+  req: Request,
+  permission: keyof UserPermissions,
+  labels: { signIn: string; denied: string }
 ): Promise<{ ok: true; user: User } | { ok: false; response: NextResponse }> {
   const email = readEmailFromRequest(req);
   if (!email) {
     return {
       ok: false,
       response: NextResponse.json(
-        { success: false, error: "Sign in / restore your account to use Accounting." },
+        { success: false, error: labels.signIn },
         { status: 401 }
       ),
     };
@@ -60,18 +58,43 @@ export async function requireAccountingAccess(
     };
   }
 
-  if (!user.permissions?.accounting) {
+  if (!user.permissions?.[permission]) {
     return {
       ok: false,
       response: NextResponse.json(
-        {
-          success: false,
-          error: "Accounting access requires admin approval.",
-        },
+        { success: false, error: labels.denied },
         { status: 403 }
       ),
     };
   }
 
   return { ok: true, user };
+}
+
+/**
+ * Server-side gate for accounting APIs.
+ * Requires restored cookie + approved user + permissions.accounting.
+ */
+export async function requireAccountingAccess(
+  req: Request
+): Promise<{ ok: true; user: User } | { ok: false; response: NextResponse }> {
+  return requirePermission(req, "accounting", {
+    signIn: "Sign in / restore your account to use Accounting.",
+    denied: "Accounting access requires admin approval.",
+  });
+}
+
+/**
+ * Server-side gate for Pub / Forestry ops APIs.
+ * Requires restored cookie + approved user + the matching ops permission.
+ */
+export async function requireOpsAccess(
+  req: Request,
+  permission: "pubOps" | "forestryOps"
+): Promise<{ ok: true; user: User } | { ok: false; response: NextResponse }> {
+  const label = permission === "pubOps" ? "Pub Operations" : "Forestry Operations";
+  return requirePermission(req, permission, {
+    signIn: `Sign in / restore your account to use ${label}.`,
+    denied: `${label} access requires admin approval.`,
+  });
 }

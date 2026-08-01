@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import OpsGate from "@/components/OpsGate";
 
 type ForestryReport = {
   id: string;
@@ -181,6 +182,7 @@ export default function ForestryOperationsPage() {
   };
 
   return (
+    <OpsGate permission="forestryOps" section="Forestry Operations">
     <main
       style={{
         fontFamily: "system-ui",
@@ -458,5 +460,6 @@ export default function ForestryOperationsPage() {
         </section>
       </div>
     </main>
+    </OpsGate>
   );
 }
