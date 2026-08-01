@@ -33,6 +33,7 @@ function money(n: number) {
 
 function canHardDelete(status: string) {
   return status === 'draft' || status === 'void';
+}
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
