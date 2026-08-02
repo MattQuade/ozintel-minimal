@@ -60,7 +60,7 @@ export default function NewInvoicePage() {
   );
   const [orderDate, setOrderDate] = useState('');
   const [subject, setSubject] = useState(
-    process.env.NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT || ''
+    process.env.NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT || 'Draught'
   );
   const [notes, setNotes] = useState('');
   const [matchKeyword, setMatchKeyword] = useState('');

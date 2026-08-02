@@ -46,23 +46,36 @@ function fmtAmount(n: number) {
   }).format(Math.abs(n) || 0);
 }
 
-function envText(key: string, fallback = '') {
+/** Env override if set; otherwise Collingullie Hotel defaults (must show in prod without env). */
+function envText(key: string, fallback: string) {
   const raw = process.env[key];
-  if (raw == null || raw === '') return fallback;
+  if (raw == null || String(raw).trim() === '') return fallback;
   return String(raw).replace(/\\n/g, '\n').trim();
 }
 
 const BUSINESS_NAME = envText(
   'NEXT_PUBLIC_OZINTEL_BUSINESS_NAME',
-  'OzIntel Accounting'
+  'Collingullie Hotel'
 );
-const BUSINESS_ADDRESS = envText('NEXT_PUBLIC_OZINTEL_BUSINESS_ADDRESS');
-const BUSINESS_ABN = envText('NEXT_PUBLIC_OZINTEL_ABN');
-const BANK_NAME = envText('NEXT_PUBLIC_OZINTEL_BANK_NAME');
-const BANK_ACCOUNT_NAME = envText('NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT_NAME');
-const BANK_BSB = envText('NEXT_PUBLIC_OZINTEL_BANK_BSB');
-const BANK_ACCOUNT = envText('NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT');
-const DEFAULT_SUBJECT = envText('NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT');
+const BUSINESS_ADDRESS = envText(
+  'NEXT_PUBLIC_OZINTEL_BUSINESS_ADDRESS',
+  '10 Lockhart Road,\nCollingullie, NSW, 2650'
+);
+const BUSINESS_ABN = envText('NEXT_PUBLIC_OZINTEL_ABN', '79 095 176 373');
+const BANK_NAME = envText('NEXT_PUBLIC_OZINTEL_BANK_NAME', 'ANZ');
+const BANK_ACCOUNT_NAME = envText(
+  'NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT_NAME',
+  'Collingullie Hotel'
+);
+const BANK_BSB = envText('NEXT_PUBLIC_OZINTEL_BANK_BSB', '012-823');
+const BANK_ACCOUNT = envText(
+  'NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT',
+  '4236-236-56'
+);
+const DEFAULT_SUBJECT = envText(
+  'NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT',
+  'Draught'
+);
 
 function lessLabel(description: string): string {
   const d = String(description || '').trim();
@@ -72,6 +85,11 @@ function lessLabel(description: string): string {
     return rest ? `Less: ${rest}` : 'Less:';
   }
   return `Less: ${d}`;
+}
+
+function subjectDisplay(raw: string): string {
+  const s = String(raw || '').trim().replace(/:+\s*$/, '');
+  return s ? `Subject: ${s}:` : '';
 }
 
 export default function InvoicePrintPage() {
@@ -123,11 +141,10 @@ export default function InvoicePrintPage() {
     );
   }
 
-  const subject =
-    String(invoice.subject || '').trim() || DEFAULT_SUBJECT;
+  const subject = subjectDisplay(
+    String(invoice.subject || '').trim() || DEFAULT_SUBJECT
+  );
   const orderDate = String(invoice.orderDate || '').trim();
-  const hasBank =
-    BANK_NAME || BANK_ACCOUNT_NAME || BANK_BSB || BANK_ACCOUNT;
 
   return (
     <AccountingGate
@@ -135,7 +152,7 @@ export default function InvoicePrintPage() {
       backHref={`/invoices/${id}`}
       backLabel="← Back to invoice"
     >
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-6 max-w-[720px] mx-auto print:p-0 print:max-w-none">
         <div className="print:hidden flex gap-3 mb-6">
           <button
             type="button"
@@ -153,67 +170,62 @@ export default function InvoicePrintPage() {
         </div>
 
         <article
-          className="bg-white border border-slate-200 print:border-0 p-10 print:p-0 text-[15px] text-black leading-relaxed"
+          className="bg-white text-black print:border-0 p-10 print:p-8 text-[15px] leading-[1.45] font-bold"
           style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
         >
-          <header className="text-center mb-10">
-            <h1 className="text-xl font-bold tracking-wide uppercase mb-4">
-              Tax Invoice
+          {/* Header — centered like the paper invoice */}
+          <header className="text-center mb-12">
+            <h1 className="text-[18px] font-bold tracking-wide uppercase mb-5">
+              TAX INVOICE
             </h1>
-            <div className="font-bold text-base">{BUSINESS_NAME}</div>
-            {BUSINESS_ADDRESS && (
-              <div className="whitespace-pre-line mt-0.5">
-                {BUSINESS_ADDRESS}
-              </div>
-            )}
-            {BUSINESS_ABN && (
-              <div className="mt-0.5">
-                <span className="font-bold">ABN:</span> {BUSINESS_ABN}
-              </div>
-            )}
+            <div className="font-bold text-[15px] leading-snug">
+              {BUSINESS_NAME}
+            </div>
+            <div className="whitespace-pre-line font-bold text-[15px] leading-snug mt-0.5">
+              {BUSINESS_ADDRESS}
+            </div>
+            <div className="mt-5 font-bold text-[15px]">
+              ABN: {BUSINESS_ABN}
+            </div>
           </header>
 
-          <section className="mb-8 space-y-1">
+          {/* Meta — left-aligned, bold label + value */}
+          <section className="mb-8 space-y-0.5 font-bold">
             <div>
-              <span className="font-bold">To:</span>{' '}
-              {invoice.customerName}
+              To: {invoice.customerName}
             </div>
             <div>
-              <span className="font-bold">Date:</span>{' '}
-              {formatAuDate(invoice.issueDate)}
+              Date: {formatAuDate(invoice.issueDate)}
             </div>
-            {orderDate && (
+            {orderDate ? (
               <div>
-                <span className="font-bold">Order Date:</span>{' '}
-                {formatAuDate(orderDate)}
+                Order Date: {formatAuDate(orderDate)}
               </div>
-            )}
+            ) : null}
             <div>
-              <span className="font-bold">Invoice No.:</span>{' '}
-              {invoice.number}
+              Invoice No.: {invoice.number}
             </div>
           </section>
 
-          <div className="flex justify-between items-baseline mb-3">
-            {subject ? (
-              <div className="font-bold">Subject: {subject}:</div>
-            ) : (
-              <div />
-            )}
-            <div className="font-bold pr-0.5">$</div>
+          {/* Subject + $ column cue */}
+          <div className="flex justify-between items-baseline mb-2 font-bold">
+            <div>{subject}</div>
+            <div className="pr-0.5">$</div>
           </div>
 
-          <div className="mb-2">
+          {/* Line items — qty | desc | unit (incl. GST) | total; minimal borders */}
+          <div className="mb-1 font-bold">
             {rows.product.map((line) => {
               const t = computeLineTotals(line);
               const unitIncl = unitPriceInclGst(line);
               const qty = Number(line.quantity) || 0;
+              const desc = String(line.description || '').trim();
 
               if (isFreightLine(line)) {
                 return (
                   <div
                     key={line.id}
-                    className="grid grid-cols-[1fr_5.5rem] gap-x-4 py-0.5"
+                    className="grid grid-cols-[1fr_5.75rem] gap-x-4 py-[2px]"
                   >
                     <div>
                       Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)}{' '}
@@ -226,20 +238,34 @@ export default function InvoicePrintPage() {
                 );
               }
 
+              /* Bare amount-only / blank description line (e.g. rounding) */
+              if (!desc) {
+                return (
+                  <div
+                    key={line.id}
+                    className="grid grid-cols-[1fr_5.75rem] gap-x-4 py-[2px]"
+                  >
+                    <div />
+                    <div className="text-right tabular-nums">
+                      {fmtAmount(t.incl)}
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={line.id}
-                  className="grid grid-cols-[2.5rem_1fr_auto_5.5rem] gap-x-3 py-0.5 items-baseline"
+                  className="grid grid-cols-[2.25rem_minmax(0,1fr)_5.75rem] gap-x-2 py-[2px] items-baseline"
                 >
                   <div className="tabular-nums">{qty}</div>
                   <div className="min-w-0">
-                    <span>{line.description}</span>
-                    <span className="ml-3 tabular-nums">
+                    <span>{desc}</span>
+                    <span className="ml-4 tabular-nums">
                       {fmtAmount(unitIncl)}
                     </span>
-                    <span className="ml-1 text-[13px]">(incl. GST)</span>
+                    <span className="ml-1">(incl. GST)</span>
                   </div>
-                  <div />
                   <div className="text-right tabular-nums">
                     {fmtAmount(t.incl)}
                   </div>
@@ -248,12 +274,11 @@ export default function InvoicePrintPage() {
             })}
           </div>
 
-          <div className="mt-6 mb-2 flex justify-end">
-            <div className="grid grid-cols-[auto_5.5rem] gap-x-6 min-w-[14rem]">
-              <div className="font-bold text-right">Subtotal:</div>
-              <div className="text-right tabular-nums font-bold">
-                {fmtAmount(printTotals.subtotalIncl)}
-              </div>
+          {/* Totals — full width; labels left with items, amounts right */}
+          <div className="mt-8 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold">
+            <div>Subtotal:</div>
+            <div className="text-right tabular-nums">
+              {fmtAmount(printTotals.subtotalIncl)}
             </div>
           </div>
 
@@ -262,7 +287,7 @@ export default function InvoicePrintPage() {
             return (
               <div
                 key={line.id}
-                className="grid grid-cols-[1fr_5.5rem] gap-x-4 py-0.5 mt-2"
+                className="mt-3 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold"
               >
                 <div>{lessLabel(line.description)}</div>
                 <div className="text-right tabular-nums">
@@ -272,49 +297,29 @@ export default function InvoicePrintPage() {
             );
           })}
 
-          <div className="mt-6 mb-10 grid grid-cols-[1fr_5.5rem] gap-x-4">
-            <div className="font-bold">Total (incl. GST):</div>
-            <div className="text-right tabular-nums font-bold">
+          <div className="mt-6 mb-12 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold">
+            <div>Total (incl. GST):</div>
+            <div className="text-right tabular-nums">
               {fmtAmount(printTotals.totalIncl)}
             </div>
           </div>
 
-          <p className="text-center font-bold mb-10">
+          <p className="text-center font-bold mb-12">
             Thank you for your custom
           </p>
 
-          {hasBank && (
-            <section className="mb-14 space-y-0.5">
-              {(BANK_NAME || BANK_ACCOUNT_NAME) && (
-                <div>
-                  {BANK_NAME && (
-                    <span className="font-bold">{BANK_NAME}:</span>
-                  )}
-                  {BANK_ACCOUNT_NAME && (
-                    <>
-                      {BANK_NAME ? ' ' : ''}
-                      {BANK_ACCOUNT_NAME}
-                    </>
-                  )}
-                </div>
-              )}
-              {BANK_BSB && (
-                <div>
-                  <span className="font-bold">BSB:</span> {BANK_BSB}
-                </div>
-              )}
-              {BANK_ACCOUNT && (
-                <div>
-                  <span className="font-bold">Account:</span> {BANK_ACCOUNT}
-                </div>
-              )}
-            </section>
-          )}
+          <section className="mb-16 space-y-0.5 font-bold">
+            <div>
+              {BANK_NAME}: {BANK_ACCOUNT_NAME}
+            </div>
+            <div>BSB: {BANK_BSB}</div>
+            <div>Account: {BANK_ACCOUNT}</div>
+          </section>
 
-          <footer className="text-xs text-slate-600 space-y-0.5 print:mt-8">
-            {invoice.matchKeyword && (
+          <footer className="text-[11px] font-normal text-black space-y-0.5">
+            {invoice.matchKeyword ? (
               <div>Payment Reference: {invoice.matchKeyword}</div>
-            )}
+            ) : null}
             <div>Generated by OzIntel Accounting</div>
           </footer>
         </article>
