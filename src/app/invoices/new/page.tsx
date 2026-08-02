@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate } from '@/lib/accounting/dates';
+import {
+  computeInvoiceTotals,
+  computeLineTotals,
+} from '@/lib/accounting/invoiceMath';
 
 type Customer = { id: string; name: string };
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
@@ -23,10 +27,6 @@ function money(n: number) {
     style: 'currency',
     currency: 'AUD',
   }).format(n || 0);
-}
-
-function round2(n: number) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 export default function NewInvoicePage() {
@@ -74,17 +74,7 @@ export default function NewInvoicePage() {
     [coa]
   );
 
-  const totals = useMemo(() => {
-    let subtotal = 0;
-    let gstTotal = 0;
-    for (const line of lines) {
-      const excl = round2((line.quantity || 0) * (line.unitPrice || 0));
-      const gst = line.hasGST ? round2(excl * 0.1) : 0;
-      subtotal = round2(subtotal + excl);
-      gstTotal = round2(gstTotal + gst);
-    }
-    return { subtotal, gstTotal, total: round2(subtotal + gstTotal) };
-  }, [lines]);
+  const totals = useMemo(() => computeInvoiceTotals(lines), [lines]);
 
   const updateLine = (id: string, patch: Partial<LineDraft>) => {
     setLines((prev) =>
@@ -106,7 +96,7 @@ export default function NewInvoicePage() {
       setError('Select a customer');
       return;
     }
-    if (!lines.some((l) => l.description.trim() && l.quantity > 0)) {
+    if (!lines.some((l) => l.description.trim() && l.quantity !== 0)) {
       setError('Add at least one line item');
       return;
     }
@@ -144,10 +134,11 @@ export default function NewInvoicePage() {
 
   return (
     <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
-      <div className="p-8 max-w-4xl mx-auto">
+      <div className="p-8 max-w-5xl mx-auto">
         <h1 className="text-3xl font-bold mb-2">New invoice</h1>
         <p className="text-slate-500 mb-8">
           Saves as draft. Authorise from the invoice page to post AR / revenue / GST.
+          Use a line description containing &quot;Discount&quot; (or a negative unit) to reduce the total.
         </p>
 
         {customers.length === 0 && (
@@ -208,127 +199,167 @@ export default function NewInvoicePage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Line items</h2>
-              <button
-                type="button"
-                className="text-sm text-orange-700 hover:underline"
-                onClick={() =>
-                  setLines((prev) => [
-                    ...prev,
-                    {
-                      id: String(Date.now()),
-                      description: '',
-                      quantity: 1,
-                      unitPrice: 0,
-                      accountCode: revenueAccounts[0]?.code || '0105',
-                      hasGST: true,
-                    },
-                  ])
-                }
-              >
-                + Add line
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  className="text-sm text-slate-600 hover:underline"
+                  onClick={() =>
+                    setLines((prev) => [
+                      ...prev,
+                      {
+                        id: String(Date.now()),
+                        description: 'Discount',
+                        quantity: 1,
+                        unitPrice: 0,
+                        accountCode: revenueAccounts[0]?.code || '0105',
+                        hasGST: true,
+                      },
+                    ])
+                  }
+                >
+                  + Discount
+                </button>
+                <button
+                  type="button"
+                  className="text-sm text-orange-700 hover:underline"
+                  onClick={() =>
+                    setLines((prev) => [
+                      ...prev,
+                      {
+                        id: String(Date.now()),
+                        description: '',
+                        quantity: 1,
+                        unitPrice: 0,
+                        accountCode: revenueAccounts[0]?.code || '0105',
+                        hasGST: true,
+                      },
+                    ])
+                  }
+                >
+                  + Add line
+                </button>
+              </div>
             </div>
             <div className="space-y-3">
-              {lines.map((line) => (
-                <div
-                  key={line.id}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end border border-slate-100 rounded-xl p-3"
-                >
-                  <div className="md:col-span-4">
-                    <label className="block text-xs text-slate-500 mb-1">Description</label>
-                    <input
-                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                      value={line.description}
-                      onChange={(e) =>
-                        updateLine(line.id, { description: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs text-slate-500 mb-1">Qty</label>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                      value={line.quantity}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          updateLine(line.id, { quantity: 1 });
-                          return;
-                        }
-                        const n = parseFloat(raw);
-                        updateLine(line.id, {
-                          quantity: Number.isFinite(n) ? n : 1,
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs text-slate-500 mb-1">
-                      Unit (ex GST)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      min="0"
-                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                      value={line.unitPrice}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === '') {
-                          updateLine(line.id, { unitPrice: 0 });
-                          return;
-                        }
-                        const n = parseFloat(raw);
-                        updateLine(line.id, {
-                          unitPrice: Number.isFinite(n) ? n : 0,
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="md:col-span-3">
-                    <label className="block text-xs text-slate-500 mb-1">Account</label>
-                    <select
-                      className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                      value={line.accountCode}
-                      onChange={(e) =>
-                        updateLine(line.id, { accountCode: e.target.value })
-                      }
-                    >
-                      {revenueAccounts.map((a) => (
-                        <option key={a.code} value={a.code}>
-                          {a.code} — {a.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-1 flex items-center gap-2 pb-1">
-                    <label className="flex items-center gap-1 text-xs text-slate-600">
+              {lines.map((line) => {
+                const lineTot = computeLineTotals(line);
+                return (
+                  <div
+                    key={line.id}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end border border-slate-100 rounded-xl p-3"
+                  >
+                    <div className="md:col-span-3">
+                      <label className="block text-xs text-slate-500 mb-1">Description</label>
                       <input
-                        type="checkbox"
-                        checked={line.hasGST}
+                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                        value={line.description}
                         onChange={(e) =>
-                          updateLine(line.id, { hasGST: e.target.checked })
+                          updateLine(line.id, { description: e.target.value })
                         }
                       />
-                      GST
-                    </label>
-                    {lines.length > 1 && (
-                      <button
-                        type="button"
-                        className="text-red-500 text-xs"
-                        onClick={() =>
-                          setLines((prev) => prev.filter((l) => l.id !== line.id))
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-xs text-slate-500 mb-1">Qty</label>
+                      <input
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                        value={line.quantity}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            updateLine(line.id, { quantity: 1 });
+                            return;
+                          }
+                          const n = parseFloat(raw);
+                          updateLine(line.id, {
+                            quantity: Number.isFinite(n) ? n : 1,
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs text-slate-500 mb-1">
+                        Unit (ex GST)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                        value={line.unitPrice}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            updateLine(line.id, { unitPrice: 0 });
+                            return;
+                          }
+                          const n = parseFloat(raw);
+                          updateLine(line.id, {
+                            unitPrice: Number.isFinite(n) ? n : 0,
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-xs text-slate-500 mb-1">GST</label>
+                      <input
+                        type="text"
+                        readOnly
+                        tabIndex={-1}
+                        className="w-full border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 text-sm text-slate-700"
+                        value={money(Math.abs(lineTot.gst))}
+                        title={
+                          lineTot.isDiscount
+                            ? 'Line GST (reduces invoice GST)'
+                            : 'GST for this line (qty × unit × 10%)'
+                        }
+                        aria-label="Line GST"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs text-slate-500 mb-1">Account</label>
+                      <select
+                        className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                        value={line.accountCode}
+                        onChange={(e) =>
+                          updateLine(line.id, { accountCode: e.target.value })
                         }
                       >
-                        ✕
-                      </button>
-                    )}
+                        {revenueAccounts.map((a) => (
+                          <option key={a.code} value={a.code}>
+                            {a.code} — {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-1 flex items-center gap-2 pb-1">
+                      <label className="flex items-center gap-1 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={line.hasGST}
+                          onChange={(e) =>
+                            updateLine(line.id, { hasGST: e.target.checked })
+                          }
+                        />
+                        Tax
+                      </label>
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          className="text-red-500 text-xs"
+                          onClick={() =>
+                            setLines((prev) => prev.filter((l) => l.id !== line.id))
+                          }
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -362,6 +393,9 @@ export default function NewInvoicePage() {
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
             <div className="text-sm text-slate-600 space-y-1">
               <div>Subtotal (ex GST): {money(totals.subtotal)}</div>
+              {totals.discountTotal > 0.009 && (
+                <div>Discount (ex GST): −{money(totals.discountTotal)}</div>
+              )}
               <div>GST: {money(totals.gstTotal)}</div>
               <div className="text-lg font-semibold text-slate-900">
                 Total: {money(totals.total)}

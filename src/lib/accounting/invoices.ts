@@ -18,6 +18,11 @@ import {
   isOpenForAllocation,
   type InvoiceMatchCandidate,
 } from "@/lib/accounting/invoiceDepositMatch";
+import {
+  computeInvoiceTotals,
+  computeLineTotals,
+  round2,
+} from "@/lib/accounting/invoiceMath";
 
 export type InvoiceStatus = "draft" | "authorised" | "paid" | "void";
 
@@ -25,12 +30,20 @@ export type InvoiceLine = {
   id: string;
   description: string;
   quantity: number;
-  /** Unit price excluding GST */
+  /** Unit price excluding GST (may be negative for discounts) */
   unitPrice: number;
   accountCode: string;
   accountName: string;
   hasGST: boolean;
 };
+
+export {
+  computeInvoiceTotals,
+  computeLineTotals,
+  GST_RATE,
+  isDiscountLine,
+  round2,
+} from "@/lib/accounting/invoiceMath";
 
 export type InvoicePayment = {
   id: string;
@@ -52,10 +65,12 @@ export type Invoice = {
   dueDate: string;
   lines: InvoiceLine[];
   status: InvoiceStatus;
-  /** Ex GST */
+  /** Positive lines ex GST (before discount) */
   subtotal: number;
+  /** Discount lines ex GST (absolute; subtracted from subtotal) */
+  discountTotal: number;
   gstTotal: number;
-  /** Incl GST */
+  /** Incl GST = (subtotal − discountTotal) + gstTotal */
   total: number;
   amountPaid: number;
   amountDue: number;
@@ -77,7 +92,6 @@ export type Invoice = {
 
 const AR_CODE = "2101";
 const GST_CODE = "820";
-const GST_RATE = 0.1;
 
 let invoicesChain: Promise<unknown> = Promise.resolve();
 function withInvoicesLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -114,10 +128,15 @@ async function readInvoicesUnlocked(): Promise<Invoice[]> {
     if (!Array.isArray(parsed)) return [];
     return (parsed as Invoice[]).map((inv) => ({
       ...inv,
+      lines: Array.isArray(inv.lines) ? inv.lines : [],
+      discountTotal:
+        typeof inv.discountTotal === "number" ? inv.discountTotal : 0,
       matchKeyword: String(inv.matchKeyword || "").trim(),
       notes: String(inv.notes || ""),
       payments: Array.isArray(inv.payments) ? inv.payments : [],
-      ledgerEntryIds: Array.isArray(inv.ledgerEntryIds) ? inv.ledgerEntryIds : [],
+      ledgerEntryIds: Array.isArray(inv.ledgerEntryIds)
+        ? inv.ledgerEntryIds
+        : [],
       voidLedgerEntryIds: Array.isArray(inv.voidLedgerEntryIds)
         ? inv.voidLedgerEntryIds
         : [],
@@ -135,41 +154,6 @@ export async function readInvoices(): Promise<Invoice[]> {
 export async function getInvoiceById(id: string): Promise<Invoice | null> {
   const invoices = await readInvoicesUnlocked();
   return invoices.find((inv) => inv.id === id) || null;
-}
-
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-export function computeLineTotals(line: InvoiceLine): {
-  excl: number;
-  gst: number;
-  incl: number;
-} {
-  const excl = round2(
-    (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0)
-  );
-  const gst = line.hasGST ? round2(excl * GST_RATE) : 0;
-  return { excl, gst, incl: round2(excl + gst) };
-}
-
-export function computeInvoiceTotals(lines: InvoiceLine[]): {
-  subtotal: number;
-  gstTotal: number;
-  total: number;
-} {
-  let subtotal = 0;
-  let gstTotal = 0;
-  for (const line of lines) {
-    const t = computeLineTotals(line);
-    subtotal = round2(subtotal + t.excl);
-    gstTotal = round2(gstTotal + t.gst);
-  }
-  return {
-    subtotal,
-    gstTotal,
-    total: round2(subtotal + gstTotal),
-  };
 }
 
 function nextInvoiceNumber(invoices: Invoice[]): string {
@@ -229,7 +213,12 @@ async function enrichLines(lines: InvoiceLine[]): Promise<InvoiceLine[]> {
 
 function applyMoneyFields(
   invoice: Invoice,
-  totals: { subtotal: number; gstTotal: number; total: number }
+  totals: {
+    subtotal: number;
+    discountTotal: number;
+    gstTotal: number;
+    total: number;
+  }
 ): Invoice {
   const amountPaid = round2(invoice.amountPaid || 0);
   const amountDue = round2(Math.max(0, totals.total - amountPaid));
@@ -239,7 +228,10 @@ function applyMoneyFields(
   }
   return {
     ...invoice,
-    ...totals,
+    subtotal: totals.subtotal,
+    discountTotal: totals.discountTotal,
+    gstTotal: totals.gstTotal,
+    total: totals.total,
     amountPaid,
     amountDue,
     status,
@@ -319,6 +311,7 @@ export async function upsertInvoice(
       lines,
       status: "draft",
       subtotal: totals.subtotal,
+      discountTotal: totals.discountTotal,
       gstTotal: totals.gstTotal,
       total: totals.total,
       amountPaid: 0,

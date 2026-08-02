@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { computeLineTotals } from '@/lib/accounting/invoiceMath';
 
 type InvoiceLine = {
   id: string;
@@ -34,6 +35,7 @@ type Invoice = {
   lines: InvoiceLine[];
   status: string;
   subtotal: number;
+  discountTotal?: number;
   gstTotal: number;
   total: number;
   amountPaid: number;
@@ -379,7 +381,7 @@ export default function InvoiceDetailPage() {
             </thead>
             <tbody>
               {invoice.lines.map((line) => {
-                const excl = line.quantity * line.unitPrice;
+                const t = computeLineTotals(line);
                 return (
                   <tr key={line.id} className="border-b border-slate-100">
                     <td className="py-2">{line.description}</td>
@@ -391,7 +393,9 @@ export default function InvoiceDetailPage() {
                     <td className="py-2 text-center">
                       {line.hasGST ? '10%' : '—'}
                     </td>
-                    <td className="py-2 text-right">{money(excl)}</td>
+                    <td className="py-2 text-right">
+                      {t.isDiscount ? `−${money(Math.abs(t.excl))}` : money(t.excl)}
+                    </td>
                   </tr>
                 );
               })}
@@ -399,11 +403,17 @@ export default function InvoiceDetailPage() {
           </table>
 
           <div className="flex justify-end">
-            <div className="text-sm space-y-1 w-48">
+            <div className="text-sm space-y-1 w-52">
               <div className="flex justify-between">
                 <span className="text-slate-500">Subtotal</span>
                 <span>{money(invoice.subtotal)}</span>
               </div>
+              {(invoice.discountTotal || 0) > 0.009 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Discount</span>
+                  <span>−{money(invoice.discountTotal || 0)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">GST</span>
                 <span>{money(invoice.gstTotal)}</span>
