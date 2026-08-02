@@ -185,23 +185,33 @@ export default function InvoicesPage() {
                     {money(inv.amountDue)}
                   </td>
                   <td className="p-3 text-right">
-                    {canHardDelete(inv.status) ? (
-                      <button
-                        type="button"
-                        disabled={busyId === inv.id}
-                        onClick={() => remove(inv)}
-                        className="text-red-600 hover:underline disabled:opacity-40"
-                      >
-                        Delete
-                      </button>
-                    ) : (
-                      <span
-                        className="text-slate-400 text-xs"
-                        title="Authorised/paid invoices post to the ledger — void first, then delete"
-                      >
-                        Void first
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                      {inv.status === 'draft' && (
+                        <Link
+                          href={`/invoices/${inv.id}/edit`}
+                          className="text-orange-700 hover:underline"
+                        >
+                          Edit
+                        </Link>
+                      )}
+                      {canHardDelete(inv.status) ? (
+                        <button
+                          type="button"
+                          disabled={busyId === inv.id}
+                          onClick={() => remove(inv)}
+                          className="text-red-600 hover:underline disabled:opacity-40"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <span
+                          className="text-slate-400 text-xs"
+                          title="Authorised/paid invoices post to the ledger — void first, then delete"
+                        >
+                          Void first
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
