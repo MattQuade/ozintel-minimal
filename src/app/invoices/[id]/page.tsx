@@ -287,6 +287,12 @@ export default function InvoiceDetailPage() {
             </Link>
             {invoice.status === 'draft' && (
               <>
+                <Link
+                  href={`/invoices/${invoice.id}/edit`}
+                  className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium"
+                >
+                  Edit
+                </Link>
                 <button
                   type="button"
                   disabled={busy}

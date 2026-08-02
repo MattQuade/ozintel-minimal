@@ -27,7 +27,10 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-/** Update notes / matchKeyword (any status); number editable while draft. */
+/**
+ * Draft: full structural edit (customer, dates, lines, notes, keyword, number).
+ * Authorised/paid/void: notes + matchKeyword only (enforced in upsertInvoice).
+ */
 export async function PATCH(req: Request, { params }: Params) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
@@ -35,6 +38,14 @@ export async function PATCH(req: Request, { params }: Params) {
   try {
     const { id } = await params;
     const body = await req.json();
+    const existing = await getInvoiceById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Invoice not found" },
+        { status: 404 }
+      );
+    }
+
     const patch: Parameters<typeof upsertInvoice>[0] = {
       id,
       notes: body.notes,
@@ -43,6 +54,14 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.number !== undefined) {
       patch.number = body.number;
     }
+
+    if (existing.status === "draft") {
+      if (body.customerId !== undefined) patch.customerId = body.customerId;
+      if (body.issueDate !== undefined) patch.issueDate = body.issueDate;
+      if (body.dueDate !== undefined) patch.dueDate = body.dueDate;
+      if (Array.isArray(body.lines)) patch.lines = body.lines;
+    }
+
     const invoice = await upsertInvoice(patch);
     return NextResponse.json({ success: true, invoice });
   } catch (error) {
