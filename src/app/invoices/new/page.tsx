@@ -16,8 +16,10 @@ type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
 type LineDraft = {
   id: string;
   description: string;
-  quantity: number;
-  unitPrice: number;
+  /** Raw input text so the field can be cleared while typing */
+  quantity: string;
+  /** Raw input text so the field can be cleared while typing */
+  unitPrice: string;
   accountCode: string;
   hasGST: boolean;
 };
@@ -27,6 +29,22 @@ function money(n: number) {
     style: 'currency',
     currency: 'AUD',
   }).format(n || 0);
+}
+
+/** Parse draft numeric input; empty / invalid → 0 for totals & save. */
+function parseDraftNumber(raw: string): number {
+  if (raw.trim() === '') return 0;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function lineForMath(line: LineDraft) {
+  return {
+    description: line.description,
+    quantity: parseDraftNumber(line.quantity),
+    unitPrice: parseDraftNumber(line.unitPrice),
+    hasGST: line.hasGST,
+  };
 }
 
 export default function NewInvoicePage() {
@@ -48,8 +66,8 @@ export default function NewInvoicePage() {
     {
       id: '1',
       description: '',
-      quantity: 1,
-      unitPrice: 0,
+      quantity: '1',
+      unitPrice: '',
       accountCode: '0105',
       hasGST: true,
     },
@@ -74,7 +92,10 @@ export default function NewInvoicePage() {
     [coa]
   );
 
-  const totals = useMemo(() => computeInvoiceTotals(lines), [lines]);
+  const totals = useMemo(
+    () => computeInvoiceTotals(lines.map(lineForMath)),
+    [lines]
+  );
 
   const updateLine = (id: string, patch: Partial<LineDraft>) => {
     setLines((prev) =>
@@ -96,7 +117,11 @@ export default function NewInvoicePage() {
       setError('Select a customer');
       return;
     }
-    if (!lines.some((l) => l.description.trim() && l.quantity !== 0)) {
+    if (
+      !lines.some(
+        (l) => l.description.trim() && parseDraftNumber(l.quantity) !== 0
+      )
+    ) {
       setError('Add at least one line item');
       return;
     }
@@ -115,8 +140,8 @@ export default function NewInvoicePage() {
             .filter((l) => l.description.trim())
             .map((l) => ({
               description: l.description,
-              quantity: l.quantity,
-              unitPrice: l.unitPrice,
+              quantity: parseDraftNumber(l.quantity),
+              unitPrice: parseDraftNumber(l.unitPrice),
               accountCode: l.accountCode,
               hasGST: l.hasGST,
             })),
@@ -209,8 +234,8 @@ export default function NewInvoicePage() {
                       {
                         id: String(Date.now()),
                         description: 'Discount',
-                        quantity: 1,
-                        unitPrice: 0,
+                        quantity: '1',
+                        unitPrice: '',
                         accountCode: revenueAccounts[0]?.code || '0105',
                         hasGST: true,
                       },
@@ -228,8 +253,8 @@ export default function NewInvoicePage() {
                       {
                         id: String(Date.now()),
                         description: '',
-                        quantity: 1,
-                        unitPrice: 0,
+                        quantity: '1',
+                        unitPrice: '',
                         accountCode: revenueAccounts[0]?.code || '0105',
                         hasGST: true,
                       },
@@ -242,7 +267,7 @@ export default function NewInvoicePage() {
             </div>
             <div className="space-y-3">
               {lines.map((line) => {
-                const lineTot = computeLineTotals(line);
+                const lineTot = computeLineTotals(lineForMath(line));
                 return (
                   <div
                     key={line.id}
@@ -266,17 +291,9 @@ export default function NewInvoicePage() {
                         inputMode="decimal"
                         className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
                         value={line.quantity}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === '') {
-                            updateLine(line.id, { quantity: 1 });
-                            return;
-                          }
-                          const n = parseFloat(raw);
-                          updateLine(line.id, {
-                            quantity: Number.isFinite(n) ? n : 1,
-                          });
-                        }}
+                        onChange={(e) =>
+                          updateLine(line.id, { quantity: e.target.value })
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -289,17 +306,9 @@ export default function NewInvoicePage() {
                         inputMode="decimal"
                         className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
                         value={line.unitPrice}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === '') {
-                            updateLine(line.id, { unitPrice: 0 });
-                            return;
-                          }
-                          const n = parseFloat(raw);
-                          updateLine(line.id, {
-                            unitPrice: Number.isFinite(n) ? n : 0,
-                          });
-                        }}
+                        onChange={(e) =>
+                          updateLine(line.id, { unitPrice: e.target.value })
+                        }
                       />
                     </div>
                     <div className="md:col-span-2">
