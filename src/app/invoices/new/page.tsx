@@ -58,6 +58,10 @@ export default function NewInvoicePage() {
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
   );
+  const [orderDate, setOrderDate] = useState('');
+  const [subject, setSubject] = useState(
+    process.env.NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT || ''
+  );
   const [notes, setNotes] = useState('');
   const [matchKeyword, setMatchKeyword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -134,6 +138,8 @@ export default function NewInvoicePage() {
           customerId,
           issueDate,
           dueDate,
+          orderDate: orderDate || '',
+          subject: subject.trim(),
           notes,
           matchKeyword,
           lines: lines
@@ -208,6 +214,19 @@ export default function NewInvoicePage() {
               </p>
             </div>
             <div>
+              <label className="block text-sm text-slate-600 mb-1">Order date</label>
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                value={orderDate}
+                onChange={(e) => setOrderDate(e.target.value)}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Optional · shown on print
+                {orderDate ? ` · ${formatAuDate(orderDate)}` : ''}
+              </p>
+            </div>
+            <div>
               <label className="block text-sm text-slate-600 mb-1">Due date</label>
               <input
                 type="date"
@@ -218,6 +237,17 @@ export default function NewInvoicePage() {
               <p className="text-xs text-slate-400 mt-1">
                 {formatAuDate(dueDate) || 'DD/MM/YYYY'}
               </p>
+            </div>
+            <div className="md:col-span-3">
+              <label className="block text-sm text-slate-600 mb-1">
+                Subject (print)
+              </label>
+              <input
+                className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. Draught"
+              />
             </div>
           </div>
 

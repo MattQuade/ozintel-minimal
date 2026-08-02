@@ -29,6 +29,17 @@ export function isDiscountLine(line: {
   return qty < 0 || unit < 0 || qty * unit < 0;
 }
 
+/** Freight lines print as "Freight: N x $unit (incl.GST)". */
+export function isFreightLine(line: { description?: string }): boolean {
+  return /^\s*freight\b/i.test(String(line.description || ""));
+}
+
+/** Unit price including GST when the line is taxable. */
+export function unitPriceInclGst(line: InvoiceLineLike): number {
+  const unit = Number(line.unitPrice) || 0;
+  return line.hasGST ? round2(unit * (1 + GST_RATE)) : round2(unit);
+}
+
 export function computeLineTotals(line: InvoiceLineLike): {
   excl: number;
   gst: number;

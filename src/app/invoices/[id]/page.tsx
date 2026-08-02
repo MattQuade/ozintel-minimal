@@ -32,6 +32,8 @@ type Invoice = {
   customerName: string;
   issueDate: string;
   dueDate: string;
+  orderDate?: string;
+  subject?: string;
   lines: InvoiceLine[];
   status: string;
   subtotal: number;
@@ -81,6 +83,9 @@ export default function InvoiceDetailPage() {
   const [payNote, setPayNote] = useState('');
   const [matchKeyword, setMatchKeyword] = useState('');
   const [keywordDirty, setKeywordDirty] = useState(false);
+  const [orderDate, setOrderDate] = useState('');
+  const [subject, setSubject] = useState('');
+  const [printMetaDirty, setPrintMetaDirty] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [numberDirty, setNumberDirty] = useState(false);
 
@@ -92,6 +97,9 @@ export default function InvoiceDetailPage() {
       setInvoice(data);
       setMatchKeyword(String(data.matchKeyword || ''));
       setKeywordDirty(false);
+      setOrderDate(String(data.orderDate || '').slice(0, 10));
+      setSubject(String(data.subject || ''));
+      setPrintMetaDirty(false);
       setInvoiceNumber(String(data.number || ''));
       setNumberDirty(false);
       setPayAmount(
@@ -161,6 +169,31 @@ export default function InvoiceDetailPage() {
       setInvoice(data.invoice);
       setMatchKeyword(String(data.invoice.matchKeyword || ''));
       setKeywordDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const savePrintMeta = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/invoices/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderDate: orderDate || '',
+          subject: subject.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed');
+      setInvoice(data.invoice);
+      setOrderDate(String(data.invoice.orderDate || '').slice(0, 10));
+      setSubject(String(data.invoice.subject || ''));
+      setPrintMetaDirty(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
@@ -432,35 +465,87 @@ export default function InvoiceDetailPage() {
           )}
 
           {invoice.status !== 'void' && (
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <label className="block text-sm text-slate-600 mb-1">
-                Bank match keyword
-              </label>
-              <div className="flex flex-wrap gap-2 items-center">
-                <input
-                  className="flex-1 min-w-[200px] border border-slate-300 rounded-xl px-3 py-2 text-sm"
-                  value={matchKeyword}
-                  onChange={(e) => {
-                    setMatchKeyword(e.target.value);
-                    setKeywordDirty(true);
-                  }}
-                  placeholder="e.g. job name or reference"
-                  disabled={invoice.status === 'void'}
-                />
+            <div className="mt-4 border-t border-slate-100 pt-4 space-y-4">
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">
+                  Print details
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Order date
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                      value={orderDate}
+                      onChange={(e) => {
+                        setOrderDate(e.target.value);
+                        setPrintMetaDirty(true);
+                      }}
+                    />
+                    {orderDate && (
+                      <p className="text-xs text-slate-400 mt-1">
+                        {formatAuDate(orderDate)}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                      value={subject}
+                      onChange={(e) => {
+                        setSubject(e.target.value);
+                        setPrintMetaDirty(true);
+                      }}
+                      placeholder="e.g. Draught"
+                    />
+                  </div>
+                </div>
                 <button
                   type="button"
-                  disabled={busy || !keywordDirty}
-                  onClick={saveKeyword}
-                  className="bg-slate-800 hover:bg-slate-900 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-40"
+                  disabled={busy || !printMetaDirty}
+                  onClick={savePrintMeta}
+                  className="mt-2 bg-slate-800 hover:bg-slate-900 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-40"
                 >
-                  Save keyword
+                  Save print details
                 </button>
               </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Used with bank deposits for auto-reconcile. When a deposit amount
-                matches amount due and the bank description contains this keyword,
-                the payment is applied automatically.
-              </p>
+
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">
+                  Bank match keyword
+                </label>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <input
+                    className="flex-1 min-w-[200px] border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                    value={matchKeyword}
+                    onChange={(e) => {
+                      setMatchKeyword(e.target.value);
+                      setKeywordDirty(true);
+                    }}
+                    placeholder="e.g. job name or reference"
+                    disabled={invoice.status === 'void'}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || !keywordDirty}
+                    onClick={saveKeyword}
+                    className="bg-slate-800 hover:bg-slate-900 text-white text-sm px-4 py-2 rounded-xl disabled:opacity-40"
+                  >
+                    Save keyword
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Used with bank deposits for auto-reconcile. When a deposit amount
+                  matches amount due and the bank description contains this keyword,
+                  the payment is applied automatically. Also prints as Payment
+                  Reference.
+                </p>
+              </div>
             </div>
           )}
         </div>

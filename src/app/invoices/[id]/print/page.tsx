@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate } from '@/lib/accounting/dates';
-import { computeLineTotals } from '@/lib/accounting/invoiceMath';
+import {
+  computeLineTotals,
+  isFreightLine,
+  round2,
+  unitPriceInclGst,
+} from '@/lib/accounting/invoiceMath';
 
 type InvoiceLine = {
   id: string;
@@ -15,15 +20,6 @@ type InvoiceLine = {
   hasGST: boolean;
 };
 
-type Customer = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  billingAddress: string;
-  abn: string;
-};
-
 type Invoice = {
   id: string;
   number: string;
@@ -31,6 +27,8 @@ type Invoice = {
   customerName: string;
   issueDate: string;
   dueDate: string;
+  orderDate?: string;
+  subject?: string;
   lines: InvoiceLine[];
   status: string;
   subtotal: number;
@@ -41,35 +39,81 @@ type Invoice = {
   matchKeyword?: string;
 };
 
-function money(n: number) {
+function fmtAmount(n: number) {
   return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-  }).format(n || 0);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(n) || 0);
 }
 
-const BUSINESS_NAME =
-  process.env.NEXT_PUBLIC_OZINTEL_BUSINESS_NAME || 'OzIntel Accounting';
+function envText(key: string, fallback = '') {
+  const raw = process.env[key];
+  if (raw == null || raw === '') return fallback;
+  return String(raw).replace(/\\n/g, '\n').trim();
+}
+
+const BUSINESS_NAME = envText(
+  'NEXT_PUBLIC_OZINTEL_BUSINESS_NAME',
+  'OzIntel Accounting'
+);
+const BUSINESS_ADDRESS = envText('NEXT_PUBLIC_OZINTEL_BUSINESS_ADDRESS');
+const BUSINESS_ABN = envText('NEXT_PUBLIC_OZINTEL_ABN');
+const BANK_NAME = envText('NEXT_PUBLIC_OZINTEL_BANK_NAME');
+const BANK_ACCOUNT_NAME = envText('NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT_NAME');
+const BANK_BSB = envText('NEXT_PUBLIC_OZINTEL_BANK_BSB');
+const BANK_ACCOUNT = envText('NEXT_PUBLIC_OZINTEL_BANK_ACCOUNT');
+const DEFAULT_SUBJECT = envText('NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT');
+
+function lessLabel(description: string): string {
+  const d = String(description || '').trim();
+  if (/^less\s*:/i.test(d)) return d;
+  if (/^discount\s*:?\s*/i.test(d)) {
+    const rest = d.replace(/^discount\s*:?\s*/i, '').trim();
+    return rest ? `Less: ${rest}` : 'Less:';
+  }
+  return `Less: ${d}`;
+}
 
 export default function InvoicePrintPage() {
   const params = useParams();
   const id = String(params.id || '');
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [customer, setCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     (async () => {
       const res = await fetch(`/api/invoices/${id}`);
       if (!res.ok) return;
-      const inv = await res.json();
-      setInvoice(inv);
-      const cres = await fetch('/api/customers');
-      const list = await cres.json();
-      if (Array.isArray(list)) {
-        setCustomer(list.find((c: Customer) => c.id === inv.customerId) || null);
-      }
+      setInvoice(await res.json());
     })();
   }, [id]);
+
+  const rows = useMemo(() => {
+    if (!invoice) return { product: [] as InvoiceLine[], discount: [] as InvoiceLine[] };
+    const product: InvoiceLine[] = [];
+    const discount: InvoiceLine[] = [];
+    for (const line of invoice.lines) {
+      const t = computeLineTotals(line);
+      if (t.isDiscount) discount.push(line);
+      else product.push(line);
+    }
+    return { product, discount };
+  }, [invoice]);
+
+  const printTotals = useMemo(() => {
+    if (!invoice) return { subtotalIncl: 0, discountIncl: 0, totalIncl: 0 };
+    let subtotalIncl = 0;
+    let discountIncl = 0;
+    for (const line of invoice.lines) {
+      const t = computeLineTotals(line);
+      if (t.isDiscount) discountIncl = round2(discountIncl + Math.abs(t.incl));
+      else subtotalIncl = round2(subtotalIncl + t.incl);
+    }
+    return {
+      subtotalIncl,
+      discountIncl,
+      totalIncl: round2(invoice.total),
+    };
+  }, [invoice]);
 
   if (!invoice) {
     return (
@@ -78,6 +122,12 @@ export default function InvoicePrintPage() {
       </AccountingGate>
     );
   }
+
+  const subject =
+    String(invoice.subject || '').trim() || DEFAULT_SUBJECT;
+  const orderDate = String(invoice.orderDate || '').trim();
+  const hasBank =
+    BANK_NAME || BANK_ACCOUNT_NAME || BANK_BSB || BANK_ACCOUNT;
 
   return (
     <AccountingGate
@@ -102,107 +152,170 @@ export default function InvoicePrintPage() {
           </Link>
         </div>
 
-        <article className="bg-white border border-slate-200 rounded-none print:border-0 p-8 print:p-0">
-          <header className="flex justify-between gap-6 mb-10">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">{BUSINESS_NAME}</h1>
-              <p className="text-sm text-slate-500 mt-1">Tax Invoice</p>
-            </div>
-            <div className="text-right text-sm">
-              <div className="text-xl font-semibold">{invoice.number}</div>
-              <div className="text-slate-600 mt-1">
-                Issue: {formatAuDate(invoice.issueDate)}
+        <article
+          className="bg-white border border-slate-200 print:border-0 p-10 print:p-0 text-[15px] text-black leading-relaxed"
+          style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
+        >
+          <header className="text-center mb-10">
+            <h1 className="text-xl font-bold tracking-wide uppercase mb-4">
+              Tax Invoice
+            </h1>
+            <div className="font-bold text-base">{BUSINESS_NAME}</div>
+            {BUSINESS_ADDRESS && (
+              <div className="whitespace-pre-line mt-0.5">
+                {BUSINESS_ADDRESS}
               </div>
-              <div className="text-slate-600">
-                Due: {formatAuDate(invoice.dueDate)}
+            )}
+            {BUSINESS_ABN && (
+              <div className="mt-0.5">
+                <span className="font-bold">ABN:</span> {BUSINESS_ABN}
               </div>
-              <div className="capitalize mt-1 text-slate-500">{invoice.status}</div>
-            </div>
+            )}
           </header>
 
-          <section className="mb-8 text-sm">
-            <h2 className="text-xs uppercase tracking-wide text-slate-400 mb-1">Bill to</h2>
-            <div className="font-semibold text-slate-900">
-              {customer?.name || invoice.customerName}
+          <section className="mb-8 space-y-1">
+            <div>
+              <span className="font-bold">To:</span>{' '}
+              {invoice.customerName}
             </div>
-            {customer?.billingAddress && (
-              <div className="whitespace-pre-line text-slate-600 mt-1">
-                {customer.billingAddress}
+            <div>
+              <span className="font-bold">Date:</span>{' '}
+              {formatAuDate(invoice.issueDate)}
+            </div>
+            {orderDate && (
+              <div>
+                <span className="font-bold">Order Date:</span>{' '}
+                {formatAuDate(orderDate)}
               </div>
             )}
-            {customer?.email && (
-              <div className="text-slate-600">{customer.email}</div>
-            )}
-            {customer?.abn && (
-              <div className="text-slate-600">ABN {customer.abn}</div>
-            )}
+            <div>
+              <span className="font-bold">Invoice No.:</span>{' '}
+              {invoice.number}
+            </div>
           </section>
 
-          <table className="w-full text-sm mb-6">
-            <thead>
-              <tr className="border-b-2 border-slate-800">
-                <th className="text-left py-2 font-semibold">Description</th>
-                <th className="text-right py-2 font-semibold">Qty</th>
-                <th className="text-right py-2 font-semibold">Unit</th>
-                <th className="text-right py-2 font-semibold">GST</th>
-                <th className="text-right py-2 font-semibold">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lines.map((line) => {
-                const t = computeLineTotals(line);
-                return (
-                  <tr key={line.id} className="border-b border-slate-200">
-                    <td className="py-2">{line.description}</td>
-                    <td className="py-2 text-right">{line.quantity}</td>
-                    <td className="py-2 text-right">{money(line.unitPrice)}</td>
-                    <td className="py-2 text-right">{money(Math.abs(t.gst))}</td>
-                    <td className="py-2 text-right">
-                      {t.isDiscount ? `−${money(Math.abs(t.excl))}` : money(t.excl)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="flex justify-between items-baseline mb-3">
+            {subject ? (
+              <div className="font-bold">Subject: {subject}:</div>
+            ) : (
+              <div />
+            )}
+            <div className="font-bold pr-0.5">$</div>
+          </div>
 
-          <div className="flex justify-end mb-8">
-            <div className="w-56 text-sm space-y-1">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{money(invoice.subtotal)}</span>
-              </div>
-              {(invoice.discountTotal || 0) > 0.009 && (
-                <div className="flex justify-between">
-                  <span>Discount</span>
-                  <span>−{money(invoice.discountTotal || 0)}</span>
+          <div className="mb-2">
+            {rows.product.map((line) => {
+              const t = computeLineTotals(line);
+              const unitIncl = unitPriceInclGst(line);
+              const qty = Number(line.quantity) || 0;
+
+              if (isFreightLine(line)) {
+                return (
+                  <div
+                    key={line.id}
+                    className="grid grid-cols-[1fr_5.5rem] gap-x-4 py-0.5"
+                  >
+                    <div>
+                      Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)}{' '}
+                      (incl.GST)
+                    </div>
+                    <div className="text-right tabular-nums">
+                      {fmtAmount(t.incl)}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={line.id}
+                  className="grid grid-cols-[2.5rem_1fr_auto_5.5rem] gap-x-3 py-0.5 items-baseline"
+                >
+                  <div className="tabular-nums">{qty}</div>
+                  <div className="min-w-0">
+                    <span>{line.description}</span>
+                    <span className="ml-3 tabular-nums">
+                      {fmtAmount(unitIncl)}
+                    </span>
+                    <span className="ml-1 text-[13px]">(incl. GST)</span>
+                  </div>
+                  <div />
+                  <div className="text-right tabular-nums">
+                    {fmtAmount(t.incl)}
+                  </div>
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span>GST</span>
-                <span>{money(invoice.gstTotal)}</span>
-              </div>
-              <div className="flex justify-between font-bold text-base border-t border-slate-800 pt-2 mt-1">
-                <span>Total AUD</span>
-                <span>{money(invoice.total)}</span>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 mb-2 flex justify-end">
+            <div className="grid grid-cols-[auto_5.5rem] gap-x-6 min-w-[14rem]">
+              <div className="font-bold text-right">Subtotal:</div>
+              <div className="text-right tabular-nums font-bold">
+                {fmtAmount(printTotals.subtotalIncl)}
               </div>
             </div>
           </div>
 
-          {invoice.matchKeyword && (
-            <p className="text-xs text-slate-500 mb-4">
-              Payment reference: {invoice.matchKeyword}
-            </p>
+          {rows.discount.map((line) => {
+            const t = computeLineTotals(line);
+            return (
+              <div
+                key={line.id}
+                className="grid grid-cols-[1fr_5.5rem] gap-x-4 py-0.5 mt-2"
+              >
+                <div>{lessLabel(line.description)}</div>
+                <div className="text-right tabular-nums">
+                  {fmtAmount(t.incl)}
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="mt-6 mb-10 grid grid-cols-[1fr_5.5rem] gap-x-4">
+            <div className="font-bold">Total (incl. GST):</div>
+            <div className="text-right tabular-nums font-bold">
+              {fmtAmount(printTotals.totalIncl)}
+            </div>
+          </div>
+
+          <p className="text-center font-bold mb-10">
+            Thank you for your custom
+          </p>
+
+          {hasBank && (
+            <section className="mb-14 space-y-0.5">
+              {(BANK_NAME || BANK_ACCOUNT_NAME) && (
+                <div>
+                  {BANK_NAME && (
+                    <span className="font-bold">{BANK_NAME}:</span>
+                  )}
+                  {BANK_ACCOUNT_NAME && (
+                    <>
+                      {BANK_NAME ? ' ' : ''}
+                      {BANK_ACCOUNT_NAME}
+                    </>
+                  )}
+                </div>
+              )}
+              {BANK_BSB && (
+                <div>
+                  <span className="font-bold">BSB:</span> {BANK_BSB}
+                </div>
+              )}
+              {BANK_ACCOUNT && (
+                <div>
+                  <span className="font-bold">Account:</span> {BANK_ACCOUNT}
+                </div>
+              )}
+            </section>
           )}
 
-          {invoice.notes && (
-            <p className="text-sm text-slate-600 border-t border-slate-200 pt-4">
-              {invoice.notes}
-            </p>
-          )}
-
-          <footer className="mt-12 text-xs text-slate-400 print:mt-16">
-            Generated by OzIntel · Unit prices exclude GST unless noted
+          <footer className="text-xs text-slate-600 space-y-0.5 print:mt-8">
+            {invoice.matchKeyword && (
+              <div>Payment Reference: {invoice.matchKeyword}</div>
+            )}
+            <div>Generated by OzIntel Accounting</div>
           </footer>
         </article>
       </div>

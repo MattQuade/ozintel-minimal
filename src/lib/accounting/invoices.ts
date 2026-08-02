@@ -42,7 +42,9 @@ export {
   computeLineTotals,
   GST_RATE,
   isDiscountLine,
+  isFreightLine,
   round2,
+  unitPriceInclGst,
 } from "@/lib/accounting/invoiceMath";
 
 export type InvoicePayment = {
@@ -63,6 +65,10 @@ export type Invoice = {
   customerName: string;
   issueDate: string;
   dueDate: string;
+  /** Optional customer order date (print only; ISO yyyy-mm-dd) */
+  orderDate: string;
+  /** Optional print subject (e.g. "Draught"); empty falls back to env default */
+  subject: string;
   lines: InvoiceLine[];
   status: InvoiceStatus;
   /** Positive lines ex GST (before discount) */
@@ -131,6 +137,8 @@ async function readInvoicesUnlocked(): Promise<Invoice[]> {
       lines: Array.isArray(inv.lines) ? inv.lines : [],
       discountTotal:
         typeof inv.discountTotal === "number" ? inv.discountTotal : 0,
+      orderDate: String(inv.orderDate || "").trim().slice(0, 10),
+      subject: String(inv.subject || "").trim(),
       matchKeyword: String(inv.matchKeyword || "").trim(),
       notes: String(inv.notes || ""),
       payments: Array.isArray(inv.payments) ? inv.payments : [],
@@ -253,7 +261,7 @@ export async function upsertInvoice(
         existing.status === "paid" ||
         existing.status === "void")
     ) {
-      // Allow notes + matchKeyword after authorise; structural edits blocked
+      // Allow print metadata after authorise; structural edits blocked
       if (input.status && input.status !== existing.status) {
         // status changes go through authorise/pay/void actions
       }
@@ -263,10 +271,22 @@ export async function upsertInvoice(
           ? input.matchKeyword
           : existing.matchKeyword ?? ""
       ).trim();
+      const editableOrderDate = String(
+        input.orderDate !== undefined
+          ? input.orderDate
+          : existing.orderDate ?? ""
+      )
+        .trim()
+        .slice(0, 10);
+      const editableSubject = String(
+        input.subject !== undefined ? input.subject : existing.subject ?? ""
+      ).trim();
       const next: Invoice = {
         ...existing,
         notes: editableNotes,
         matchKeyword: editableKeyword,
+        orderDate: editableOrderDate,
+        subject: editableSubject,
         updatedAt: new Date().toISOString(),
       };
       invoices[idx] = next;
@@ -308,6 +328,16 @@ export async function upsertInvoice(
           existing?.dueDate ||
           new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
       ),
+      orderDate: String(
+        input.orderDate !== undefined
+          ? input.orderDate
+          : existing?.orderDate ?? ""
+      )
+        .trim()
+        .slice(0, 10),
+      subject: String(
+        input.subject !== undefined ? input.subject : existing?.subject ?? ""
+      ).trim(),
       lines,
       status: "draft",
       subtotal: totals.subtotal,

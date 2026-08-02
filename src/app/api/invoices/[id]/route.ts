@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
   }
 }
 
-/** Update notes / matchKeyword (any status); number editable while draft. */
+/** Update notes / matchKeyword / print fields (any status); number editable while draft. */
 export async function PATCH(req: Request, { params }: Params) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
@@ -42,6 +42,12 @@ export async function PATCH(req: Request, { params }: Params) {
     };
     if (body.number !== undefined) {
       patch.number = body.number;
+    }
+    if (body.orderDate !== undefined) {
+      patch.orderDate = body.orderDate;
+    }
+    if (body.subject !== undefined) {
+      patch.subject = body.subject;
     }
     const invoice = await upsertInvoice(patch);
     return NextResponse.json({ success: true, invoice });
