@@ -16,11 +16,19 @@ type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
 type LineDraft = {
   id: string;
   description: string;
-  quantity: number;
+  /** Empty string while the user is typing so the field is not prefilled with 0/1. */
+  quantity: number | '';
   unitPrice: number;
   accountCode: string;
   hasGST: boolean;
 };
+
+function lineForMath(line: LineDraft) {
+  return {
+    ...line,
+    quantity: line.quantity === '' ? 0 : Number(line.quantity),
+  };
+}
 
 function money(n: number) {
   return new Intl.NumberFormat('en-AU', {
@@ -48,7 +56,7 @@ export default function NewInvoicePage() {
     {
       id: '1',
       description: '',
-      quantity: 1,
+      quantity: '',
       unitPrice: 0,
       accountCode: '0105',
       hasGST: true,
@@ -74,7 +82,10 @@ export default function NewInvoicePage() {
     [coa]
   );
 
-  const totals = useMemo(() => computeInvoiceTotals(lines), [lines]);
+  const totals = useMemo(
+    () => computeInvoiceTotals(lines.map(lineForMath)),
+    [lines]
+  );
 
   const updateLine = (id: string, patch: Partial<LineDraft>) => {
     setLines((prev) =>
@@ -96,7 +107,11 @@ export default function NewInvoicePage() {
       setError('Select a customer');
       return;
     }
-    if (!lines.some((l) => l.description.trim() && l.quantity !== 0)) {
+    if (
+      !lines.some(
+        (l) => l.description.trim() && l.quantity !== '' && Number(l.quantity) !== 0
+      )
+    ) {
       setError('Add at least one line item');
       return;
     }
@@ -112,10 +127,15 @@ export default function NewInvoicePage() {
           notes,
           matchKeyword,
           lines: lines
-            .filter((l) => l.description.trim())
+            .filter(
+              (l) =>
+                l.description.trim() &&
+                l.quantity !== '' &&
+                Number.isFinite(Number(l.quantity))
+            )
             .map((l) => ({
               description: l.description,
-              quantity: l.quantity,
+              quantity: Number(l.quantity),
               unitPrice: l.unitPrice,
               accountCode: l.accountCode,
               hasGST: l.hasGST,
@@ -209,7 +229,7 @@ export default function NewInvoicePage() {
                       {
                         id: String(Date.now()),
                         description: 'Discount',
-                        quantity: 1,
+                        quantity: '',
                         unitPrice: 0,
                         accountCode: revenueAccounts[0]?.code || '0105',
                         hasGST: true,
@@ -228,7 +248,7 @@ export default function NewInvoicePage() {
                       {
                         id: String(Date.now()),
                         description: '',
-                        quantity: 1,
+                        quantity: '',
                         unitPrice: 0,
                         accountCode: revenueAccounts[0]?.code || '0105',
                         hasGST: true,
@@ -242,7 +262,7 @@ export default function NewInvoicePage() {
             </div>
             <div className="space-y-3">
               {lines.map((line) => {
-                const lineTot = computeLineTotals(line);
+                const lineTot = computeLineTotals(lineForMath(line));
                 return (
                   <div
                     key={line.id}
@@ -269,13 +289,12 @@ export default function NewInvoicePage() {
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === '') {
-                            updateLine(line.id, { quantity: 1 });
+                            updateLine(line.id, { quantity: '' });
                             return;
                           }
                           const n = parseFloat(raw);
-                          updateLine(line.id, {
-                            quantity: Number.isFinite(n) ? n : 1,
-                          });
+                          if (!Number.isFinite(n)) return;
+                          updateLine(line.id, { quantity: n });
                         }}
                       />
                     </div>
