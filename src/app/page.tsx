@@ -33,8 +33,24 @@ const API_BASE = "";
 const COOKIE_NAME = 'ozintel_user_email';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+function normalizeEmailClient(email: string) {
+  return String(email || "")
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function emailsMatch(a: string, b: string) {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
+  return normalizeEmailClient(a) === normalizeEmailClient(b);
+}
+
+/** Strip invisible chars before restore lookup (same rules as server). */
+function normalizeRestoreQuery(query: string) {
+  return String(query || "")
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .trim();
 }
 
 function setUserCookie(email: string) {
@@ -91,10 +107,11 @@ export default function HomePage() {
 
   const restoreFromServer = async (query: string, silent = false) => {
     try {
+      const normalizedQuery = normalizeRestoreQuery(query);
       const res = await fetch(`${API_BASE}/api/users/restore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: normalizedQuery }),
       });
       const data = await res.json();
       if (data.success && data.user) {
@@ -261,11 +278,12 @@ export default function HomePage() {
 
   const handleRestoreAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!restoreEmail.trim()) {
+    const query = normalizeRestoreQuery(restoreEmail);
+    if (!query) {
       alert("Please enter your email, mobile number, or full name from signup.");
       return;
     }
-    const success = await restoreFromServer(restoreEmail.trim());
+    const success = await restoreFromServer(query);
     if (success) {
       setShowRestore(false);
       setRestoreEmail('');
@@ -417,12 +435,38 @@ export default function HomePage() {
     }
   };
 
-  const addSafeContact = () => {
-    if (!safePhone.trim() || !safeName.trim()) return;
-    const updated = [...safeContacts, { name: safeName.trim(), phone: safePhone.trim() }];
+  /** Prefer DOM/FormData so mobile autofill still works even if React state lagged. */
+  const readContactFields = (
+    form: HTMLFormElement,
+    phoneState: string,
+    nameState: string
+  ) => {
+    const fd = new FormData(form);
+    const phoneFromForm = String(fd.get('phone') || '').trim();
+    const nameFromForm = String(fd.get('name') || '').trim();
+    return {
+      phone: phoneFromForm || phoneState.trim(),
+      name: nameFromForm || nameState.trim(),
+    };
+  };
+
+  const addSafeContact = (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    const form = e?.currentTarget;
+    const { phone, name } = form
+      ? readContactFields(form, safePhone, safeName)
+      : { phone: safePhone.trim(), name: safeName.trim() };
+
+    if (!phone || !name) {
+      alert('Please enter both a phone number and a name for the safe contact.');
+      return;
+    }
+
+    const updated = [...safeContacts, { name, phone }];
     saveContacts(updated, emergencyContacts);
     setSafePhone('');
     setSafeName('');
+    setStatus(`✅ Safe contact added: ${name}`);
   };
 
   const removeSafeContact = (index: number) => {
@@ -432,12 +476,23 @@ export default function HomePage() {
     saveContacts(updated, emergencyContacts);
   };
 
-  const addEmergencyContact = () => {
-    if (!emergencyPhone.trim() || !emergencyName.trim()) return;
-    const updated = [...emergencyContacts, { name: emergencyName.trim(), phone: emergencyPhone.trim() }];
+  const addEmergencyContact = (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    const form = e?.currentTarget;
+    const { phone, name } = form
+      ? readContactFields(form, emergencyPhone, emergencyName)
+      : { phone: emergencyPhone.trim(), name: emergencyName.trim() };
+
+    if (!phone || !name) {
+      alert('Please enter both a phone number and a name for the emergency contact.');
+      return;
+    }
+
+    const updated = [...emergencyContacts, { name, phone }];
     saveContacts(safeContacts, updated);
     setEmergencyPhone('');
     setEmergencyName('');
+    setStatus(`✅ Emergency contact added: ${name}`);
   };
 
   const removeEmergencyContact = (index: number) => {
@@ -856,7 +911,8 @@ export default function HomePage() {
         <form onSubmit={handleRestoreAccount} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#94a3b8' }}>Restore Existing Account</h3>
           <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: 0 }}>
-            Enter the email, mobile number, or exact full name used at signup.
+            Enter the <strong>signup email</strong>, mobile, or exact full name.
+            Use the address stored in Admin (it may not look like their name).
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
             <input type="text" placeholder="Email, phone, or full name" value={restoreEmail} onChange={e => setRestoreEmail(e.target.value)} autoComplete="username" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
@@ -897,32 +953,82 @@ export default function HomePage() {
 
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Safe Arrival Contacts</h2>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
+          Contacts stay on this device only (not uploaded).
+        </p>
         {safeContacts.map((contact, index) => (
           <div key={index} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{contact.name} ({contact.phone})</span>
-            <button onClick={() => removeSafeContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            <button type="button" onClick={() => removeSafeContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
           </div>
         ))}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}>
-          <input type="tel" placeholder="+61412345678" value={safePhone} onChange={e => setSafePhone(e.target.value)} style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-          <input type="text" placeholder="Name" value={safeName} onChange={e => setSafeName(e.target.value)} style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-          <button onClick={addSafeContact} style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Add Safe</button>
-        </div>
+        <form
+          onSubmit={addSafeContact}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}
+        >
+          <input
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="+61412345678"
+            value={safePhone}
+            onChange={e => setSafePhone(e.target.value)}
+            style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+          />
+          <input
+            name="name"
+            type="text"
+            autoComplete="name"
+            placeholder="Name"
+            value={safeName}
+            onChange={e => setSafeName(e.target.value)}
+            style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+          />
+          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+            Add Safe
+          </button>
+        </form>
       </div>
 
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Emergency Contacts</h2>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
+          Contacts stay on this device only (not uploaded).
+        </p>
         {emergencyContacts.map((contact, index) => (
           <div key={index} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{contact.name} ({contact.phone})</span>
-            <button onClick={() => removeEmergencyContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            <button type="button" onClick={() => removeEmergencyContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
           </div>
         ))}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}>
-          <input type="tel" placeholder="+61412345678" value={emergencyPhone} onChange={e => setEmergencyPhone(e.target.value)} style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-          <input type="text" placeholder="Name" value={emergencyName} onChange={e => setEmergencyName(e.target.value)} style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-          <button onClick={addEmergencyContact} style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Add Emergency</button>
-        </div>
+        <form
+          onSubmit={addEmergencyContact}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}
+        >
+          <input
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="+61412345678"
+            value={emergencyPhone}
+            onChange={e => setEmergencyPhone(e.target.value)}
+            style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+          />
+          <input
+            name="name"
+            type="text"
+            autoComplete="name"
+            placeholder="Name"
+            value={emergencyName}
+            onChange={e => setEmergencyName(e.target.value)}
+            style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+          />
+          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+            Add Emergency
+          </button>
+        </form>
       </div>
 
       <div style={{ margin: '40px 0 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
