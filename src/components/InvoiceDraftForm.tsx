@@ -16,9 +16,9 @@ type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
 type LineDraft = {
   id: string;
   description: string;
-  /** Empty string while the user is typing so the field is not prefilled with 0/1. */
+  /** Empty string while the user is typing so fields are not prefilled with 0/1. */
   quantity: number | '';
-  unitPrice: number;
+  unitPrice: number | '';
   accountCode: string;
   hasGST: boolean;
 };
@@ -45,6 +45,7 @@ function lineForMath(line: LineDraft) {
   return {
     ...line,
     quantity: line.quantity === '' ? 0 : Number(line.quantity),
+    unitPrice: line.unitPrice === '' ? 0 : Number(line.unitPrice),
   };
 }
 
@@ -60,7 +61,7 @@ function blankLine(accountCode = '0105'): LineDraft {
     id: String(Date.now()),
     description: '',
     quantity: '',
-    unitPrice: 0,
+    unitPrice: '',
     accountCode,
     hasGST: true,
   };
@@ -95,7 +96,9 @@ export default function InvoiceDraftForm({ mode, initial }: Props) {
         id: l.id || `line-${i}`,
         description: l.description || '',
         quantity: Number.isFinite(Number(l.quantity)) ? Number(l.quantity) : '',
-        unitPrice: Number(l.unitPrice) || 0,
+        unitPrice: Number.isFinite(Number(l.unitPrice))
+          ? Number(l.unitPrice)
+          : '',
         accountCode: l.accountCode || '0105',
         hasGST: l.hasGST !== false,
       }));
@@ -171,7 +174,7 @@ export default function InvoiceDraftForm({ mode, initial }: Props) {
           .map((l) => ({
             description: l.description,
             quantity: Number(l.quantity),
-            unitPrice: l.unitPrice,
+            unitPrice: l.unitPrice === '' ? 0 : Number(l.unitPrice),
             accountCode: l.accountCode,
             hasGST: l.hasGST,
           })),
@@ -370,13 +373,12 @@ export default function InvoiceDraftForm({ mode, initial }: Props) {
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === '') {
-                            updateLine(line.id, { unitPrice: 0 });
+                            updateLine(line.id, { unitPrice: '' });
                             return;
                           }
                           const n = parseFloat(raw);
-                          updateLine(line.id, {
-                            unitPrice: Number.isFinite(n) ? n : 0,
-                          });
+                          if (!Number.isFinite(n)) return;
+                          updateLine(line.id, { unitPrice: n });
                         }}
                       />
                     </div>
