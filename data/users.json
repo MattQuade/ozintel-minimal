@@ -32,7 +32,7 @@
       "name": "Leo Quade",
       "email": "leoquade75@gmail.com",
       "phone": "+61491787228",
-      "status": "pending",
+      "status": "approved",
       "smsCount": 0,
       "smsMonth": "2026-07",
       "permissions": {
@@ -60,9 +60,93 @@
       "name": "Automne Quade",
       "email": "automnequade1234@gmail.com",
       "phone": "+61493456384",
-      "status": "pending",
+      "status": "approved",
       "smsCount": 0,
       "smsMonth": "2026-07",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Graham Willis",
+      "email": "grahamwillis283@gmail.com",
+      "phone": "+61412713681",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Chris Fuller",
+      "email": "baaloo.park251@gmail.com",
+      "phone": "+61427262009",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Shane lisle",
+      "email": "beaversisland@gmail.com",
+      "phone": "+61448200111",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Pau Brereton",
+      "email": "paul@ptgtech.com.au",
+      "phone": "0478840495",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Richard Foley",
+      "email": "richworms@gmail.com",
+      "phone": "0455946001",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false
+      },
+      "lastAlert": null
+    },
+    {
+      "name": "Milt MacFarlane",
+      "email": "allabest@live.com.au",
+      "phone": "+61478921321",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-08",
       "permissions": {
         "accounting": false,
         "pubOps": false,

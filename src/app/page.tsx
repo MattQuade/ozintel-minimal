@@ -89,41 +89,41 @@ export default function HomePage() {
   const [restoreEmail, setRestoreEmail] = useState('');
   const [dataDirConfigured, setDataDirConfigured] = useState<boolean | null>(null);
 
-  const restoreFromServer = async (email: string, silent = false) => {
+  const restoreFromServer = async (query: string, silent = false) => {
     try {
-      const res = await fetch(`${API_BASE}/api/users`);
+      const res = await fetch(`${API_BASE}/api/users/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() }),
+      });
       const data = await res.json();
-      if (data.success) {
-        const serverEmails = (data.users || []).map((u: UserProfile) => u.email);
-        const found = data.users.find((u: UserProfile) =>
-          emailsMatch(u.email, email)
-        );
-        if (found) {
-          setCurrentUser(found);
-          localStorage.setItem('ozintel_current_user', JSON.stringify(found));
-          setUserCookie(found.email);
-          if (!silent) {
-            if (found.status === 'approved') {
-              setStatus("✅ Account restored – you are approved and ready to send alerts.");
-            } else if (found.status === 'blocked') {
-              setStatus("🚫 Account restored but it is currently blocked.");
-            } else {
-              setStatus("⏳ Account restored – still pending admin approval.");
-            }
+      if (data.success && data.user) {
+        const found = data.user as UserProfile;
+        setCurrentUser(found);
+        localStorage.setItem('ozintel_current_user', JSON.stringify(found));
+        setUserCookie(found.email);
+        if (!silent) {
+          if (found.status === 'approved') {
+            setStatus("✅ Account restored – you are approved and ready to send alerts.");
+          } else if (found.status === 'blocked') {
+            setStatus("🚫 Account restored but it is currently blocked.");
+          } else {
+            setStatus("⏳ Account restored – still pending admin approval.");
           }
-          return true;
-        } else {
-          clearUserCookie();
-          localStorage.removeItem('ozintel_current_user');
-          setCurrentUser(null);
-          if (!silent) {
-            alert(
-              `No account found with that email.\n\nServer currently has ${serverEmails.length} user(s). Check the email spelling, or sign up again and ask admin to approve.`
-            );
-          }
-          return false;
         }
+        return true;
       }
+
+      clearUserCookie();
+      localStorage.removeItem('ozintel_current_user');
+      setCurrentUser(null);
+      if (!silent) {
+        alert(
+          data.error ||
+            "No account found with those details. Use the email, mobile number, or exact full name from signup."
+        );
+      }
+      return false;
     } catch (err) {
       console.error("Restore error:", err);
       if (!silent) alert("Could not restore account. Please try again.");
@@ -262,7 +262,7 @@ export default function HomePage() {
   const handleRestoreAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!restoreEmail.trim()) {
-      alert("Please enter your email address.");
+      alert("Please enter your email, mobile number, or full name from signup.");
       return;
     }
     const success = await restoreFromServer(restoreEmail.trim());
@@ -855,9 +855,11 @@ export default function HomePage() {
       {showRestore && (
         <form onSubmit={handleRestoreAccount} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#94a3b8' }}>Restore Existing Account</h3>
-          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: 0 }}>Enter the email you used when you signed up.</p>
+          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: 0 }}>
+            Enter the email, mobile number, or exact full name used at signup.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-            <input type="email" placeholder="Your Email Address" value={restoreEmail} onChange={e => setRestoreEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
+            <input type="text" placeholder="Email, phone, or full name" value={restoreEmail} onChange={e => setRestoreEmail(e.target.value)} autoComplete="username" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
             <button type="submit" style={{ padding: '12px 20px', width: '100%', fontSize: '1rem', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
               Restore Account
             </button>

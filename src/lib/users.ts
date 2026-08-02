@@ -182,12 +182,63 @@ export async function writeUsers(users: User[]) {
     "utf8"
   );
 }
+export function normalizePhone(phone: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length === 10 && digits.startsWith("0")) {
+    return `61${digits.slice(1)}`;
+  }
+  if (digits.length === 9 && digits.startsWith("4")) {
+    return `61${digits}`;
+  }
+  return digits;
+}
+
+/**
+ * Restore lookup: email (case-insensitive), phone (AU-normalized),
+ * or exact full name (case-insensitive). Name only wins when unique.
+ */
+export function matchUserForRestore(
+  query: string,
+  users: User[]
+): User | null {
+  const q = String(query || "").trim();
+  if (!q) return null;
+
+  const byEmail = users.find(
+    (u) => u.email.trim().toLowerCase() === q.toLowerCase()
+  );
+  if (byEmail) return byEmail;
+
+  const qPhone = normalizePhone(q);
+  if (qPhone.length >= 8) {
+    const byPhone = users.find(
+      (u) => normalizePhone(u.phone) === qPhone && normalizePhone(u.phone).length >= 8
+    );
+    if (byPhone) return byPhone;
+  }
+
+  const nameMatches = users.filter(
+    (u) => u.name.trim().toLowerCase() === q.toLowerCase()
+  );
+  if (nameMatches.length === 1) return nameMatches[0];
+
+  return null;
+}
+
 export async function findUserByEmail(email: string) {
   const users = await readUsers();
   return (
-    users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null
+    users.find(
+      (u) => u.email.trim().toLowerCase() === String(email || "").trim().toLowerCase()
+    ) || null
   );
 }
+
+export async function findUserForRestore(query: string) {
+  const users = await readUsers();
+  return matchUserForRestore(query, users);
+}
+
 export { currentMonthKey };
 
 
