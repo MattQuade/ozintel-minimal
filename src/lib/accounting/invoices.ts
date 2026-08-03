@@ -229,6 +229,14 @@ export async function createDraftFromCustomerLast(
     .toISOString()
     .slice(0, 10);
 
+  const clonedLines: Partial<InvoiceLine>[] = template.lines.map((l) => ({
+    description: l.description,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    accountCode: l.accountCode,
+    hasGST: l.hasGST,
+  }));
+
   const invoice = await upsertInvoice({
     id: existingDraft?.id,
     number: existingDraft?.number,
@@ -239,13 +247,7 @@ export async function createDraftFromCustomerLast(
     subject: template.subject || "",
     notes: template.notes || "",
     matchKeyword: template.matchKeyword || "",
-    lines: template.lines.map((l) => ({
-      description: l.description,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      accountCode: l.accountCode,
-      hasGST: l.hasGST,
-    })),
+    lines: clonedLines,
   });
 
   return {
@@ -337,8 +339,12 @@ function applyMoneyFields(
   };
 }
 
+export type UpsertInvoiceInput = Omit<Partial<Invoice>, "lines"> & {
+  lines?: Partial<InvoiceLine>[];
+};
+
 export async function upsertInvoice(
-  input: Partial<Invoice> & { lines?: Partial<InvoiceLine>[] }
+  input: UpsertInvoiceInput
 ): Promise<Invoice> {
   return withInvoicesLock(async () => {
     const invoices = await readInvoicesUnlocked();
