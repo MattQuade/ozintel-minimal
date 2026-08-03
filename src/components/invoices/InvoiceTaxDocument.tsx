@@ -81,6 +81,12 @@ function subjectDisplay(raw: string): string {
   return s ? `Subject: ${s}:` : '';
 }
 
+/** Label + value columns — values share one vertical edge (Excel-style). */
+const META_COLS = '7.75rem 1fr';
+/** Qty | description | unit incl. GST | line total */
+const LINE_COLS = '2.5rem minmax(0,1fr) 8.5rem 5.75rem';
+const TOTAL_COLS = '1fr 5.75rem';
+
 type Props = {
   invoice: InvoiceTaxData;
   /** Extra classes on the article (e.g. border for on-screen draft preview) */
@@ -121,26 +127,26 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
 
   return (
     <article
-      className={`bg-white text-black print:border-0 p-10 print:p-8 text-[15px] leading-[1.45] font-bold ${className}`}
+      className={`bg-white text-black print:border-0 p-10 print:p-8 text-[15px] leading-[1.55] font-bold ${className}`}
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
-      <header className="text-center mb-12">
+      <header className="text-center mb-14">
         <h1 className="text-[18px] font-bold tracking-wide uppercase mb-5">
           TAX INVOICE
         </h1>
         <div className="font-bold text-[15px] leading-snug">{BUSINESS_NAME}</div>
-        <div className="whitespace-pre-line font-bold text-[15px] leading-snug mt-0.5">
+        <div className="whitespace-pre-line font-bold text-[15px] leading-snug mt-1">
           {BUSINESS_ADDRESS}
         </div>
         <div className="mt-5 font-bold text-[15px]">ABN: {BUSINESS_ABN}</div>
       </header>
 
-      {/* Meta — labels left, values in one vertical column (Excel-style) */}
-      <section className="mb-8 font-bold">
-        <div className="mb-0.5">To: {invoice.customerName}</div>
+      {/* Meta — To on one line; Date / Order Date / Invoice No. values share a column */}
+      <section className="mb-10 font-bold">
+        <div className="mb-1.5">To: {invoice.customerName}</div>
         <div
-          className="grid gap-x-4 gap-y-0.5 items-baseline"
-          style={{ gridTemplateColumns: 'max-content 1fr' }}
+          className="grid gap-x-6 gap-y-1.5 items-baseline"
+          style={{ gridTemplateColumns: META_COLS }}
         >
           <div>Date:</div>
           <div>{formatAuDate(invoice.issueDate)}</div>
@@ -155,12 +161,13 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         </div>
       </section>
 
-      <div className="flex justify-between items-baseline mb-2 font-bold">
+      <div className="flex justify-between items-baseline mb-4 font-bold">
         <div>{subject}</div>
-        <div className="pr-0.5">$</div>
+        <div className="w-[5.75rem] text-right">$</div>
       </div>
 
-      <div className="mb-1 font-bold">
+      {/* Line items — four clear columns, not clustered */}
+      <div className="mb-2 font-bold">
         {rows.product.map((line) => {
           const t = computeLineTotals(line);
           const unitIncl = unitPriceInclGst(line);
@@ -171,10 +178,11 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
             return (
               <div
                 key={line.id}
-                className="grid grid-cols-[1fr_5.75rem] gap-x-4 py-[2px]"
+                className="grid gap-x-4 py-1.5 items-baseline"
+                style={{ gridTemplateColumns: TOTAL_COLS }}
               >
                 <div>
-                  Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)} (incl.GST)
+                  Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)} (incl. GST)
                 </div>
                 <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
               </div>
@@ -185,7 +193,8 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
             return (
               <div
                 key={line.id}
-                className="grid grid-cols-[1fr_5.75rem] gap-x-4 py-[2px]"
+                className="grid gap-x-4 py-1.5 items-baseline"
+                style={{ gridTemplateColumns: TOTAL_COLS }}
               >
                 <div />
                 <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
@@ -196,13 +205,14 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           return (
             <div
               key={line.id}
-              className="grid grid-cols-[2.25rem_minmax(0,1fr)_5.75rem] gap-x-2 py-[2px] items-baseline"
+              className="grid gap-x-5 py-1.5 items-baseline"
+              style={{ gridTemplateColumns: LINE_COLS }}
             >
               <div className="tabular-nums">{qty}</div>
-              <div className="min-w-0">
-                <span>{desc}</span>
-                <span className="ml-4 tabular-nums">{fmtAmount(unitIncl)}</span>
-                <span className="ml-1">(incl. GST)</span>
+              <div className="min-w-0 pr-2">{desc}</div>
+              <div className="tabular-nums whitespace-nowrap">
+                {fmtAmount(unitIncl)}
+                <span className="font-normal"> (incl. GST)</span>
               </div>
               <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
             </div>
@@ -210,7 +220,10 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         })}
       </div>
 
-      <div className="mt-8 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold">
+      <div
+        className="mt-10 grid gap-x-4 font-bold items-baseline"
+        style={{ gridTemplateColumns: TOTAL_COLS }}
+      >
         <div>Subtotal:</div>
         <div className="text-right tabular-nums">
           {fmtAmount(printTotals.subtotalIncl)}
@@ -222,7 +235,8 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         return (
           <div
             key={line.id}
-            className="mt-3 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold"
+            className="mt-4 grid gap-x-4 font-bold items-baseline"
+            style={{ gridTemplateColumns: TOTAL_COLS }}
           >
             <div>{lessLabel(line.description)}</div>
             <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
@@ -230,21 +244,28 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         );
       })}
 
-      <div className="mt-6 mb-12 grid grid-cols-[1fr_5.75rem] gap-x-4 font-bold">
+      <div
+        className="mt-6 mb-14 grid gap-x-4 font-bold items-baseline"
+        style={{ gridTemplateColumns: TOTAL_COLS }}
+      >
         <div>Total (incl. GST):</div>
         <div className="text-right tabular-nums">
           {fmtAmount(printTotals.totalIncl)}
         </div>
       </div>
 
-      <p className="text-center font-bold mb-12">Thank you for your custom</p>
+      <p className="text-center font-bold mb-14">Thank you for your custom</p>
 
-      <section className="mb-16 space-y-0.5 font-bold">
-        <div>
-          {BANK_NAME}: {BANK_ACCOUNT_NAME}
-        </div>
-        <div>BSB: {BANK_BSB}</div>
-        <div>Account: {BANK_ACCOUNT}</div>
+      <section
+        className="mb-16 grid gap-x-6 gap-y-1.5 items-baseline font-bold"
+        style={{ gridTemplateColumns: META_COLS }}
+      >
+        <div>{BANK_NAME}:</div>
+        <div>{BANK_ACCOUNT_NAME}</div>
+        <div>BSB:</div>
+        <div>{BANK_BSB}</div>
+        <div>Account:</div>
+        <div>{BANK_ACCOUNT}</div>
       </section>
 
       <footer className="text-[11px] font-normal text-black space-y-0.5">
