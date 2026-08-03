@@ -65,8 +65,8 @@ export default function AccountingGate({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-20">
+    <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
+      <div className="border-b border-gray-200 bg-white sticky top-0 z-20 print:hidden">
         <div className="max-w-screen-2xl mx-auto px-6 py-3 flex flex-wrap items-center gap-4">
           <Link
             href={backHref}

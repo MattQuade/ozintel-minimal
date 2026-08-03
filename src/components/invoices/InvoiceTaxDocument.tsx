@@ -127,25 +127,25 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
 
   return (
     <article
-      className={`bg-white text-black print:border-0 p-10 print:p-8 text-[15px] leading-[1.55] font-bold ${className}`}
+      className={`bg-white text-black print:border-0 p-10 print:p-0 text-[15px] leading-[1.4] font-bold ${className}`}
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
-      <header className="text-center mb-14">
-        <h1 className="text-[18px] font-bold tracking-wide uppercase mb-5">
+      <header className="text-center mb-8 print:mb-6">
+        <h1 className="text-[18px] font-bold tracking-wide uppercase mb-4">
           TAX INVOICE
         </h1>
         <div className="font-bold text-[15px] leading-snug">{BUSINESS_NAME}</div>
-        <div className="whitespace-pre-line font-bold text-[15px] leading-snug mt-1">
+        <div className="whitespace-pre-line font-bold text-[15px] leading-snug mt-0.5">
           {BUSINESS_ADDRESS}
         </div>
-        <div className="mt-5 font-bold text-[15px]">ABN: {BUSINESS_ABN}</div>
+        <div className="mt-4 font-bold text-[15px]">ABN: {BUSINESS_ABN}</div>
       </header>
 
       {/* Meta — To / Date / Order Date / Invoice No. / Subject share one value column */}
-      <section className="mb-6 font-bold">
+      <section className="mb-5 font-bold">
         <div className="flex items-end justify-between gap-4">
           <div
-            className="grid gap-x-3 gap-y-1 items-baseline"
+            className="grid gap-x-3 gap-y-0.5 items-baseline"
             style={{ gridTemplateColumns: META_COLS }}
           >
             <div>To:</div>
@@ -172,7 +172,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
       </section>
 
       {/* Line items — four clear columns, not clustered */}
-      <div className="mb-2 font-bold">
+      <div className="mb-1 font-bold">
         {rows.product.map((line) => {
           const t = computeLineTotals(line);
           const unitIncl = unitPriceInclGst(line);
@@ -183,7 +183,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
             return (
               <div
                 key={line.id}
-                className="grid gap-x-4 py-1.5 items-baseline"
+                className="grid gap-x-4 py-0.5 items-baseline"
                 style={{ gridTemplateColumns: TOTAL_COLS }}
               >
                 <div>
@@ -198,7 +198,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
             return (
               <div
                 key={line.id}
-                className="grid gap-x-4 py-1.5 items-baseline"
+                className="grid gap-x-4 py-0.5 items-baseline"
                 style={{ gridTemplateColumns: TOTAL_COLS }}
               >
                 <div />
@@ -210,7 +210,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           return (
             <div
               key={line.id}
-              className="grid gap-x-5 py-1.5 items-baseline"
+              className="grid gap-x-5 py-0.5 items-baseline"
               style={{ gridTemplateColumns: LINE_COLS }}
             >
               <div className="tabular-nums">{qty}</div>
@@ -226,7 +226,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
       </div>
 
       <div
-        className="mt-10 grid gap-x-4 font-bold items-baseline"
+        className="mt-6 grid gap-x-4 font-bold items-baseline"
         style={{ gridTemplateColumns: TOTAL_COLS }}
       >
         <div>Subtotal:</div>
@@ -240,7 +240,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         return (
           <div
             key={line.id}
-            className="mt-4 grid gap-x-4 font-bold items-baseline"
+            className="mt-2 grid gap-x-4 font-bold items-baseline"
             style={{ gridTemplateColumns: TOTAL_COLS }}
           >
             <div>{lessLabel(line.description)}</div>
@@ -250,7 +250,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
       })}
 
       <div
-        className="mt-6 mb-14 grid gap-x-4 font-bold items-baseline"
+        className="mt-4 mb-8 grid gap-x-4 font-bold items-baseline"
         style={{ gridTemplateColumns: TOTAL_COLS }}
       >
         <div>Total (incl. GST):</div>
@@ -259,10 +259,10 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         </div>
       </div>
 
-      <p className="text-center font-bold mb-14">Thank you for your custom</p>
+      <p className="text-center font-bold mb-8">Thank you for your custom</p>
 
       <section
-        className="mb-16 grid gap-x-6 gap-y-1.5 items-baseline font-bold"
+        className="mb-6 grid gap-x-3 gap-y-0.5 items-baseline font-bold"
         style={{ gridTemplateColumns: META_COLS }}
       >
         <div>{BANK_NAME}:</div>
@@ -273,11 +273,10 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         <div>{BANK_ACCOUNT}</div>
       </section>
 
-      <footer className="text-[11px] font-normal text-black space-y-0.5">
+      <footer className="text-[11px] font-normal text-black space-y-0.5 print:mt-2">
         {invoice.matchKeyword ? (
           <div>Payment Reference: {invoice.matchKeyword}</div>
         ) : null}
-        <div>Generated by OzIntel Accounting</div>
       </footer>
     </article>
   );

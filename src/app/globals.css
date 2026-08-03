@@ -21,3 +21,24 @@ input.no-spinner[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Invoice PDF — one A4 page; leave no room for browser chrome when headers are off */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: white !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  body * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
