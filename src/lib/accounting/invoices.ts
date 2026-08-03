@@ -164,6 +164,97 @@ export async function getInvoiceById(id: string): Promise<Invoice | null> {
   return invoices.find((inv) => inv.id === id) || null;
 }
 
+/** Most recent non-void invoice for a customer — prefers authorised/paid as template. */
+export async function getLastInvoiceForCustomer(
+  customerId: string
+): Promise<Invoice | null> {
+  const id = String(customerId || "").trim();
+  if (!id) return null;
+  const invoices = await readInvoicesUnlocked();
+  const candidates = invoices.filter(
+    (inv) => inv.customerId === id && inv.status !== "void"
+  );
+  if (!candidates.length) return null;
+  const posted = candidates.filter(
+    (inv) => inv.status === "authorised" || inv.status === "paid"
+  );
+  const pool = posted.length ? posted : candidates;
+  pool.sort((a, b) => {
+    const byDate = String(b.issueDate).localeCompare(String(a.issueDate));
+    if (byDate !== 0) return byDate;
+    return String(b.updatedAt || b.createdAt || "").localeCompare(
+      String(a.updatedAt || a.createdAt || "")
+    );
+  });
+  return pool[0];
+}
+
+/**
+ * Create (or refresh) a draft for a customer by copying their last invoice.
+ * Reuses an existing open draft for that customer when present.
+ */
+export async function createDraftFromCustomerLast(
+  customerId: string
+): Promise<{
+  invoice: Invoice;
+  reusedDraft: boolean;
+  fromInvoiceNumber: string;
+}> {
+  const customer = await getCustomerById(String(customerId || "").trim());
+  if (!customer) throw new Error("Customer not found");
+
+  const invoices = await readInvoices();
+  const existingDraft = invoices.find(
+    (inv) => inv.customerId === customer.id && inv.status === "draft"
+  );
+
+  const template = await getLastInvoiceForCustomer(customer.id);
+  if (!template || !template.lines?.length) {
+    throw new Error(
+      `No previous invoice for ${customer.name} — create the first one from scratch`
+    );
+  }
+
+  // Only an open draft exists — open it rather than cloning onto itself
+  if (existingDraft && template.id === existingDraft.id) {
+    return {
+      invoice: existingDraft,
+      reusedDraft: true,
+      fromInvoiceNumber: existingDraft.number,
+    };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dueDate = new Date(Date.now() + 14 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
+  const invoice = await upsertInvoice({
+    id: existingDraft?.id,
+    number: existingDraft?.number,
+    customerId: customer.id,
+    issueDate: today,
+    dueDate,
+    orderDate: "",
+    subject: template.subject || "",
+    notes: template.notes || "",
+    matchKeyword: template.matchKeyword || "",
+    lines: template.lines.map((l) => ({
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      accountCode: l.accountCode,
+      hasGST: l.hasGST,
+    })),
+  });
+
+  return {
+    invoice,
+    reusedDraft: Boolean(existingDraft),
+    fromInvoiceNumber: template.number,
+  };
+}
+
 function nextInvoiceNumber(invoices: Invoice[]): string {
   let max = 0;
   for (const inv of invoices) {

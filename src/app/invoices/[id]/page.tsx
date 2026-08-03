@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import InvoiceTaxDocument from '@/components/invoices/InvoiceTaxDocument';
 import { formatAuDate } from '@/lib/accounting/dates';
 import { computeLineTotals } from '@/lib/accounting/invoiceMath';
 
@@ -320,6 +321,12 @@ export default function InvoiceDetailPage() {
             </Link>
             {invoice.status === 'draft' && (
               <>
+                <Link
+                  href={`/invoices/${invoice.id}/edit`}
+                  className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium"
+                >
+                  Edit
+                </Link>
                 <button
                   type="button"
                   disabled={busy}
@@ -381,6 +388,25 @@ export default function InvoiceDetailPage() {
           </div>
         )}
 
+        {invoice.status === 'draft' && (
+          <div className="mb-6">
+            <p className="text-sm text-slate-500 mb-3">
+              Tax invoice preview (same layout as Print / PDF). Use{' '}
+              <Link
+                href={`/invoices/${invoice.id}/edit`}
+                className="font-medium text-orange-700 hover:underline"
+              >
+                Edit
+              </Link>{' '}
+              to change lines, then authorise when it looks right.
+            </p>
+            <div className="max-w-[720px] border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <InvoiceTaxDocument invoice={invoice} />
+            </div>
+          </div>
+        )}
+
+        {invoice.status !== 'draft' && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-6">
             <div>
@@ -463,9 +489,17 @@ export default function InvoiceDetailPage() {
               {invoice.notes}
             </p>
           )}
+        </div>
+        )}
 
-          {invoice.status !== 'void' && (
-            <div className="mt-4 border-t border-slate-100 pt-4 space-y-4">
+        {invoice.status !== 'void' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+          {invoice.status === 'draft' && invoice.notes ? (
+            <p className="mb-4 text-sm text-slate-600 border-b border-slate-100 pb-4">
+              {invoice.notes}
+            </p>
+          ) : null}
+          <div className="space-y-4">
               <div>
                 <label className="block text-sm text-slate-600 mb-1">
                   Print details
@@ -547,8 +581,8 @@ export default function InvoiceDetailPage() {
                 </p>
               </div>
             </div>
-          )}
         </div>
+        )}
 
         {canPay && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">

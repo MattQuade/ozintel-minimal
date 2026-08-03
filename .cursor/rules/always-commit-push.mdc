@@ -1,0 +1,13 @@
+---
+description: Always commit and push to Render after completed updates
+alwaysApply: true
+---
+
+# Deploy habit
+
+After finishing user-requested updates or bug fixes in this repo:
+
+1. **Commit** the relevant changed files (focused commit; exclude secrets, local data dumps, `.cursor/` debug logs, `tsconfig.tsbuildinfo`, one-off classification scripts unless asked).
+2. **Push** to `origin` on the current branch so Render can deploy — do this as a matter of course, without waiting to be asked again.
+3. Only skip commit/push if the user explicitly says not to deploy, or if there is nothing to commit.
+4. After push, briefly tell the user deploy is in progress / what to check once Render finishes.

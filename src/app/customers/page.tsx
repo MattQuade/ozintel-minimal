@@ -226,6 +226,12 @@ export default function CustomersPage() {
                   <td className="p-3 text-slate-600">{c.phone || '—'}</td>
                   <td className="p-3 text-slate-600">{c.abn || '—'}</td>
                   <td className="p-3 text-right space-x-2">
+                    <Link
+                      href={`/invoices/new?customerId=${encodeURIComponent(c.id)}`}
+                      className="text-orange-700 hover:underline"
+                    >
+                      Invoice
+                    </Link>
                     <button
                       type="button"
                       onClick={() => startEdit(c)}
