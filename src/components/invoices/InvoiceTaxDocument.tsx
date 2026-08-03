@@ -76,13 +76,13 @@ function lessLabel(description: string): string {
   return `Less: ${d}`;
 }
 
-function subjectDisplay(raw: string): string {
+function subjectValue(raw: string): string {
   const s = String(raw || '').trim().replace(/:+\s*$/, '');
-  return s ? `Subject: ${s}:` : '';
+  return s ? `${s}:` : '';
 }
 
-/** Label + value columns — values share one vertical edge (Excel-style). */
-const META_COLS = '7.75rem 1fr';
+/** Label column sized to longest label; values sit tight to the left. */
+const META_COLS = 'max-content 1fr';
 /** Qty | description | unit incl. GST | line total */
 const LINE_COLS = '2.5rem minmax(0,1fr) 8.5rem 5.75rem';
 const TOTAL_COLS = '1fr 5.75rem';
@@ -120,7 +120,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
     };
   }, [invoice.lines, invoice.total]);
 
-  const subject = subjectDisplay(
+  const subject = subjectValue(
     String(invoice.subject || '').trim() || DEFAULT_SUBJECT
   );
   const orderDate = String(invoice.orderDate || '').trim();
@@ -141,30 +141,35 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         <div className="mt-5 font-bold text-[15px]">ABN: {BUSINESS_ABN}</div>
       </header>
 
-      {/* Meta — To on one line; Date / Order Date / Invoice No. values share a column */}
-      <section className="mb-10 font-bold">
-        <div className="mb-1.5">To: {invoice.customerName}</div>
-        <div
-          className="grid gap-x-6 gap-y-1.5 items-baseline"
-          style={{ gridTemplateColumns: META_COLS }}
-        >
-          <div>Date:</div>
-          <div>{formatAuDate(invoice.issueDate)}</div>
-          {orderDate ? (
-            <>
-              <div>Order Date:</div>
-              <div>{formatAuDate(orderDate)}</div>
-            </>
-          ) : null}
-          <div>Invoice No.:</div>
-          <div>{invoice.number}</div>
+      {/* Meta — To / Date / Order Date / Invoice No. / Subject share one value column */}
+      <section className="mb-6 font-bold">
+        <div className="flex items-end justify-between gap-4">
+          <div
+            className="grid gap-x-3 gap-y-1 items-baseline"
+            style={{ gridTemplateColumns: META_COLS }}
+          >
+            <div>To:</div>
+            <div>{invoice.customerName}</div>
+            <div>Date:</div>
+            <div>{formatAuDate(invoice.issueDate)}</div>
+            {orderDate ? (
+              <>
+                <div>Order Date:</div>
+                <div>{formatAuDate(orderDate)}</div>
+              </>
+            ) : null}
+            <div>Invoice No.:</div>
+            <div>{invoice.number}</div>
+            {subject ? (
+              <>
+                <div>Subject:</div>
+                <div>{subject}</div>
+              </>
+            ) : null}
+          </div>
+          <div className="w-[5.75rem] text-right shrink-0">$</div>
         </div>
       </section>
-
-      <div className="flex justify-between items-baseline mb-4 font-bold">
-        <div>{subject}</div>
-        <div className="w-[5.75rem] text-right">$</div>
-      </div>
 
       {/* Line items — four clear columns, not clustered */}
       <div className="mb-2 font-bold">
