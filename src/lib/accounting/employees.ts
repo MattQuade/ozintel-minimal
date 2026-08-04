@@ -15,6 +15,13 @@ export type PayBasis = "salary" | "hourly";
 
 export type ResidencyStatus = "resident" | "foreign";
 
+export type TaxScaleType =
+  | "standard"
+  | "working_holiday_maker"
+  | "no_tfn";
+
+export type EmployeePayFrequency = "weekly" | "fortnightly";
+
 export type Employee = {
   id: string;
   legalFirstName: string;
@@ -31,13 +38,20 @@ export type Employee = {
   employmentStatus: EmploymentStatus;
   position: string;
   department: string;
+  /** Optional award / classification shown on payslips. */
+  classification: string;
   /** Tax file number — never log this field. */
   tfn: string;
   residencyStatus: ResidencyStatus;
   taxFreeThreshold: boolean;
+  /** Stored for STP/display; PAYG calc still uses residency + TFT for MVP. */
+  taxScaleType: TaxScaleType;
   payBasis: PayBasis;
-  /** Annual salary (salary basis) or hourly rate (hourly basis). */
+  /** Default pay calendar for this employee (pay template). */
+  payFrequency: EmployeePayFrequency;
+  /** Annual salary (salary basis) or hourly rate (hourly basis) — pay template. */
   ordinaryRate: number;
+  /** Template ordinary hours per week. */
   standardHoursPerWeek: number;
   bankAccountName: string;
   bsb: string;
@@ -51,6 +65,8 @@ export type Employee = {
   /** Optional leave balances (hours) — accrual engine out of scope. */
   leaveAnnualHours: number;
   leaveSickHours: number;
+  /** Free-text employee notes. */
+  notes: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -140,6 +156,21 @@ function asResidency(v: unknown): ResidencyStatus {
   return "resident";
 }
 
+function asTaxScale(v: unknown): TaxScaleType {
+  const s = String(v || "")
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+  if (s.includes("working") || s === "whm") return "working_holiday_maker";
+  if (s.includes("no-tfn") || s === "notfn") return "no_tfn";
+  return "standard";
+}
+
+function asPayFrequency(v: unknown): EmployeePayFrequency {
+  return String(v || "").toLowerCase() === "fortnightly"
+    ? "fortnightly"
+    : "weekly";
+}
+
 function normalizeEmployee(
   input: Partial<Employee>,
   existing?: Employee
@@ -194,6 +225,9 @@ function normalizeEmployee(
     ),
     position: String(input.position ?? existing?.position ?? "").trim(),
     department: String(input.department ?? existing?.department ?? "").trim(),
+    classification: String(
+      input.classification ?? existing?.classification ?? ""
+    ).trim(),
     tfn: String(input.tfn ?? existing?.tfn ?? "").replace(/\s/g, ""),
     residencyStatus: asResidency(
       input.residencyStatus ?? existing?.residencyStatus
@@ -201,7 +235,11 @@ function normalizeEmployee(
     taxFreeThreshold: Boolean(
       input.taxFreeThreshold ?? existing?.taxFreeThreshold ?? true
     ),
+    taxScaleType: asTaxScale(input.taxScaleType ?? existing?.taxScaleType),
     payBasis: asPayBasis(input.payBasis ?? existing?.payBasis),
+    payFrequency: asPayFrequency(
+      input.payFrequency ?? existing?.payFrequency
+    ),
     ordinaryRate,
     standardHoursPerWeek: Math.max(
       0,
@@ -233,6 +271,7 @@ function normalizeEmployee(
       0,
       Number(input.leaveSickHours ?? existing?.leaveSickHours ?? 0) || 0
     ),
+    notes: String(input.notes ?? existing?.notes ?? "").trim(),
     createdAt: existing?.createdAt || input.createdAt || now,
     updatedAt: now,
   };

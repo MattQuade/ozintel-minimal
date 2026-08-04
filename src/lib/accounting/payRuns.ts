@@ -41,6 +41,17 @@ export type PayRunLine = {
   ordinaryRate: number;
 };
 
+export type PayLineOverride = Partial<
+  Pick<
+    PayRunLine,
+    | "ordinaryEarnings"
+    | "allowances"
+    | "overtime"
+    | "hours"
+    | "ordinaryRate"
+  >
+>;
+
 export type PayRunTotals = {
   gross: number;
   paygWithheld: number;
@@ -75,15 +86,7 @@ export type CreatePayRunInput = {
   frequency?: PayFrequency;
   employeeIds?: string[];
   /** Optional per-employee overrides keyed by employee id. */
-  lineOverrides?: Record<
-    string,
-    Partial<
-      Pick<
-        PayRunLine,
-        "ordinaryEarnings" | "allowances" | "overtime" | "hours"
-      >
-    >
-  >;
+  lineOverrides?: Record<string, PayLineOverride>;
   notes?: string;
 };
 
@@ -152,7 +155,7 @@ function weeksInFrequency(frequency: PayFrequency): number {
   return frequency === "fortnightly" ? 2 : 1;
 }
 
-/** Default ordinary earnings for one pay period from employee pay settings. */
+/** Default ordinary earnings for one pay period from employee pay template. */
 export function defaultOrdinaryEarnings(
   emp: Employee,
   frequency: PayFrequency
@@ -176,16 +179,51 @@ export function defaultOrdinaryEarnings(
 export function buildPayRunLine(
   emp: Employee,
   frequency: PayFrequency,
-  override?: Partial<
-    Pick<PayRunLine, "ordinaryEarnings" | "allowances" | "overtime" | "hours">
-  >
+  override?: PayLineOverride
 ): PayRunLine {
   const defaults = defaultOrdinaryEarnings(emp, frequency);
-  const ordinaryEarnings = round2(
-    override?.ordinaryEarnings ?? defaults.ordinary
+  const ordinaryRate = round2(
+    override?.ordinaryRate != null && Number.isFinite(Number(override.ordinaryRate))
+      ? Number(override.ordinaryRate)
+      : defaults.rate
   );
-  const allowances = round2(override?.allowances ?? 0);
-  const overtime = round2(override?.overtime ?? 0);
+  const hours = round2(
+    override?.hours != null && Number.isFinite(Number(override.hours))
+      ? Number(override.hours)
+      : defaults.hours
+  );
+
+  let ordinaryEarnings: number;
+  if (
+    override?.ordinaryEarnings != null &&
+    Number.isFinite(Number(override.ordinaryEarnings))
+  ) {
+    ordinaryEarnings = round2(Number(override.ordinaryEarnings));
+  } else if (emp.payBasis === "hourly") {
+    ordinaryEarnings = round2(ordinaryRate * hours);
+  } else if (
+    override?.hours != null &&
+    defaults.hours > 0 &&
+    Number(override.hours) !== defaults.hours
+  ) {
+    // Scale salary period amount if hours were adjusted
+    ordinaryEarnings = round2(
+      defaults.ordinary * (hours / defaults.hours)
+    );
+  } else {
+    ordinaryEarnings = defaults.ordinary;
+  }
+
+  const allowances = round2(
+    override?.allowances != null && Number.isFinite(Number(override.allowances))
+      ? Number(override.allowances)
+      : 0
+  );
+  const overtime = round2(
+    override?.overtime != null && Number.isFinite(Number(override.overtime))
+      ? Number(override.overtime)
+      : 0
+  );
   const gross = round2(ordinaryEarnings + allowances + overtime);
   // OTE ≈ ordinary + allowances for MVP (overtime typically excluded from OTE)
   const ote = round2(ordinaryEarnings + allowances);
@@ -211,8 +249,8 @@ export function buildPayRunLine(
     paygWithheld,
     superAmount,
     net,
-    hours: round2(override?.hours ?? defaults.hours),
-    ordinaryRate: defaults.rate,
+    hours,
+    ordinaryRate,
   };
 }
 
@@ -286,9 +324,7 @@ export async function createPayRun(input: CreatePayRunInput): Promise<PayRun> {
 export async function updateDraftPayRun(
   id: string,
   patch: Partial<CreatePayRunInput> & {
-    lines?: Array<
-      Partial<PayRunLine> & { employeeId: string }
-    >;
+    lines?: Array<Partial<PayRunLine> & { employeeId: string }>;
   }
 ): Promise<PayRun> {
   return withPayRunsLock(async () => {
@@ -306,29 +342,58 @@ export async function updateDraftPayRun(
         : run.frequency;
 
     const allEmployees = await readEmployees();
-    let lines = run.lines;
+    let employeeIds = Array.isArray(patch.employeeIds)
+      ? patch.employeeIds.map(String)
+      : [...run.employeeIds];
+    let lines = [...run.lines];
 
-    if (Array.isArray(patch.employeeIds) || patch.lines || patch.frequency) {
-      const ids = Array.isArray(patch.employeeIds)
-        ? patch.employeeIds.map(String)
-        : run.employeeIds;
-      const overrideMap = new Map(
-        (patch.lines || []).map((l) => [l.employeeId, l])
-      );
-      lines = [];
-      for (const empId of ids) {
-        const emp = allEmployees.find((e) => e.id === empId);
-        if (!emp) throw new Error(`Employee not found: ${empId}`);
-        const ov = overrideMap.get(empId);
-        lines.push(
-          buildPayRunLine(emp, frequency, {
-            ordinaryEarnings: ov?.ordinaryEarnings,
-            allowances: ov?.allowances,
-            overtime: ov?.overtime,
-            hours: ov?.hours,
-          })
-        );
+    const rebuildLine = (
+      empId: string,
+      ov?: PayLineOverride & Partial<PayRunLine>
+    ): PayRunLine => {
+      const emp = allEmployees.find((e) => e.id === empId);
+      if (!emp) throw new Error(`Employee not found: ${empId}`);
+      const existing = lines.find((l) => l.employeeId === empId);
+      const hoursChanged =
+        ov?.hours != null &&
+        existing != null &&
+        Number(ov.hours) !== Number(existing.hours);
+      const rateChanged =
+        ov?.ordinaryRate != null &&
+        existing != null &&
+        Number(ov.ordinaryRate) !== Number(existing.ordinaryRate);
+      const ordinaryExplicit = ov?.ordinaryEarnings != null;
+
+      return buildPayRunLine(emp, frequency, {
+        hours: ov?.hours ?? existing?.hours,
+        ordinaryRate: ov?.ordinaryRate ?? existing?.ordinaryRate,
+        allowances: ov?.allowances ?? existing?.allowances,
+        overtime: ov?.overtime ?? existing?.overtime,
+        ordinaryEarnings: ordinaryExplicit
+          ? ov!.ordinaryEarnings
+          : hoursChanged || rateChanged
+            ? undefined
+            : existing?.ordinaryEarnings,
+      });
+    };
+
+    if (Array.isArray(patch.employeeIds) || patch.frequency) {
+      lines = employeeIds.map((empId) => {
+        const ov = (patch.lines || []).find((l) => l.employeeId === empId);
+        return rebuildLine(empId, ov);
+      });
+    } else if (Array.isArray(patch.lines) && patch.lines.length) {
+      // Patch one or more employees without resetting the rest
+      const byId = new Map(lines.map((l) => [l.employeeId, l]));
+      for (const ov of patch.lines) {
+        const empId = String(ov.employeeId || "").trim();
+        if (!empId) continue;
+        if (!employeeIds.includes(empId)) employeeIds.push(empId);
+        byId.set(empId, rebuildLine(empId, ov));
       }
+      lines = employeeIds
+        .map((id) => byId.get(id))
+        .filter((l): l is PayRunLine => Boolean(l));
     }
 
     const next: PayRun = {

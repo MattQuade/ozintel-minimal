@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import { SUPER_GUARANTEE_PERCENT } from '@/lib/payroll/constants';
@@ -9,6 +10,7 @@ import { SUPER_GUARANTEE_PERCENT } from '@/lib/payroll/constants';
 type EmploymentStatus = 'full-time' | 'part-time' | 'casual' | 'terminated';
 type PayBasis = 'salary' | 'hourly';
 type ResidencyStatus = 'resident' | 'foreign';
+type TaxScaleType = 'standard' | 'working_holiday_maker' | 'no_tfn';
 type PayFrequency = 'weekly' | 'fortnightly';
 type PayRunStatus = 'draft' | 'posted' | 'stp_submitted';
 
@@ -28,10 +30,13 @@ type Employee = {
   employmentStatus: EmploymentStatus;
   position: string;
   department: string;
+  classification: string;
   tfn: string;
   residencyStatus: ResidencyStatus;
   taxFreeThreshold: boolean;
+  taxScaleType: TaxScaleType;
   payBasis: PayBasis;
+  payFrequency: PayFrequency;
   ordinaryRate: number;
   standardHoursPerWeek: number;
   bankAccountName: string;
@@ -44,6 +49,7 @@ type Employee = {
   sgPercent: number;
   leaveAnnualHours: number;
   leaveSickHours: number;
+  notes: string;
 };
 
 type PayRunLine = {
@@ -99,10 +105,13 @@ const emptyEmployeeForm: Omit<Employee, 'id'> = {
   employmentStatus: 'full-time',
   position: '',
   department: '',
+  classification: '',
   tfn: '',
   residencyStatus: 'resident',
   taxFreeThreshold: true,
+  taxScaleType: 'standard',
   payBasis: 'salary',
+  payFrequency: 'weekly',
   ordinaryRate: 0,
   standardHoursPerWeek: 38,
   bankAccountName: '',
@@ -115,6 +124,7 @@ const emptyEmployeeForm: Omit<Employee, 'id'> = {
   sgPercent: SUPER_GUARANTEE_PERCENT,
   leaveAnnualHours: 0,
   leaveSickHours: 0,
+  notes: '',
 };
 
 function money(n: number) {
@@ -151,19 +161,20 @@ function statusClass(s: PayRunStatus) {
   return 'bg-slate-100 text-slate-700';
 }
 
-function fortnightDefaults() {
+function weekDefaults() {
   const end = new Date();
   const start = new Date(end);
-  start.setDate(start.getDate() - 13);
+  start.setDate(start.getDate() - 6);
   return {
     periodStart: toIsoDateInput(start),
     periodEnd: toIsoDateInput(end),
     paymentDate: toIsoDateInput(end),
-    frequency: 'fortnightly' as PayFrequency,
+    frequency: 'weekly' as PayFrequency,
   };
 }
 
 export default function EmployeesPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'employees' | 'payruns' | 'payslips'>(
     'employees'
   );
@@ -178,7 +189,7 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
 
   const [showPayRunModal, setShowPayRunModal] = useState(false);
-  const [payForm, setPayForm] = useState(fortnightDefaults);
+  const [payForm, setPayForm] = useState(weekDefaults);
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
@@ -206,11 +217,6 @@ export default function EmployeesPage() {
   const activeEmployees = useMemo(
     () => employees.filter((e) => e.employmentStatus !== 'terminated'),
     [employees]
-  );
-
-  const selectedRun = useMemo(
-    () => payRuns.find((r) => r.id === selectedRunId) || null,
-    [payRuns, selectedRunId]
   );
 
   const payslipRows = useMemo(() => {
@@ -298,7 +304,7 @@ export default function EmployeesPage() {
   };
 
   const openPayRunModal = () => {
-    setPayForm(fortnightDefaults());
+    setPayForm(weekDefaults());
     setSelectedEmpIds(activeEmployees.map((e) => e.id));
     setShowPayRunModal(true);
   };
@@ -322,10 +328,8 @@ export default function EmployeesPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Create failed');
       setShowPayRunModal(false);
-      setSelectedRunId(data.payRun.id);
-      setActiveTab('payruns');
-      await load();
       setStatus(`Pay run ${data.payRun.number} created (draft)`);
+      router.push(`/employees/payruns/${data.payRun.id}`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Create failed');
     } finally {
@@ -503,22 +507,23 @@ export default function EmployeesPage() {
         )}
 
         {!loading && activeTab === 'payruns' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-3xl shadow p-6">
-              <h2 className="text-2xl font-semibold mb-4">Pay runs</h2>
-              {payRuns.length === 0 ? (
-                <p className="text-center py-12 text-gray-500">
-                  No pay runs yet. Create a fortnightly or weekly run.
-                </p>
-              ) : (
-                payRuns.map((run) => (
-                  <button
+          <div className="bg-white rounded-3xl shadow p-6">
+            <h2 className="text-2xl font-semibold mb-2">Pay runs</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Open a draft to edit each employee&apos;s payslip for the period,
+              then post when ready.
+            </p>
+            {payRuns.length === 0 ? (
+              <p className="text-center py-12 text-gray-500">
+                No pay runs yet. Create a weekly or fortnightly run.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {payRuns.map((run) => (
+                  <Link
                     key={run.id}
-                    type="button"
-                    onClick={() => setSelectedRunId(run.id)}
-                    className={`w-full text-left border rounded-2xl p-4 mb-3 hover:bg-gray-50 ${
-                      selectedRunId === run.id ? 'border-blue-500 bg-blue-50/40' : ''
-                    }`}
+                    href={`/employees/payruns/${run.id}`}
+                    className="block border rounded-2xl p-4 hover:bg-gray-50"
                   >
                     <div className="flex justify-between items-start gap-3">
                       <div>
@@ -526,7 +531,8 @@ export default function EmployeesPage() {
                           {run.number} · {run.frequency}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {formatAuDate(run.periodStart)} – {formatAuDate(run.periodEnd)}
+                          {formatAuDate(run.periodStart)} –{' '}
+                          {formatAuDate(run.periodEnd)}
                         </p>
                         <p className="text-sm text-gray-500">
                           Pay {formatAuDate(run.paymentDate)} ·{' '}
@@ -544,106 +550,10 @@ export default function EmployeesPage() {
                         </span>
                       </div>
                     </div>
-                  </button>
-                ))
-              )}
-            </div>
-
-            <div className="bg-white rounded-3xl shadow p-6">
-              {!selectedRun ? (
-                <p className="text-center py-16 text-gray-500">
-                  Select a pay run to view lines and post to the ledger.
-                </p>
-              ) : (
-                <>
-                  <div className="flex flex-wrap justify-between gap-3 mb-4">
-                    <div>
-                      <h2 className="text-2xl font-semibold">{selectedRun.number}</h2>
-                      <p className="text-sm text-gray-500">
-                        Gross {money(selectedRun.totals.gross)} · PAYG{' '}
-                        {money(selectedRun.totals.paygWithheld)} · Super{' '}
-                        {money(selectedRun.totals.superAmount)} · Net{' '}
-                        {money(selectedRun.totals.net)}
-                      </p>
-                      {selectedRun.journalRef && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Journal {selectedRun.journalRef}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedRun.status === 'draft' && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={saving}
-                            onClick={() => postPayRun(selectedRun.id)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            Post / Finalise
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deletePayRun(selectedRun.id)}
-                            className="border border-red-300 text-red-600 px-4 py-2 rounded-xl"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                      {selectedRun.status === 'posted' && (
-                        <button
-                          type="button"
-                          onClick={() => markStpReady(selectedRun.id)}
-                          className="border px-4 py-2 rounded-xl hover:bg-gray-50"
-                          title="Placeholder for future STP lodgement"
-                        >
-                          Mark STP-ready
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b">
-                          <th className="py-2 pr-2">Employee</th>
-                          <th className="py-2 pr-2 text-right">Gross</th>
-                          <th className="py-2 pr-2 text-right">PAYG</th>
-                          <th className="py-2 pr-2 text-right">Super</th>
-                          <th className="py-2 pr-2 text-right">Net</th>
-                          <th className="py-2">Payslip</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedRun.lines.map((line) => (
-                          <tr key={line.employeeId} className="border-b last:border-0">
-                            <td className="py-3 pr-2 font-medium">{line.employeeName}</td>
-                            <td className="py-3 pr-2 text-right">{money(line.gross)}</td>
-                            <td className="py-3 pr-2 text-right">
-                              {money(line.paygWithheld)}
-                            </td>
-                            <td className="py-3 pr-2 text-right">
-                              {money(line.superAmount)}
-                            </td>
-                            <td className="py-3 pr-2 text-right">{money(line.net)}</td>
-                            <td className="py-3">
-                              <Link
-                                href={`/employees/payruns/${selectedRun.id}/payslip/${line.employeeId}`}
-                                className="text-blue-600 hover:underline"
-                              >
-                                View
-                              </Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -813,7 +723,7 @@ export default function EmployeesPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="font-semibold">Employment & pay</h3>
+                    <h3 className="font-semibold">Employment</h3>
                     <div className="grid grid-cols-2 gap-3">
                       {field(
                         'Status',
@@ -834,16 +744,19 @@ export default function EmployeesPage() {
                         </select>
                       )}
                       {field(
-                        'Pay basis',
+                        'Pay frequency',
                         <select
                           className={inputCls}
-                          value={form.payBasis}
+                          value={form.payFrequency}
                           onChange={(e) =>
-                            setForm({ ...form, payBasis: e.target.value as PayBasis })
+                            setForm({
+                              ...form,
+                              payFrequency: e.target.value as PayFrequency,
+                            })
                           }
                         >
-                          <option value="salary">Salary (annual)</option>
-                          <option value="hourly">Hourly</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="fortnightly">Fortnightly</option>
                         </select>
                       )}
                     </div>
@@ -865,7 +778,37 @@ export default function EmployeesPage() {
                         }
                       />
                     )}
+                    {field(
+                      'Classification (optional)',
+                      <input
+                        className={inputCls}
+                        value={form.classification}
+                        onChange={(e) =>
+                          setForm({ ...form, classification: e.target.value })
+                        }
+                        placeholder="Award classification"
+                      />
+                    )}
+
+                    <h3 className="font-semibold pt-2">Pay template</h3>
+                    <p className="text-xs text-slate-500 -mt-2">
+                      Default hours and rate used when a pay run is created for
+                      this employee.
+                    </p>
                     <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Pay basis',
+                        <select
+                          className={inputCls}
+                          value={form.payBasis}
+                          onChange={(e) =>
+                            setForm({ ...form, payBasis: e.target.value as PayBasis })
+                          }
+                        >
+                          <option value="salary">Salary (annual)</option>
+                          <option value="hourly">Hourly</option>
+                        </select>
+                      )}
                       {field(
                         form.payBasis === 'salary' ? 'Annual salary' : 'Hourly rate',
                         <input
@@ -880,21 +823,21 @@ export default function EmployeesPage() {
                           }
                         />
                       )}
-                      {field(
-                        'Standard hours / week',
-                        <input
-                          type="number"
-                          className={inputCls}
-                          value={form.standardHoursPerWeek || ''}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              standardHoursPerWeek: Number(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      )}
                     </div>
+                    {field(
+                      'Ordinary hours / week',
+                      <input
+                        type="number"
+                        className={inputCls}
+                        value={form.standardHoursPerWeek || ''}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            standardHoursPerWeek: Number(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    )}
 
                     <h3 className="font-semibold pt-2">Tax</h3>
                     {field(
@@ -924,20 +867,71 @@ export default function EmployeesPage() {
                         </select>
                       )}
                       {field(
-                        'Tax-free threshold',
+                        'Tax scale',
                         <select
                           className={inputCls}
-                          value={form.taxFreeThreshold ? 'yes' : 'no'}
+                          value={form.taxScaleType}
                           onChange={(e) =>
                             setForm({
                               ...form,
-                              taxFreeThreshold: e.target.value === 'yes',
+                              taxScaleType: e.target.value as TaxScaleType,
                             })
                           }
                         >
-                          <option value="yes">Claimed</option>
-                          <option value="no">Not claimed</option>
+                          <option value="standard">Standard</option>
+                          <option value="working_holiday_maker">
+                            Working holiday maker
+                          </option>
+                          <option value="no_tfn">No TFN</option>
                         </select>
+                      )}
+                    </div>
+                    {field(
+                      'Tax-free threshold',
+                      <select
+                        className={inputCls}
+                        value={form.taxFreeThreshold ? 'yes' : 'no'}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            taxFreeThreshold: e.target.value === 'yes',
+                          })
+                        }
+                      >
+                        <option value="yes">Claimed</option>
+                        <option value="no">Not claimed</option>
+                      </select>
+                    )}
+
+                    <h3 className="font-semibold pt-2">Leave balances (hours)</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {field(
+                        'Annual leave',
+                        <input
+                          type="number"
+                          className={inputCls}
+                          value={form.leaveAnnualHours || ''}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              leaveAnnualHours: Number(e.target.value) || 0,
+                            })
+                          }
+                        />
+                      )}
+                      {field(
+                        'Personal / sick leave',
+                        <input
+                          type="number"
+                          className={inputCls}
+                          value={form.leaveSickHours || ''}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              leaveSickHours: Number(e.target.value) || 0,
+                            })
+                          }
+                        />
                       )}
                     </div>
 
@@ -1032,6 +1026,15 @@ export default function EmployeesPage() {
                         />
                       )}
                     </div>
+
+                    <h3 className="font-semibold pt-2">Notes</h3>
+                    <textarea
+                      className={inputCls}
+                      rows={3}
+                      value={form.notes}
+                      onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      placeholder="Internal notes"
+                    />
                   </div>
                 </div>
 
@@ -1074,8 +1077,8 @@ export default function EmployeesPage() {
                       })
                     }
                   >
-                    <option value="fortnightly">Fortnightly</option>
                     <option value="weekly">Weekly</option>
+                    <option value="fortnightly">Fortnightly</option>
                   </select>
                 )}
                 {field(
