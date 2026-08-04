@@ -19,6 +19,12 @@ import {
   SUPER_GUARANTEE_RATE,
 } from "@/lib/payroll/constants";
 import {
+  hospitalityEmploymentKind,
+  hospitalityOvertimeAmount,
+  hospitalityWeekendEarnings,
+  hospitalityWeekendMultipliers,
+} from "@/lib/payroll/hospitalityAward";
+import {
   calculatePaygWithholding,
   type PayFrequency,
 } from "@/lib/payroll/paygWithholding";
@@ -28,17 +34,27 @@ export type PayRunStatus = "draft" | "posted" | "stp_submitted";
 export type PayRunLine = {
   employeeId: string;
   employeeName: string;
+  /** Copied from employee at line build — drives Sat/Sun multipliers. */
+  employmentStatus: string;
+  /** Weekday ordinary hours (Mon–Fri). */
+  hours: number;
+  ordinaryRate: number;
+  /** Weekday ordinary earnings (base rate × weekday hours). */
   ordinaryEarnings: number;
-  allowances: number;
+  saturdayHours: number;
+  saturdayEarnings: number;
+  sundayHours: number;
+  sundayEarnings: number;
+  overtimeHours: number;
+  /** Overtime $ (Hospitality Award: first 2h @ 150%, rest @ 200%). */
   overtime: number;
+  allowances: number;
   gross: number;
-  /** Ordinary time earnings for SG (≈ ordinary + allowances for MVP). */
+  /** OTE for SG ≈ weekday + Sat + Sun ordinary-time + allowances (excl. OT). */
   ote: number;
   paygWithheld: number;
   superAmount: number;
   net: number;
-  hours: number;
-  ordinaryRate: number;
 };
 
 export type PayLineOverride = Partial<
@@ -47,8 +63,13 @@ export type PayLineOverride = Partial<
     | "ordinaryEarnings"
     | "allowances"
     | "overtime"
+    | "overtimeHours"
     | "hours"
     | "ordinaryRate"
+    | "saturdayHours"
+    | "saturdayEarnings"
+    | "sundayHours"
+    | "sundayEarnings"
   >
 >;
 
@@ -126,7 +147,26 @@ async function readPayRunsUnlocked(): Promise<PayRun[]> {
   try {
     const raw = await fs.readFile(getPayRunsFilePath(), "utf8");
     const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? (parsed as PayRun[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as PayRun[]).map((run) => ({
+      ...run,
+      lines: Array.isArray(run.lines)
+        ? run.lines.map((l) => ({
+            ...l,
+            employmentStatus: String(l.employmentStatus || ""),
+            saturdayHours: Number(l.saturdayHours) || 0,
+            saturdayEarnings: Number(l.saturdayEarnings) || 0,
+            sundayHours: Number(l.sundayHours) || 0,
+            sundayEarnings: Number(l.sundayEarnings) || 0,
+            overtimeHours: Number(l.overtimeHours) || 0,
+            hours: Number(l.hours) || 0,
+            ordinaryRate: Number(l.ordinaryRate) || 0,
+            ordinaryEarnings: Number(l.ordinaryEarnings) || 0,
+            allowances: Number(l.allowances) || 0,
+            overtime: Number(l.overtime) || 0,
+          }))
+        : [],
+    }));
   } catch {
     await writePayRunsUnlocked([]);
     return [];
@@ -206,27 +246,71 @@ export function buildPayRunLine(
     defaults.hours > 0 &&
     Number(override.hours) !== defaults.hours
   ) {
-    // Scale salary period amount if hours were adjusted
-    ordinaryEarnings = round2(
-      defaults.ordinary * (hours / defaults.hours)
-    );
+    ordinaryEarnings = round2(defaults.ordinary * (hours / defaults.hours));
   } else {
     ordinaryEarnings = defaults.ordinary;
   }
+
+  const kind = hospitalityEmploymentKind(emp.employmentStatus);
+  const weekend = hospitalityWeekendMultipliers(kind);
+
+  const saturdayHours = round2(
+    override?.saturdayHours != null &&
+      Number.isFinite(Number(override.saturdayHours))
+      ? Number(override.saturdayHours)
+      : 0
+  );
+  const sundayHours = round2(
+    override?.sundayHours != null && Number.isFinite(Number(override.sundayHours))
+      ? Number(override.sundayHours)
+      : 0
+  );
+  const overtimeHours = round2(
+    override?.overtimeHours != null &&
+      Number.isFinite(Number(override.overtimeHours))
+      ? Number(override.overtimeHours)
+      : 0
+  );
+
+  const saturdayEarnings = round2(
+    override?.saturdayEarnings != null &&
+      Number.isFinite(Number(override.saturdayEarnings))
+      ? Number(override.saturdayEarnings)
+      : hospitalityWeekendEarnings(
+          ordinaryRate,
+          saturdayHours,
+          weekend.saturday
+        )
+  );
+  const sundayEarnings = round2(
+    override?.sundayEarnings != null &&
+      Number.isFinite(Number(override.sundayEarnings))
+      ? Number(override.sundayEarnings)
+      : hospitalityWeekendEarnings(ordinaryRate, sundayHours, weekend.sunday)
+  );
 
   const allowances = round2(
     override?.allowances != null && Number.isFinite(Number(override.allowances))
       ? Number(override.allowances)
       : 0
   );
+
   const overtime = round2(
     override?.overtime != null && Number.isFinite(Number(override.overtime))
       ? Number(override.overtime)
-      : 0
+      : hospitalityOvertimeAmount(ordinaryRate, overtimeHours)
   );
-  const gross = round2(ordinaryEarnings + allowances + overtime);
-  // OTE ≈ ordinary + allowances for MVP (overtime typically excluded from OTE)
-  const ote = round2(ordinaryEarnings + allowances);
+
+  const gross = round2(
+    ordinaryEarnings +
+      saturdayEarnings +
+      sundayEarnings +
+      allowances +
+      overtime
+  );
+  const ote = round2(
+    ordinaryEarnings + saturdayEarnings + sundayEarnings + allowances
+  );
   const sgRate = (Number(emp.sgPercent) || SUPER_GUARANTEE_RATE * 100) / 100;
   const superAmount = round2(ote * sgRate);
   const paygWithheld = calculatePaygWithholding({
@@ -241,16 +325,22 @@ export function buildPayRunLine(
   return {
     employeeId: emp.id,
     employeeName: employeeDisplayName(emp),
+    employmentStatus: emp.employmentStatus,
+    hours,
+    ordinaryRate,
     ordinaryEarnings,
-    allowances,
+    saturdayHours,
+    saturdayEarnings,
+    sundayHours,
+    sundayEarnings,
+    overtimeHours,
     overtime,
+    allowances,
     gross,
     ote,
     paygWithheld,
     superAmount,
     net,
-    hours,
-    ordinaryRate,
   };
 }
 
@@ -363,17 +453,49 @@ export async function updateDraftPayRun(
         existing != null &&
         Number(ov.ordinaryRate) !== Number(existing.ordinaryRate);
       const ordinaryExplicit = ov?.ordinaryEarnings != null;
+      const satHoursChanged =
+        ov?.saturdayHours != null &&
+        existing != null &&
+        Number(ov.saturdayHours) !== Number(existing.saturdayHours || 0);
+      const sunHoursChanged =
+        ov?.sundayHours != null &&
+        existing != null &&
+        Number(ov.sundayHours) !== Number(existing.sundayHours || 0);
+      const otHoursChanged =
+        ov?.overtimeHours != null &&
+        existing != null &&
+        Number(ov.overtimeHours) !== Number(existing.overtimeHours || 0);
 
       return buildPayRunLine(emp, frequency, {
         hours: ov?.hours ?? existing?.hours,
         ordinaryRate: ov?.ordinaryRate ?? existing?.ordinaryRate,
         allowances: ov?.allowances ?? existing?.allowances,
-        overtime: ov?.overtime ?? existing?.overtime,
+        saturdayHours: ov?.saturdayHours ?? existing?.saturdayHours ?? 0,
+        sundayHours: ov?.sundayHours ?? existing?.sundayHours ?? 0,
+        overtimeHours: ov?.overtimeHours ?? existing?.overtimeHours ?? 0,
         ordinaryEarnings: ordinaryExplicit
           ? ov!.ordinaryEarnings
           : hoursChanged || rateChanged
             ? undefined
             : existing?.ordinaryEarnings,
+        saturdayEarnings:
+          ov?.saturdayEarnings != null
+            ? ov.saturdayEarnings
+            : satHoursChanged || rateChanged
+              ? undefined
+              : existing?.saturdayEarnings,
+        sundayEarnings:
+          ov?.sundayEarnings != null
+            ? ov.sundayEarnings
+            : sunHoursChanged || rateChanged
+              ? undefined
+              : existing?.sundayEarnings,
+        overtime:
+          ov?.overtime != null
+            ? ov.overtime
+            : otHoursChanged || rateChanged
+              ? undefined
+              : existing?.overtime,
       });
     };
 

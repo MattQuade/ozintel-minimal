@@ -19,9 +19,16 @@ type PayslipPayload = {
   line: {
     employeeId: string;
     employeeName: string;
+    employmentStatus?: string;
     ordinaryEarnings: number;
+    ordinaryRate?: number;
     allowances: number;
     overtime: number;
+    overtimeHours?: number;
+    saturdayHours?: number;
+    saturdayEarnings?: number;
+    sundayHours?: number;
+    sundayEarnings?: number;
     gross: number;
     paygWithheld: number;
     superAmount: number;
@@ -169,12 +176,45 @@ export default function PayslipPage() {
               </thead>
               <tbody>
                 <tr className="border-b">
-                  <td className="py-3">Ordinary</td>
+                  <td className="py-3">
+                    Ordinary
+                    {data.line.hours > 0
+                      ? ` (${data.line.hours}h weekday)`
+                      : ''}
+                  </td>
                   <td className="py-3 text-right">
                     {money(data.line.ordinaryEarnings)}
                   </td>
                   <td className="py-3 text-right text-gray-400">—</td>
                 </tr>
+                {(Number(data.line.saturdayEarnings) || 0) > 0 && (
+                  <tr className="border-b">
+                    <td className="py-3">
+                      Saturday
+                      {(Number(data.line.saturdayHours) || 0) > 0
+                        ? ` (${data.line.saturdayHours}h)`
+                        : ''}
+                    </td>
+                    <td className="py-3 text-right">
+                      {money(data.line.saturdayEarnings || 0)}
+                    </td>
+                    <td className="py-3 text-right text-gray-400">—</td>
+                  </tr>
+                )}
+                {(Number(data.line.sundayEarnings) || 0) > 0 && (
+                  <tr className="border-b">
+                    <td className="py-3">
+                      Sunday
+                      {(Number(data.line.sundayHours) || 0) > 0
+                        ? ` (${data.line.sundayHours}h)`
+                        : ''}
+                    </td>
+                    <td className="py-3 text-right">
+                      {money(data.line.sundayEarnings || 0)}
+                    </td>
+                    <td className="py-3 text-right text-gray-400">—</td>
+                  </tr>
+                )}
                 {data.line.allowances > 0 && (
                   <tr className="border-b">
                     <td className="py-3">Allowances</td>
@@ -184,7 +224,12 @@ export default function PayslipPage() {
                 )}
                 {data.line.overtime > 0 && (
                   <tr className="border-b">
-                    <td className="py-3">Overtime</td>
+                    <td className="py-3">
+                      Overtime
+                      {(Number(data.line.overtimeHours) || 0) > 0
+                        ? ` (${data.line.overtimeHours}h)`
+                        : ''}
+                    </td>
                     <td className="py-3 text-right">{money(data.line.overtime)}</td>
                     <td className="py-3 text-right text-gray-400">—</td>
                   </tr>
@@ -215,9 +260,10 @@ export default function PayslipPage() {
             </table>
 
             <p className="text-xs text-gray-400">
-              Employer super is not deducted from net pay. PAYG uses ATO Schedule 1
-              formula approximation (LI 2026/18). STP lodgement is not included on this
-              payslip.
+              Weekend and overtime rows use Hospitality Industry (General) Award
+              (MA000009) multipliers for NSW. Employer super is not deducted from
+              net pay. PAYG uses ATO Schedule 1 formula approximation (LI 2026/18).
+              STP lodgement is not included on this payslip.
             </p>
           </div>
         ) : null}

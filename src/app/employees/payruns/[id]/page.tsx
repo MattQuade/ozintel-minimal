@@ -1,19 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate } from '@/lib/accounting/dates';
+import {
+  hospitalityEmploymentKind,
+  hospitalityOvertimeAmount,
+  hospitalityWeekendEarnings,
+  hospitalityWeekendMultipliers,
+} from '@/lib/payroll/hospitalityAward';
 
 type PayRunStatus = 'draft' | 'posted' | 'stp_submitted';
 
 type PayRunLine = {
   employeeId: string;
   employeeName: string;
+  employmentStatus?: string;
   ordinaryEarnings: number;
   allowances: number;
   overtime: number;
+  overtimeHours?: number;
+  saturdayHours?: number;
+  saturdayEarnings?: number;
+  sundayHours?: number;
+  sundayEarnings?: number;
   gross: number;
   ote: number;
   paygWithheld: number;
@@ -62,12 +74,26 @@ function statusClass(s: PayRunStatus) {
   return 'bg-slate-100 text-slate-700';
 }
 
+function totalHours(line: PayRunLine) {
+  return (
+    (Number(line.hours) || 0) +
+    (Number(line.saturdayHours) || 0) +
+    (Number(line.sundayHours) || 0) +
+    (Number(line.overtimeHours) || 0)
+  );
+}
+
 type EditDraft = {
   hours: string;
   ordinaryRate: string;
   ordinaryEarnings: string;
-  allowances: string;
+  saturdayHours: string;
+  saturdayEarnings: string;
+  sundayHours: string;
+  sundayEarnings: string;
+  overtimeHours: string;
   overtime: string;
+  allowances: string;
 };
 
 function lineToDraft(line: PayRunLine): EditDraft {
@@ -75,9 +101,19 @@ function lineToDraft(line: PayRunLine): EditDraft {
     hours: String(line.hours ?? ''),
     ordinaryRate: String(line.ordinaryRate ?? ''),
     ordinaryEarnings: String(line.ordinaryEarnings ?? ''),
-    allowances: String(line.allowances ?? ''),
+    saturdayHours: String(line.saturdayHours ?? 0),
+    saturdayEarnings: String(line.saturdayEarnings ?? 0),
+    sundayHours: String(line.sundayHours ?? 0),
+    sundayEarnings: String(line.sundayEarnings ?? 0),
+    overtimeHours: String(line.overtimeHours ?? 0),
     overtime: String(line.overtime ?? ''),
+    allowances: String(line.allowances ?? ''),
   };
+}
+
+function parseNum(s: string) {
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export default function PayRunDetailPage() {
@@ -89,6 +125,25 @@ export default function PayRunDetailPage() {
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
+
+  const editingLine = useMemo(
+    () => payRun?.lines.find((l) => l.employeeId === editingId) || null,
+    [payRun, editingId]
+  );
+
+  const awardHint = useMemo(() => {
+    const kind = hospitalityEmploymentKind(editingLine?.employmentStatus);
+    const m = hospitalityWeekendMultipliers(kind);
+    const label = kind === 'casual' ? 'Casual' : 'Full-time / part-time';
+    return {
+      kind,
+      label,
+      satPct: Math.round(m.saturday * 100),
+      sunPct: Math.round(m.sunday * 100),
+      saturday: m.saturday,
+      sunday: m.sunday,
+    };
+  }, [editingLine?.employmentStatus]);
 
   const load = useCallback(async () => {
     try {
@@ -116,16 +171,54 @@ export default function PayRunDetailPage() {
     setDraft(null);
   };
 
+  /** Recalc award rows when hours or base rate change. */
+  const recalculateAward = (patch: Partial<EditDraft>) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      const rate = parseNum(next.ordinaryRate);
+      const weekdayHrs = parseNum(next.hours);
+      const satHrs = parseNum(next.saturdayHours);
+      const sunHrs = parseNum(next.sundayHours);
+      const otHrs = parseNum(next.overtimeHours);
+
+      if ('hours' in patch || 'ordinaryRate' in patch) {
+        next.ordinaryEarnings = String(Math.round(weekdayHrs * rate * 100) / 100);
+      }
+      if (
+        'saturdayHours' in patch ||
+        'ordinaryRate' in patch ||
+        'hours' in patch
+      ) {
+        next.saturdayEarnings = String(
+          hospitalityWeekendEarnings(rate, satHrs, awardHint.saturday)
+        );
+      }
+      if (
+        'sundayHours' in patch ||
+        'ordinaryRate' in patch ||
+        'hours' in patch
+      ) {
+        next.sundayEarnings = String(
+          hospitalityWeekendEarnings(rate, sunHrs, awardHint.sunday)
+        );
+      }
+      if (
+        'overtimeHours' in patch ||
+        'ordinaryRate' in patch ||
+        'hours' in patch
+      ) {
+        next.overtime = String(hospitalityOvertimeAmount(rate, otHrs));
+      }
+      return next;
+    });
+  };
+
   const saveLine = async () => {
     if (!payRun || !editingId || !draft) return;
     setBusy(true);
     setError('');
     try {
-      const hours = parseFloat(draft.hours);
-      const ordinaryRate = parseFloat(draft.ordinaryRate);
-      const ordinaryEarnings = parseFloat(draft.ordinaryEarnings);
-      const allowances = parseFloat(draft.allowances);
-      const overtime = parseFloat(draft.overtime);
       const res = await fetch(`/api/payruns/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -133,15 +226,16 @@ export default function PayRunDetailPage() {
           lines: [
             {
               employeeId: editingId,
-              hours: Number.isFinite(hours) ? hours : 0,
-              ordinaryRate: Number.isFinite(ordinaryRate) ? ordinaryRate : 0,
-              // Send earnings explicitly so salary edits stick; for hourly,
-              // changing hours alone still recalculates when earnings match rate×hrs
-              ordinaryEarnings: Number.isFinite(ordinaryEarnings)
-                ? ordinaryEarnings
-                : undefined,
-              allowances: Number.isFinite(allowances) ? allowances : 0,
-              overtime: Number.isFinite(overtime) ? overtime : 0,
+              hours: parseNum(draft.hours),
+              ordinaryRate: parseNum(draft.ordinaryRate),
+              ordinaryEarnings: parseNum(draft.ordinaryEarnings),
+              saturdayHours: parseNum(draft.saturdayHours),
+              saturdayEarnings: parseNum(draft.saturdayEarnings),
+              sundayHours: parseNum(draft.sundayHours),
+              sundayEarnings: parseNum(draft.sundayEarnings),
+              overtimeHours: parseNum(draft.overtimeHours),
+              overtime: parseNum(draft.overtime),
+              allowances: parseNum(draft.allowances),
             },
           ],
         }),
@@ -158,22 +252,6 @@ export default function PayRunDetailPage() {
     } finally {
       setBusy(false);
     }
-  };
-
-  /** Recalc ordinary on the draft when hours or rate change (hourly-style). */
-  const onHoursOrRateChange = (patch: Partial<EditDraft>) => {
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, ...patch };
-      const hours = parseFloat(next.hours);
-      const rate = parseFloat(next.ordinaryRate);
-      if (Number.isFinite(hours) && Number.isFinite(rate)) {
-        next.ordinaryEarnings = String(
-          Math.round(hours * rate * 100) / 100
-        );
-      }
-      return next;
-    });
   };
 
   const postPayRun = async () => {
@@ -298,9 +376,9 @@ export default function PayRunDetailPage() {
 
         {isDraft && (
           <p className="mb-4 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-            Draft pay run — open each employee to adjust hours, rate, allowances
-            or overtime for this week, then save. Post when every payslip looks
-            right.
+            Draft pay run — edit each employee for weekday, Saturday, Sunday and
+            overtime hours (Hospitality Award MA000009). Save, then post when
+            every payslip looks right.
           </p>
         )}
 
@@ -332,7 +410,7 @@ export default function PayRunDetailPage() {
                       {line.employeeName}
                     </td>
                     <td className="p-3 text-right align-top tabular-nums">
-                      {line.hours}
+                      {totalHours(line)}
                     </td>
                     <td className="p-3 text-right align-top">{money(line.gross)}</td>
                     <td className="p-3 text-right align-top">
@@ -387,53 +465,32 @@ export default function PayRunDetailPage() {
         {editingId && draft && (
           <div className="bg-white rounded-2xl border border-orange-200 p-6 mb-6">
             <h2 className="font-semibold text-lg mb-1">
-              Edit payslip —{' '}
-              {payRun.lines.find((l) => l.employeeId === editingId)?.employeeName}
+              Edit payslip — {editingLine?.employeeName}
             </h2>
             <p className="text-sm text-slate-500 mb-4">
-              Changing hours or rate recalculates ordinary earnings (hours ×
-              rate). Adjust allowances / overtime as needed, then save.
+              Hospitality Award ({awardHint.label}): Sat {awardHint.satPct}%,
+              Sun {awardHint.sunPct}%, OT first 2h @ 150% then 200%. Changing
+              hours or rate recalculates $; you can still override any amount.
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Hours</label>
-                <input
-                  type="number"
-                  step="any"
-                  className="no-spinner w-full border border-slate-300 rounded-xl px-3 py-2"
-                  value={draft.hours}
-                  onChange={(e) => onHoursOrRateChange({ hours: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Rate</label>
+                <label className="block text-xs text-slate-500 mb-1">
+                  Base hourly rate
+                </label>
                 <input
                   type="number"
                   step="any"
                   className="no-spinner w-full border border-slate-300 rounded-xl px-3 py-2"
                   value={draft.ordinaryRate}
                   onChange={(e) =>
-                    onHoursOrRateChange({ ordinaryRate: e.target.value })
+                    recalculateAward({ ordinaryRate: e.target.value })
                   }
                 />
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">
-                  Ordinary $
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="no-spinner w-full border border-slate-300 rounded-xl px-3 py-2"
-                  value={draft.ordinaryEarnings}
-                  onChange={(e) =>
-                    setDraft({ ...draft, ordinaryEarnings: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Allowances
+                  Allowances $
                 </label>
                 <input
                   type="number"
@@ -445,21 +502,135 @@ export default function PayRunDetailPage() {
                   }
                 />
               </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">
-                  Overtime
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  className="no-spinner w-full border border-slate-300 rounded-xl px-3 py-2"
-                  value={draft.overtime}
-                  onChange={(e) =>
-                    setDraft({ ...draft, overtime: e.target.value })
-                  }
-                />
-              </div>
             </div>
+
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm border border-slate-200 rounded-xl overflow-hidden">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="text-left p-2.5 font-medium">Row</th>
+                    <th className="text-right p-2.5 font-medium w-28">Hours</th>
+                    <th className="text-right p-2.5 font-medium w-36">Amount $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t border-slate-100">
+                    <td className="p-2.5">Weekday ordinary (Mon–Fri)</td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.hours}
+                        onChange={(e) =>
+                          recalculateAward({ hours: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.ordinaryEarnings}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            ordinaryEarnings: e.target.value,
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                  <tr className="border-t border-slate-100">
+                    <td className="p-2.5">
+                      Saturday ({awardHint.satPct}%)
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.saturdayHours}
+                        onChange={(e) =>
+                          recalculateAward({ saturdayHours: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.saturdayEarnings}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            saturdayEarnings: e.target.value,
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                  <tr className="border-t border-slate-100">
+                    <td className="p-2.5">Sunday ({awardHint.sunPct}%)</td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.sundayHours}
+                        onChange={(e) =>
+                          recalculateAward({ sundayHours: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.sundayEarnings}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            sundayEarnings: e.target.value,
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                  <tr className="border-t border-slate-100">
+                    <td className="p-2.5">
+                      Overtime (150% / 200%)
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.overtimeHours}
+                        onChange={(e) =>
+                          recalculateAward({ overtimeHours: e.target.value })
+                        }
+                      />
+                    </td>
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        step="any"
+                        className="no-spinner w-full border border-slate-300 rounded-lg px-2 py-1.5 text-right"
+                        value={draft.overtime}
+                        onChange={(e) =>
+                          setDraft({ ...draft, overtime: e.target.value })
+                        }
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
