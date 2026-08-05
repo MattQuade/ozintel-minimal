@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { checkAccountingAccess } from "@/lib/accounting/access";
+import VoiceNavBar from "@/components/VoiceNavBar";
 
 const previewLinks = [
   { href: "/accounting/pending?module=Accounting&section=Bank", label: "Bank" },
@@ -69,6 +70,19 @@ export default function AccountingHubPage() {
             ? "Full access enabled for your account."
             : "Preview the modules below. Full access requires admin approval."}
       </p>
+
+      <div style={{ maxWidth: 400, margin: "20px auto 0", width: "90%" }}>
+        <VoiceNavBar
+          variant="home"
+          examples={[
+            "Open Invoices",
+            "Create new invoice",
+            "Open Bank",
+            "Open Employees",
+          ]}
+        />
+      </div>
+
       <div
         style={{
           display: "flex",

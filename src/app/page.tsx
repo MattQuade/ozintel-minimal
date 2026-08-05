@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
+import VoiceNavBar from '@/components/VoiceNavBar';
 
 type Contact = {
   name: string;
@@ -677,6 +678,8 @@ export default function HomePage() {
       
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
+
+      <VoiceNavBar variant="home" />
 
       {showAdminLogin && !isAdminAuthenticated && (
         <form onSubmit={handleAdminLogin} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '15px auto', maxWidth: '400px', border: '1px solid #334155' }}>
