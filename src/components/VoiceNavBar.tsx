@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   PLATFORM_VOICE_EXAMPLES,
-  parsePlatformVoiceNav,
+  parsePlatformVoiceCommand,
 } from '@/lib/voice/platformNav';
 import {
   getSpeechRecognitionCtor,
@@ -44,20 +44,52 @@ export default function VoiceNavBar({
     };
   }, []);
 
-  const go = (transcript: string) => {
+  const go = async (transcript: string) => {
     const raw = transcript.trim();
     if (!raw) return;
     setError('');
-    const nav = parsePlatformVoiceNav(raw);
-    if (!nav) {
+    setHint('');
+
+    const cmd = parsePlatformVoiceCommand(raw);
+    if (!cmd) {
       setError(
-        `Didn’t catch that. Try “Open Accounting” or “Create new invoice”.`
+        `Didn’t catch that. Try “Open Accounting”, “Edit invoice”, or “Add date to invoice number”.`
       );
       return;
     }
+
+    // Pure navigation — no API
+    if (cmd.type === 'navigate' || cmd.type === 'edit_invoices') {
+      setBusy(true);
+      setHint(`Opening ${cmd.label}…`);
+      router.push(cmd.href);
+      return;
+    }
+
+    // Actions that need the latest draft / number update
     setBusy(true);
-    setHint(`Opening ${nav.label}…`);
-    router.push(nav.href);
+    setHint(`${cmd.label}…`);
+    try {
+      const res = await fetch('/api/invoices/voice-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: raw }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Command failed');
+      }
+      setHint(data.label || cmd.label);
+      if (data.href) {
+        router.push(data.href);
+      } else {
+        setBusy(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Command failed');
+      setBusy(false);
+      setHint('');
+    }
   };
 
   const stopListening = () => {
@@ -105,7 +137,7 @@ export default function VoiceNavBar({
     rec.onend = () => {
       setListening(false);
       if (finalText.trim()) {
-        go(finalText);
+        void go(finalText);
       } else {
         setHint('');
       }
@@ -178,7 +210,7 @@ export default function VoiceNavBar({
           fontSize: '1.05rem',
         }}
       >
-        Voice navigate
+        Voice command
       </p>
       <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: mutedColor }}>
         {examples.slice(0, 4).join(' · ')}
@@ -218,33 +250,33 @@ export default function VoiceNavBar({
         <button
           type="button"
           disabled={busy || !text.trim()}
-          onClick={() => go(text)}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 10,
-            border: 'none',
-            cursor: busy || !text.trim() ? 'not-allowed' : 'pointer',
-            fontWeight: 700,
-            background: isHome ? '#f97316' : '#ea580c',
-            color: 'white',
-            opacity: busy || !text.trim() ? 0.5 : 1,
-          }}
-        >
-          Go
-        </button>
-      </div>
+            onClick={() => void go(text)}
+            style={{
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: 'none',
+              cursor: busy || !text.trim() ? 'not-allowed' : 'pointer',
+              fontWeight: 700,
+              background: isHome ? '#f97316' : '#ea580c',
+              color: 'white',
+              opacity: busy || !text.trim() ? 0.5 : 1,
+            }}
+          >
+            Go
+          </button>
+        </div>
 
-      <input
-        type="text"
-        value={text}
-        disabled={busy}
-        placeholder="Or type: Open Invoices"
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') go(text);
-        }}
-        style={inputStyle}
-      />
+        <input
+          type="text"
+          value={text}
+          disabled={busy}
+          placeholder="Or type: Edit invoice"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void go(text);
+          }}
+          style={inputStyle}
+        />
 
       {hint && (
         <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#38bdf8' }}>

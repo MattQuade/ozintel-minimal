@@ -1,17 +1,43 @@
 /**
- * Home / hub voice navigation — open modules across OzIntel.
- * Order matters: more specific commands first.
+ * Platform voice commands: navigation + invoice actions.
  */
 
+import {
+  applyInvoiceNumberSuffix,
+  invoiceDateSuffixFromDate,
+  parseSpokenNumberSuffix,
+} from "@/lib/voice/spokenNumberSuffix";
+
 export type PlatformVoiceNav = {
+  type: "navigate";
   href: string;
   label: string;
 };
 
+export type PlatformVoiceAction =
+  | {
+      type: "edit_invoice";
+      label: string;
+    }
+  | {
+      type: "edit_invoices";
+      href: string;
+      label: string;
+    }
+  | {
+      type: "append_invoice_suffix";
+      label: string;
+      /** Explicit spoken/typed suffix, e.g. "-0709-26". */
+      suffix?: string;
+      /** When true, derive suffix from the invoice issue date (or today). */
+      useIssueDate?: boolean;
+    };
+
+export type PlatformVoiceCommand = PlatformVoiceNav | PlatformVoiceAction;
+
 type NavRule = {
   href: string;
   label: string;
-  /** Match against normalised transcript (lowercase, collapsed). */
   test: (t: string) => boolean;
 };
 
@@ -31,7 +57,6 @@ function stripFiller(s: string): string {
     .trim();
 }
 
-/** Optional open/go/show prefix. */
 function withOpen(body: string): RegExp {
   return new RegExp(
     `^(?:(?:open|go to|goto|show|launch|take me to|navigate to)\\s+)?(?:the\\s+)?${body}\\s*$`
@@ -166,21 +191,109 @@ const RULES: NavRule[] = [
   },
 ];
 
+function parseAppendSuffixCommand(t: string): PlatformVoiceAction | null {
+  // "add date to invoice number" / "append invoice date to the number"
+  if (
+    /\b(add|append|put)\b.*\b(date|issue date)\b.*\b(invoice\s+)?numbers?\b/.test(
+      t
+    ) ||
+    /\b(add|append)\b.*\binvoice\s+(date|number)\b.*\b(date|suffix|number)\b/.test(
+      t
+    ) ||
+    /^(add|append)\s+(the\s+)?(invoice\s+)?date(\s+suffix)?(\s+to(\s+the)?\s+invoice\s+numbers?)?$/.test(
+      t
+    )
+  ) {
+    return {
+      type: "append_invoice_suffix",
+      label: "Add date to invoice number",
+      useIssueDate: true,
+    };
+  }
+
+  // "add dash zero seven … to invoice number"
+  const m = t.match(
+    /\b(?:add|append|put)\s+(.+?)\s+to\s+(?:the\s+)?invoice\s+numbers?\b/
+  );
+  if (m) {
+    const spoken = m[1].trim();
+    // If they said "date" alone in the capture, use issue date
+    if (/^(the\s+)?date(\s+suffix)?$/.test(spoken)) {
+      return {
+        type: "append_invoice_suffix",
+        label: "Add date to invoice number",
+        useIssueDate: true,
+      };
+    }
+    const suffix = parseSpokenNumberSuffix(spoken);
+    if (!suffix) return null;
+    return {
+      type: "append_invoice_suffix",
+      label: `Add ${suffix} to invoice number`,
+      suffix,
+    };
+  }
+
+  return null;
+}
+
+function parseEditCommand(t: string): PlatformVoiceAction | null {
+  if (
+    /^(edit|change|modify)\s+(an?\s+)?invoices$/.test(t) ||
+    /^(edit|change|modify)\s+invoices$/.test(t) ||
+    withOpen("edit invoices").test(t)
+  ) {
+    return {
+      type: "edit_invoices",
+      href: "/invoices?filter=draft",
+      label: "Edit invoices (drafts)",
+    };
+  }
+  if (
+    /^(edit|change|modify)\s+(an?\s+)?invoice$/.test(t) ||
+    /^(edit|change|modify)\s+the\s+(last|latest|current)\s+invoice$/.test(t) ||
+    withOpen("edit invoice").test(t)
+  ) {
+    return {
+      type: "edit_invoice",
+      label: "Edit latest draft invoice",
+    };
+  }
+  return null;
+}
+
 /**
- * Map a spoken/typed command to an in-app route.
- * Returns null when nothing matches.
+ * Map a spoken/typed command to navigation or an invoice action.
  */
-export function parsePlatformVoiceNav(
+export function parsePlatformVoiceCommand(
   transcript: string
-): PlatformVoiceNav | null {
+): PlatformVoiceCommand | null {
   const t = stripFiller(transcript);
   if (!t) return null;
 
+  const append = parseAppendSuffixCommand(t);
+  if (append) return append;
+
+  const edit = parseEditCommand(t);
+  if (edit) return edit;
+
   for (const rule of RULES) {
     if (rule.test(t)) {
-      return { href: rule.href, label: rule.label };
+      return { type: "navigate", href: rule.href, label: rule.label };
     }
   }
+  return null;
+}
+
+/** @deprecated use parsePlatformVoiceCommand */
+export function parsePlatformVoiceNav(
+  transcript: string
+): { href: string; label: string } | null {
+  const cmd = parsePlatformVoiceCommand(transcript);
+  if (!cmd) return null;
+  if (cmd.type === "navigate") return { href: cmd.href, label: cmd.label };
+  if (cmd.type === "edit_invoices")
+    return { href: cmd.href, label: cmd.label };
   return null;
 }
 
@@ -188,8 +301,13 @@ export const PLATFORM_VOICE_EXAMPLES = [
   "Open Accounting",
   "Open Invoices",
   "Create new invoice",
+  "Edit invoice",
+  "Add date to invoice number",
   "Open Customers",
-  "Open Employees",
-  "Open Pub Ops",
-  "Open Forestry",
 ];
+
+export {
+  applyInvoiceNumberSuffix,
+  invoiceDateSuffixFromDate,
+  parseSpokenNumberSuffix,
+};
