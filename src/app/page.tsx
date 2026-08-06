@@ -679,8 +679,6 @@ export default function HomePage() {
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
 
-      <VoiceNavBar variant="home" />
-
       {showAdminLogin && !isAdminAuthenticated && (
         <form onSubmit={handleAdminLogin} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '15px auto', maxWidth: '400px', border: '1px solid #334155' }}>
           <h3 style={{ margin: '0 0 12px 0', color: '#f59e0b' }}>Admin Authentication</h3>
@@ -1035,6 +1033,7 @@ export default function HomePage() {
       </div>
 
       <div style={{ margin: '40px 0 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+        <VoiceNavBar variant="home" />
         <a href="/accounting" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Accounting
         </a>
