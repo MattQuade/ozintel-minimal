@@ -160,7 +160,7 @@ export default function VoiceNavBar({
         border: '1px solid #334155',
         borderRadius: 12,
         padding: 16,
-        margin: '0 auto 20px',
+        margin: 0,
         maxWidth: 400,
         textAlign: 'left',
         width: '90%',
