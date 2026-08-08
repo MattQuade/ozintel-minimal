@@ -1,14 +1,23 @@
+export type SpeechRecognitionResultLike = {
+  0: { transcript: string };
+  isFinal: boolean;
+};
+
+export type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike> & {
+    length: number;
+  };
+};
+
 export type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   start: () => void;
   stop: () => void;
-  onresult:
-    | ((event: {
-        results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }>;
-      }) => void)
-    | null;
+  abort?: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
   onend: (() => void) | null;
 };

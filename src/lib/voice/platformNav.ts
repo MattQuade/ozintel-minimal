@@ -31,6 +31,10 @@ export type PlatformVoiceAction =
       suffix?: string;
       /** When true, derive suffix from the invoice issue date (or today). */
       useIssueDate?: boolean;
+    }
+  | {
+      type: "stop_listening";
+      label: string;
     };
 
 export type PlatformVoiceCommand = PlatformVoiceNav | PlatformVoiceAction;
@@ -239,6 +243,19 @@ function parseAppendSuffixCommand(t: string): PlatformVoiceAction | null {
 
 function parseEditCommand(t: string): PlatformVoiceAction | null {
   if (
+    /^(stop|cancel)\s+(listening|voice|voice\s+commands?|mic|microphone)$/.test(
+      t
+    ) ||
+    /^(stop|cancel)\s+listening$/.test(t) ||
+    /^stop\s+voice$/.test(t) ||
+    /^hands\s*off$/.test(t)
+  ) {
+    return {
+      type: "stop_listening",
+      label: "Stop listening",
+    };
+  }
+  if (
     /^(edit|change|modify)\s+(an?\s+)?invoices$/.test(t) ||
     /^(edit|change|modify)\s+invoices$/.test(t) ||
     withOpen("edit invoices").test(t)
@@ -302,8 +319,7 @@ export const PLATFORM_VOICE_EXAMPLES = [
   "Open Invoices",
   "Create new invoice",
   "Edit invoice",
-  "Add date to invoice number",
-  "Open Customers",
+  "Stop listening",
 ];
 
 export {

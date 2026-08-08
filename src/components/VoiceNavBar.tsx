@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  isHandsfreeEnabled,
+  requestVoiceListen,
+} from '@/lib/voice/handsfreeSession';
 import {
   PLATFORM_VOICE_EXAMPLES,
   parsePlatformVoiceCommand,
 } from '@/lib/voice/platformNav';
-import {
-  getSpeechRecognitionCtor,
-  type SpeechRecognitionLike,
-} from '@/lib/voice/speechRecognition';
+import { getSpeechRecognitionCtor } from '@/lib/voice/speechRecognition';
 
 type Variant = 'home' | 'hub';
 
@@ -31,20 +32,30 @@ export default function VoiceNavBar({
   const [hint, setHint] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     setSupported(Boolean(getSpeechRecognitionCtor()));
+    setListening(isHandsfreeEnabled());
+
+    const sync = (e: Event) => {
+      const detail = (e as CustomEvent<{ on?: boolean }>).detail;
+      setListening(Boolean(detail?.on ?? isHandsfreeEnabled()));
+    };
+    window.addEventListener('ozintel-voice-handsfree', sync as EventListener);
+    window.addEventListener('ozintel-voice-listen', sync as EventListener);
     return () => {
-      try {
-        recognitionRef.current?.stop();
-      } catch {
-        /* ignore */
-      }
+      window.removeEventListener(
+        'ozintel-voice-handsfree',
+        sync as EventListener
+      );
+      window.removeEventListener(
+        'ozintel-voice-listen',
+        sync as EventListener
+      );
     };
   }, []);
 
-  const go = async (transcript: string) => {
+  const goTyped = async (transcript: string) => {
     const raw = transcript.trim();
     if (!raw) return;
     setError('');
@@ -58,7 +69,13 @@ export default function VoiceNavBar({
       return;
     }
 
-    // Pure navigation — no API
+    if (cmd.type === 'stop_listening') {
+      requestVoiceListen(false);
+      setHint('Stopped listening');
+      setListening(false);
+      return;
+    }
+
     if (cmd.type === 'navigate' || cmd.type === 'edit_invoices') {
       setBusy(true);
       setHint(`Opening ${cmd.label}…`);
@@ -66,7 +83,6 @@ export default function VoiceNavBar({
       return;
     }
 
-    // Actions that need the latest draft / number update
     setBusy(true);
     setHint(`${cmd.label}…`);
     try {
@@ -80,11 +96,8 @@ export default function VoiceNavBar({
         throw new Error(data.error || 'Command failed');
       }
       setHint(data.label || cmd.label);
-      if (data.href) {
-        router.push(data.href);
-      } else {
-        setBusy(false);
-      }
+      if (data.href) router.push(data.href);
+      else setBusy(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Command failed');
       setBusy(false);
@@ -92,63 +105,16 @@ export default function VoiceNavBar({
     }
   };
 
-  const stopListening = () => {
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
-    }
-    setListening(false);
-  };
-
-  const startListening = () => {
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      setError('Voice needs Chrome or Edge on this device');
-      return;
-    }
-    setError('');
-    setHint('Listening…');
-    const rec = new Ctor();
-    recognitionRef.current = rec;
-    rec.lang = 'en-AU';
-    rec.continuous = false;
-    rec.interimResults = true;
-    let finalText = '';
-
-    rec.onresult = (event) => {
-      const parts: string[] = [];
-      for (let i = 0; i < event.results.length; i++) {
-        parts.push(event.results[i][0].transcript);
-      }
-      finalText = parts.join(' ').trim();
-      setText(finalText);
-    };
-
-    rec.onerror = (event) => {
+  const toggleListen = () => {
+    if (listening) {
+      requestVoiceListen(false);
       setListening(false);
-      if (event.error === 'not-allowed') {
-        setError('Microphone permission blocked — allow mic for this site');
-      } else if (event.error !== 'aborted') {
-        setError(`Voice error: ${event.error || 'unknown'}`);
-      }
-    };
-
-    rec.onend = () => {
-      setListening(false);
-      if (finalText.trim()) {
-        void go(finalText);
-      } else {
-        setHint('');
-      }
-    };
-
-    try {
-      rec.start();
+      setHint('');
+    } else {
+      setError('');
+      setHint('Hands-free on — keep giving commands after each page opens');
+      requestVoiceListen(true);
       setListening(true);
-    } catch {
-      setError('Could not start microphone');
-      setListening(false);
     }
   };
 
@@ -213,7 +179,8 @@ export default function VoiceNavBar({
         Voice command
       </p>
       <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: mutedColor }}>
-        {examples.slice(0, 4).join(' · ')}
+        Tap Speak once, then keep talking across pages. Say “stop listening”
+        when done. {examples.slice(0, 3).join(' · ')}
       </p>
 
       <div
@@ -228,7 +195,7 @@ export default function VoiceNavBar({
           <button
             type="button"
             disabled={busy}
-            onClick={() => (listening ? stopListening() : startListening())}
+            onClick={toggleListen}
             style={{
               padding: '10px 16px',
               borderRadius: 10,
@@ -250,33 +217,33 @@ export default function VoiceNavBar({
         <button
           type="button"
           disabled={busy || !text.trim()}
-            onClick={() => void go(text)}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 10,
-              border: 'none',
-              cursor: busy || !text.trim() ? 'not-allowed' : 'pointer',
-              fontWeight: 700,
-              background: isHome ? '#f97316' : '#ea580c',
-              color: 'white',
-              opacity: busy || !text.trim() ? 0.5 : 1,
-            }}
-          >
-            Go
-          </button>
-        </div>
-
-        <input
-          type="text"
-          value={text}
-          disabled={busy}
-          placeholder="Or type: Edit invoice"
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void go(text);
+          onClick={() => void goTyped(text)}
+          style={{
+            padding: '10px 16px',
+            borderRadius: 10,
+            border: 'none',
+            cursor: busy || !text.trim() ? 'not-allowed' : 'pointer',
+            fontWeight: 700,
+            background: isHome ? '#f97316' : '#ea580c',
+            color: 'white',
+            opacity: busy || !text.trim() ? 0.5 : 1,
           }}
-          style={inputStyle}
-        />
+        >
+          Go
+        </button>
+      </div>
+
+      <input
+        type="text"
+        value={text}
+        disabled={busy}
+        placeholder="Or type: Edit invoice"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void goTyped(text);
+        }}
+        style={inputStyle}
+      />
 
       {hint && (
         <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#38bdf8' }}>

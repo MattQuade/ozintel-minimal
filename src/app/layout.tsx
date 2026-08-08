@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import VoiceHandsfreeDock from '@/components/VoiceHandsfreeDock';
 
 export const metadata: Metadata = {
   title: 'OzIntel Alert System',
@@ -37,6 +38,7 @@ export default function RootLayout({
         <main className="min-h-screen">
           {children}
         </main>
+        <VoiceHandsfreeDock />
       </body>
     </html>
   );

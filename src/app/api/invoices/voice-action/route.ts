@@ -64,6 +64,14 @@ export async function POST(req: Request) {
       });
     }
 
+    if (cmd.type === "stop_listening") {
+      return NextResponse.json({
+        success: true,
+        action: "stop_listening",
+        label: cmd.label,
+      });
+    }
+
     if (cmd.type === "edit_invoice") {
       const draft = latestDraft(await readInvoices());
       if (!draft) {
