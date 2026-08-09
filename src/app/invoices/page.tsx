@@ -129,10 +129,10 @@ function InvoicesContent() {
       <VoiceNavBar
         variant="hub"
         examples={[
-          'Edit invoice',
-          'Add date to invoice number',
+          'Select customer',
+          'Select customer Wagga Rugby',
           'Create new invoice',
-          'Open Customers',
+          'Edit invoice',
         ]}
       />
 

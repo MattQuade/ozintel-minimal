@@ -25,6 +25,12 @@ export type PlatformVoiceAction =
       label: string;
     }
   | {
+      type: "select_customer";
+      label: string;
+      /** Spoken customer name; empty means open the picker only. */
+      customerQuery: string;
+    }
+  | {
       type: "append_invoice_suffix";
       label: string;
       /** Explicit spoken/typed suffix, e.g. "-0709-26". */
@@ -241,6 +247,45 @@ function parseAppendSuffixCommand(t: string): PlatformVoiceAction | null {
   return null;
 }
 
+function parseSelectCustomerCommand(
+  t: string
+): PlatformVoiceCommand | null {
+  // "select customer" / "choose a customer" → new invoice picker
+  if (
+    /^(select|choose|pick)\s+(a\s+)?customers?$/.test(t) ||
+    withOpen("select customers?").test(t) ||
+    withOpen("choose customers?").test(t)
+  ) {
+    return {
+      type: "navigate",
+      href: "/invoices/new",
+      label: "Select customer",
+    };
+  }
+
+  // "select customer Wagga Rugby"
+  const m = t.match(
+    /^(?:select|choose|pick)\s+(?:a\s+)?customers?\s+(.+)$/
+  );
+  if (m) {
+    const customerQuery = m[1].trim();
+    if (!customerQuery) {
+      return {
+        type: "navigate",
+        href: "/invoices/new",
+        label: "Select customer",
+      };
+    }
+    return {
+      type: "select_customer",
+      customerQuery,
+      label: `Select customer ${customerQuery}`,
+    };
+  }
+
+  return null;
+}
+
 function parseEditCommand(t: string): PlatformVoiceAction | null {
   if (
     /^(stop|cancel)\s+(listening|voice|voice\s+commands?|mic|microphone)$/.test(
@@ -291,6 +336,9 @@ export function parsePlatformVoiceCommand(
   const append = parseAppendSuffixCommand(t);
   if (append) return append;
 
+  const selectCustomer = parseSelectCustomerCommand(t);
+  if (selectCustomer) return selectCustomer;
+
   const edit = parseEditCommand(t);
   if (edit) return edit;
 
@@ -316,8 +364,8 @@ export function parsePlatformVoiceNav(
 
 export const PLATFORM_VOICE_EXAMPLES = [
   "Open Accounting",
-  "Open Invoices",
   "Create new invoice",
+  "Select customer",
   "Edit invoice",
   "Stop listening",
 ];

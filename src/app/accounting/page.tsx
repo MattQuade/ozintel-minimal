@@ -75,10 +75,10 @@ export default function AccountingHubPage() {
         <VoiceNavBar
           variant="home"
           examples={[
-            "Open Invoices",
+            "Select customer",
             "Create new invoice",
+            "Open Invoices",
             "Open Bank",
-            "Open Employees",
           ]}
         />
       </div>

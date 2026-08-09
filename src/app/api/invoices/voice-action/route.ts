@@ -5,6 +5,8 @@ import {
   upsertInvoice,
   type Invoice,
 } from "@/lib/accounting/invoices";
+import { readCustomers } from "@/lib/accounting/customers";
+import { matchCustomerByVoice } from "@/lib/invoices/voiceInvoiceParse";
 import {
   applyInvoiceNumberSuffix,
   invoiceDateSuffixFromDate,
@@ -69,6 +71,51 @@ export async function POST(req: Request) {
         success: true,
         action: "stop_listening",
         label: cmd.label,
+      });
+    }
+
+    if (cmd.type === "select_customer") {
+      const query = String(cmd.customerQuery || "").trim();
+      if (!query) {
+        return NextResponse.json({
+          success: true,
+          action: "select_customer",
+          href: "/invoices/new",
+          label: "Select customer",
+        });
+      }
+      const customers = await readCustomers();
+      const { match, candidates, ambiguous } = matchCustomerByVoice(
+        query,
+        customers
+      );
+      if (ambiguous) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Several customers match “${query}” — pick one`,
+            ambiguous: true,
+            candidates,
+          },
+          { status: 409 }
+        );
+      }
+      if (!match) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `No customer matching “${query}”`,
+            candidates,
+          },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        action: "select_customer",
+        href: `/invoices/new?customerId=${encodeURIComponent(match.id)}`,
+        label: `Selected ${match.name}`,
+        matchedCustomer: match,
       });
     }
 

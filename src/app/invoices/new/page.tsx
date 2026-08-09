@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import InvoiceEditorForm from '@/components/invoices/InvoiceEditorForm';
+import VoiceNavBar from '@/components/VoiceNavBar';
+import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
 
 type Customer = { id: string; name: string };
 
@@ -100,6 +102,60 @@ function NewInvoiceContent() {
       setCandidates([]);
       setVoiceHint('');
       try {
+        // Platform commands e.g. "Select customer …" / "Open Invoices"
+        if (!pickCustomerId) {
+          const platform = parsePlatformVoiceCommand(text);
+          if (platform?.type === 'navigate' || platform?.type === 'edit_invoices') {
+            router.push(platform.href);
+            return;
+          }
+          if (platform?.type === 'select_customer') {
+            const res = await fetch('/api/invoices/voice-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transcript: text }),
+            });
+            const data = await res.json();
+            if (data.ambiguous && Array.isArray(data.candidates)) {
+              setCandidates(
+                data.candidates.map((c: Customer) => ({
+                  id: c.id,
+                  name: c.name,
+                }))
+              );
+              setError(data.error || 'Pick a customer');
+              setBusy(false);
+              return;
+            }
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || 'Voice command failed');
+            }
+            if (data.href) {
+              router.push(data.href);
+              return;
+            }
+          }
+          if (
+            platform &&
+            platform.type !== 'stop_listening' &&
+            (platform.type === 'edit_invoice' ||
+              platform.type === 'append_invoice_suffix')
+          ) {
+            const res = await fetch('/api/invoices/voice-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transcript: text }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || 'Voice command failed');
+            }
+            if (data.href) router.push(data.href);
+            else setBusy(false);
+            return;
+          }
+        }
+
         const res = await fetch('/api/invoices/voice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -208,10 +264,19 @@ function NewInvoiceContent() {
   return (
     <div className="p-8 max-w-lg mx-auto">
       <h1 className="text-3xl font-bold mb-2">New invoice</h1>
-      <p className="text-slate-500 mb-8">
-        Pick a customer — or use voice — to open a draft from their last
-        invoice, or speak line items.
+      <p className="text-slate-500 mb-6">
+        Pick a customer — or say “Select customer” / “Select customer [name]” —
+        to open a draft from their last invoice.
       </p>
+
+      <VoiceNavBar
+        variant="hub"
+        examples={[
+          'Select customer',
+          'Select customer Wagga Rugby',
+          'Invoice Wagga Rugby same as last',
+        ]}
+      />
 
       {customers.length === 0 && (
         <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
@@ -227,9 +292,9 @@ function NewInvoiceContent() {
         <div>
           <p className="text-sm font-medium text-slate-800 mb-1">Voice</p>
           <p className="text-xs text-slate-500 mb-3">
-            Try: “invoice [customer] same as last” or “invoice [customer] for 2
-            kegs at 280 and delivery at 40”. Opens a draft to review — never
-            auto-finalises.
+            Try: “Select customer [name]”, “invoice [customer] same as last”, or
+            “invoice [customer] for 2 kegs at 280 and delivery at 40”. Opens a
+            draft to review — never auto-finalises.
           </p>
           <div className="flex flex-wrap gap-2 mb-3">
             {voiceSupported ? (
