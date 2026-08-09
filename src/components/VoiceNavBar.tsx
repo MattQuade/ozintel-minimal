@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   isHandsfreeEnabled,
   requestVoiceListen,
+  setAwaitingCustomerName,
 } from '@/lib/voice/handsfreeSession';
 import {
   PLATFORM_VOICE_EXAMPLES,
@@ -77,9 +78,42 @@ export default function VoiceNavBar({
     }
 
     if (cmd.type === 'navigate' || cmd.type === 'edit_invoices') {
+      if (cmd.href === '/invoices/new') {
+        setAwaitingCustomerName(true);
+        setHint('Say the customer name…');
+      } else {
+        setAwaitingCustomerName(false);
+        setHint(`Opening ${cmd.label}…`);
+      }
       setBusy(true);
-      setHint(`Opening ${cmd.label}…`);
       router.push(cmd.href);
+      return;
+    }
+
+    if (cmd.type === 'select_customer') {
+      setBusy(true);
+      setHint(`${cmd.label}…`);
+      try {
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: `select customer ${cmd.customerQuery}`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not select customer');
+        }
+        setAwaitingCustomerName(false);
+        setHint(data.label || cmd.label);
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed');
+        setBusy(false);
+        setHint('');
+      }
       return;
     }
 
@@ -179,8 +213,8 @@ export default function VoiceNavBar({
         Voice command
       </p>
       <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: mutedColor }}>
-        Tap Speak once, then keep talking across pages. Say “stop listening”
-        when done. {examples.slice(0, 3).join(' · ')}
+        Tap Speak once, then keep talking. “Select customer”, then say the
+        name. Say “stop listening” when done. {examples.slice(0, 2).join(' · ')}
       </p>
 
       <div

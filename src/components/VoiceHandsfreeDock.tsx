@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  isAwaitingCustomerName,
   isHandsfreeEnabled,
   requestVoiceListen,
+  setAwaitingCustomerName,
   setHandsfreeEnabled,
 } from '@/lib/voice/handsfreeSession';
 import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
@@ -69,16 +71,47 @@ export default function VoiceHandsfreeDock() {
       const raw = transcript.trim();
       if (!raw || processingRef.current) return;
 
-      const cmd = parsePlatformVoiceCommand(raw);
+      let cmd = parsePlatformVoiceCommand(raw);
+
+      // After “Select customer”, the next utterance is the customer name
+      if (!cmd && isAwaitingCustomerName()) {
+        cmd = {
+          type: 'select_customer',
+          customerQuery: raw,
+          label: `Select customer ${raw}`,
+        };
+      }
+
+      // On the new-invoice picker, a bare name can select the customer
+      if (
+        !cmd &&
+        (pathnameRef.current === '/invoices/new' ||
+          pathnameRef.current.startsWith('/invoices/new?'))
+      ) {
+        const looksLikeName =
+          raw.split(/\s+/).length <= 6 &&
+          !/^(open|create|edit|add|stop|go|show)\b/i.test(raw);
+        if (looksLikeName) {
+          cmd = {
+            type: 'select_customer',
+            customerQuery: raw,
+            label: `Select customer ${raw}`,
+          };
+        }
+      }
+
       if (!cmd) {
         setError(
-          `Didn’t catch “${raw}”. Try again, or say “stop listening”.`
+          isAwaitingCustomerName()
+            ? `Say the customer name (heard “${raw}”).`
+            : `Didn’t catch “${raw}”. Try again, or say “stop listening”.`
         );
         return;
       }
 
       if (cmd.type === 'stop_listening') {
         setHint('Stopped listening');
+        setAwaitingCustomerName(false);
         stopRecognition(true);
         return;
       }
@@ -90,7 +123,34 @@ export default function VoiceHandsfreeDock() {
 
       try {
         if (cmd.type === 'navigate' || cmd.type === 'edit_invoices') {
+          if (
+            cmd.label === 'Select customer' ||
+            cmd.href === '/invoices/new'
+          ) {
+            setAwaitingCustomerName(true);
+            setHint('Say the customer name…');
+          } else {
+            setAwaitingCustomerName(false);
+          }
           router.push(cmd.href);
+          return;
+        }
+
+        if (cmd.type === 'select_customer') {
+          const res = await fetch('/api/invoices/voice-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript: `select customer ${cmd.customerQuery}`,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not select customer');
+          }
+          setAwaitingCustomerName(false);
+          setHint(data.label || cmd.label);
+          if (data.href) router.push(data.href);
           return;
         }
 
@@ -103,6 +163,7 @@ export default function VoiceHandsfreeDock() {
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Command failed');
         }
+        setAwaitingCustomerName(false);
         setHint(data.label || cmd.label);
         if (data.href) router.push(data.href);
       } catch (err) {
@@ -312,7 +373,9 @@ export default function VoiceHandsfreeDock() {
               {interim ||
                 hint ||
                 lastHeard ||
-                'Say next command · “stop listening” to end'}
+                (typeof window !== 'undefined' && isAwaitingCustomerName()
+                  ? 'Say the customer name…'
+                  : 'Say next command · “stop listening” to end')}
             </p>
           </div>
           <button

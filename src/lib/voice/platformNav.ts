@@ -250,11 +250,21 @@ function parseAppendSuffixCommand(t: string): PlatformVoiceAction | null {
 function parseSelectCustomerCommand(
   t: string
 ): PlatformVoiceCommand | null {
-  // "select customer" / "choose a customer" → new invoice picker
+  // Tolerate speech quirks: "the", "selected", trailing filler
+  const normalized = t
+    .replace(/\bselected\b/g, "select")
+    .replace(/\b(please|now|for me)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // "select customer" / "select the customer" / "choose a customer"
   if (
-    /^(select|choose|pick)\s+(a\s+)?customers?$/.test(t) ||
-    withOpen("select customers?").test(t) ||
-    withOpen("choose customers?").test(t)
+    /^(select|choose|pick)\s+(the\s+|a\s+|an\s+)?customers?$/.test(
+      normalized
+    ) ||
+    withOpen("select customers?").test(normalized) ||
+    withOpen("choose customers?").test(normalized) ||
+    withOpen("pick customers?").test(normalized)
   ) {
     return {
       type: "navigate",
@@ -263,9 +273,9 @@ function parseSelectCustomerCommand(
     };
   }
 
-  // "select customer Wagga Rugby"
-  const m = t.match(
-    /^(?:select|choose|pick)\s+(?:a\s+)?customers?\s+(.+)$/
+  // "select customer Wagga Rugby" / "select the customer Wagga Rugby"
+  const m = normalized.match(
+    /^(?:select|choose|pick)\s+(?:the\s+|a\s+|an\s+)?customers?\s+(.+)$/
   );
   if (m) {
     const customerQuery = m[1].trim();
