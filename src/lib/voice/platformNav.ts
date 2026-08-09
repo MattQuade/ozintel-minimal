@@ -25,6 +25,13 @@ export type PlatformVoiceAction =
       label: string;
     }
   | {
+      type: "edit_invoice_number";
+      label: string;
+      /** When set, apply immediately; otherwise wait for spoken suffix. */
+      suffix?: string;
+      useIssueDate?: boolean;
+    }
+  | {
       type: "select_customer";
       label: string;
       /** Spoken customer name; empty means open the picker only. */
@@ -37,6 +44,10 @@ export type PlatformVoiceAction =
       suffix?: string;
       /** When true, derive suffix from the invoice issue date (or today). */
       useIssueDate?: boolean;
+    }
+  | {
+      type: "go_back";
+      label: string;
     }
   | {
       type: "stop_listening";
@@ -310,6 +321,61 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
       label: "Stop listening",
     };
   }
+
+  // "go back" / "previous page" — before other go/open rules
+  if (
+    /^(go\s+)?back$/.test(t) ||
+    /^go\s+back(\s+(please|now))?$/.test(t) ||
+    /^(previous|prior)\s+(page|screen|step)$/.test(t) ||
+    /^back\s+up$/.test(t)
+  ) {
+    return {
+      type: "go_back",
+      label: "Go back",
+    };
+  }
+
+  // "edit invoice number" — must be before plain "edit invoice"
+  if (
+    /^(edit|change|modify)\s+(the\s+)?invoice\s+numbers?$/.test(t) ||
+    /^(edit|change|modify)\s+(the\s+)?numbers?\s+on\s+(the\s+)?invoice$/.test(
+      t
+    )
+  ) {
+    return {
+      type: "edit_invoice_number",
+      label: "Edit invoice number",
+    };
+  }
+
+  // "edit invoice number dash zero seven zero nine dash twenty six"
+  const numEdit = t.match(
+    /^(?:edit|change|modify)\s+(?:the\s+)?invoice\s+numbers?\s+(.+)$/
+  );
+  if (numEdit) {
+    const spoken = numEdit[1].trim();
+    if (/^(the\s+)?date(\s+suffix)?$/.test(spoken)) {
+      return {
+        type: "edit_invoice_number",
+        label: "Add date to invoice number",
+        useIssueDate: true,
+      };
+    }
+    const suffix = parseSpokenNumberSuffix(spoken);
+    if (suffix) {
+      return {
+        type: "edit_invoice_number",
+        label: `Edit invoice number ${suffix}`,
+        suffix,
+      };
+    }
+    // Could not parse yet — still enter edit mode so they can retry
+    return {
+      type: "edit_invoice_number",
+      label: "Edit invoice number",
+    };
+  }
+
   if (
     /^(edit|change|modify)\s+(an?\s+)?invoices$/.test(t) ||
     /^(edit|change|modify)\s+invoices$/.test(t) ||
@@ -374,9 +440,9 @@ export function parsePlatformVoiceNav(
 
 export const PLATFORM_VOICE_EXAMPLES = [
   "Open Accounting",
-  "Create new invoice",
   "Select customer",
-  "Edit invoice",
+  "Edit invoice number",
+  "Go back",
   "Stop listening",
 ];
 

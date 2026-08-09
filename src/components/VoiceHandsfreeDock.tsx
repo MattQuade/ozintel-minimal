@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   isAwaitingCustomerName,
+  isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
   requestVoiceListen,
   setAwaitingCustomerName,
+  setAwaitingInvoiceNumberSuffix,
   setHandsfreeEnabled,
 } from '@/lib/voice/handsfreeSession';
 import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
+import { parseSpokenNumberSuffix } from '@/lib/voice/spokenNumberSuffix';
 import {
   getSpeechRecognitionCtor,
   type SpeechRecognitionLike,
@@ -82,6 +85,31 @@ export default function VoiceHandsfreeDock() {
         };
       }
 
+      // After “Edit invoice number”, the next utterance is the dash/digit suffix
+      if (!cmd && isAwaitingInvoiceNumberSuffix()) {
+        if (/^(the\s+)?date(\s+suffix)?$/i.test(raw.trim())) {
+          cmd = {
+            type: 'edit_invoice_number',
+            label: 'Add date to invoice number',
+            useIssueDate: true,
+          };
+        } else {
+          const suffix = parseSpokenNumberSuffix(raw);
+          if (suffix) {
+            cmd = {
+              type: 'edit_invoice_number',
+              label: `Edit invoice number ${suffix}`,
+              suffix,
+            };
+          } else {
+            setError(
+              `Could not hear a suffix in “${raw}”. Try “dash zero seven zero nine dash twenty six”.`
+            );
+            return;
+          }
+        }
+      }
+
       // On the new-invoice picker, a bare name can select the customer
       if (
         !cmd &&
@@ -104,7 +132,9 @@ export default function VoiceHandsfreeDock() {
         setError(
           isAwaitingCustomerName()
             ? `Say the customer name (heard “${raw}”).`
-            : `Didn’t catch “${raw}”. Try again, or say “stop listening”.`
+            : isAwaitingInvoiceNumberSuffix()
+              ? `Say the number suffix (heard “${raw}”).`
+              : `Didn’t catch “${raw}”. Try again, or say “stop listening”.`
         );
         return;
       }
@@ -112,7 +142,16 @@ export default function VoiceHandsfreeDock() {
       if (cmd.type === 'stop_listening') {
         setHint('Stopped listening');
         setAwaitingCustomerName(false);
+        setAwaitingInvoiceNumberSuffix(false);
         stopRecognition(true);
+        return;
+      }
+
+      if (cmd.type === 'go_back') {
+        setAwaitingCustomerName(false);
+        setAwaitingInvoiceNumberSuffix(false);
+        setHint('Going back…');
+        router.back();
         return;
       }
 
@@ -128,11 +167,40 @@ export default function VoiceHandsfreeDock() {
             cmd.href === '/invoices/new'
           ) {
             setAwaitingCustomerName(true);
+            setAwaitingInvoiceNumberSuffix(false);
             setHint('Say the customer name…');
           } else {
             setAwaitingCustomerName(false);
+            setAwaitingInvoiceNumberSuffix(false);
           }
           router.push(cmd.href);
+          return;
+        }
+
+        if (cmd.type === 'edit_invoice_number') {
+          if (!cmd.suffix && !cmd.useIssueDate) {
+            setAwaitingInvoiceNumberSuffix(true);
+            setAwaitingCustomerName(false);
+            setHint(
+              'Say the suffix… e.g. dash zero seven zero nine dash twenty six'
+            );
+            return;
+          }
+          const spoken = cmd.useIssueDate
+            ? 'edit invoice number date'
+            : `edit invoice number ${cmd.suffix}`;
+          const res = await fetch('/api/invoices/voice-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript: spoken }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not update invoice number');
+          }
+          setAwaitingInvoiceNumberSuffix(false);
+          setHint(data.label || cmd.label);
+          if (data.href) router.push(data.href);
           return;
         }
 
@@ -149,6 +217,7 @@ export default function VoiceHandsfreeDock() {
             throw new Error(data.error || 'Could not select customer');
           }
           setAwaitingCustomerName(false);
+          setAwaitingInvoiceNumberSuffix(false);
           setHint(data.label || cmd.label);
           if (data.href) router.push(data.href);
           return;
@@ -164,6 +233,7 @@ export default function VoiceHandsfreeDock() {
           throw new Error(data.error || 'Command failed');
         }
         setAwaitingCustomerName(false);
+        setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
         if (data.href) router.push(data.href);
       } catch (err) {
@@ -375,7 +445,10 @@ export default function VoiceHandsfreeDock() {
                 lastHeard ||
                 (typeof window !== 'undefined' && isAwaitingCustomerName()
                   ? 'Say the customer name…'
-                  : 'Say next command · “stop listening” to end')}
+                  : typeof window !== 'undefined' &&
+                      isAwaitingInvoiceNumberSuffix()
+                    ? 'Say the number suffix…'
+                    : 'Say next command · “stop listening” to end')}
             </p>
           </div>
           <button

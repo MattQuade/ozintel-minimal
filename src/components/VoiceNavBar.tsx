@@ -6,6 +6,7 @@ import {
   isHandsfreeEnabled,
   requestVoiceListen,
   setAwaitingCustomerName,
+  setAwaitingInvoiceNumberSuffix,
 } from '@/lib/voice/handsfreeSession';
 import {
   PLATFORM_VOICE_EXAMPLES,
@@ -77,16 +78,62 @@ export default function VoiceNavBar({
       return;
     }
 
+    if (cmd.type === 'go_back') {
+      setAwaitingCustomerName(false);
+      setAwaitingInvoiceNumberSuffix(false);
+      setHint('Going back…');
+      router.back();
+      return;
+    }
+
     if (cmd.type === 'navigate' || cmd.type === 'edit_invoices') {
       if (cmd.href === '/invoices/new') {
         setAwaitingCustomerName(true);
+        setAwaitingInvoiceNumberSuffix(false);
         setHint('Say the customer name…');
       } else {
         setAwaitingCustomerName(false);
+        setAwaitingInvoiceNumberSuffix(false);
         setHint(`Opening ${cmd.label}…`);
       }
       setBusy(true);
       router.push(cmd.href);
+      return;
+    }
+
+    if (cmd.type === 'edit_invoice_number') {
+      if (!cmd.suffix && !cmd.useIssueDate) {
+        setAwaitingInvoiceNumberSuffix(true);
+        setAwaitingCustomerName(false);
+        setHint(
+          'Say the suffix… e.g. dash zero seven zero nine dash twenty six'
+        );
+        return;
+      }
+      setBusy(true);
+      setHint(`${cmd.label}…`);
+      try {
+        const spoken = cmd.useIssueDate
+          ? 'edit invoice number date'
+          : `edit invoice number ${cmd.suffix}`;
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript: spoken }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not update invoice number');
+        }
+        setAwaitingInvoiceNumberSuffix(false);
+        setHint(data.label || cmd.label);
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed');
+        setBusy(false);
+        setHint('');
+      }
       return;
     }
 
@@ -106,6 +153,7 @@ export default function VoiceNavBar({
           throw new Error(data.error || 'Could not select customer');
         }
         setAwaitingCustomerName(false);
+        setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
         if (data.href) router.push(data.href);
         else setBusy(false);
@@ -213,8 +261,8 @@ export default function VoiceNavBar({
         Voice command
       </p>
       <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: mutedColor }}>
-        Tap Speak once, then keep talking. “Select customer”, then say the
-        name. Say “stop listening” when done. {examples.slice(0, 2).join(' · ')}
+        Tap Speak once, then keep talking. “Edit invoice number” then the
+        suffix · “Go back”. {examples.slice(0, 2).join(' · ')}
       </p>
 
       <div

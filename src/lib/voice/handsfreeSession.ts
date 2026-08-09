@@ -5,6 +5,7 @@
 
 export const HANDSFREE_STORAGE_KEY = "ozintel_voice_handsfree";
 export const AWAITING_CUSTOMER_KEY = "ozintel_voice_awaiting_customer";
+export const AWAITING_INVOICE_SUFFIX_KEY = "ozintel_voice_awaiting_invoice_suffix";
 
 export function isHandsfreeEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -15,13 +16,22 @@ export function isHandsfreeEnabled(): boolean {
   }
 }
 
+function clearAwaitingFlags() {
+  try {
+    sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+    sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function setHandsfreeEnabled(on: boolean) {
   if (typeof window === "undefined") return;
   try {
     if (on) sessionStorage.setItem(HANDSFREE_STORAGE_KEY, "1");
     else {
       sessionStorage.removeItem(HANDSFREE_STORAGE_KEY);
-      sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+      clearAwaitingFlags();
     }
   } catch {
     /* ignore */
@@ -44,8 +54,36 @@ export function isAwaitingCustomerName(): boolean {
 export function setAwaitingCustomerName(on: boolean) {
   if (typeof window === "undefined") return;
   try {
-    if (on) sessionStorage.setItem(AWAITING_CUSTOMER_KEY, "1");
-    else sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+    if (on) {
+      sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+      sessionStorage.setItem(AWAITING_CUSTOMER_KEY, "1");
+    } else {
+      sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isAwaitingInvoiceNumberSuffix(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(AWAITING_INVOICE_SUFFIX_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** After “Edit invoice number”, the next utterance is the dash/digit suffix. */
+export function setAwaitingInvoiceNumberSuffix(on: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (on) {
+      sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+      sessionStorage.setItem(AWAITING_INVOICE_SUFFIX_KEY, "1");
+    } else {
+      sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+    }
   } catch {
     /* ignore */
   }

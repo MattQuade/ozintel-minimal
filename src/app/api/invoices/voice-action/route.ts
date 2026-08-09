@@ -74,6 +74,88 @@ export async function POST(req: Request) {
       });
     }
 
+    if (cmd.type === "go_back") {
+      return NextResponse.json({
+        success: true,
+        action: "go_back",
+        label: cmd.label,
+      });
+    }
+
+    if (cmd.type === "edit_invoice_number") {
+      if (!cmd.suffix && !cmd.useIssueDate) {
+        return NextResponse.json({
+          success: true,
+          action: "edit_invoice_number",
+          awaitingSuffix: true,
+          label: "Say the number suffix…",
+        });
+      }
+      // Apply suffix using the same path as append_invoice_suffix
+      const invoices = await readInvoices();
+      const requestedId = String(body.invoiceId || "").trim();
+      let invoice = requestedId
+        ? invoices.find((i) => i.id === requestedId) || null
+        : latestDraft(invoices);
+
+      if (!invoice) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No draft invoice found to update the number",
+          },
+          { status: 404 }
+        );
+      }
+      if (invoice.status !== "draft") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Only draft invoice numbers can change (${invoice.number} is ${invoice.status})`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const suffix = cmd.useIssueDate
+        ? invoiceDateSuffixFromDate(invoice.issueDate || invoice.orderDate)
+        : cmd.suffix;
+
+      if (!suffix) {
+        return NextResponse.json(
+          { success: false, error: "Could not parse the number suffix" },
+          { status: 400 }
+        );
+      }
+
+      const nextNumber = applyInvoiceNumberSuffix(invoice.number, suffix);
+      if (nextNumber === invoice.number) {
+        return NextResponse.json({
+          success: true,
+          action: "edit_invoice_number",
+          href: `/invoices/${invoice.id}`,
+          label: `Number already ${invoice.number}`,
+          invoice,
+          suffix,
+        });
+      }
+
+      const updated = await upsertInvoice({
+        id: invoice.id,
+        number: nextNumber,
+      });
+
+      return NextResponse.json({
+        success: true,
+        action: "edit_invoice_number",
+        href: `/invoices/${updated.id}`,
+        label: `Number → ${updated.number}`,
+        invoice: updated,
+        suffix,
+        previousNumber: invoice.number,
+      });
+    }
+
     if (cmd.type === "select_customer") {
       const query = String(cmd.customerQuery || "").trim();
       if (!query) {
