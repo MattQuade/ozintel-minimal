@@ -11,19 +11,20 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Params) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
-
-  try {
-    const { id } = await params;
-    const payRun = await markPayRunStpReady(id);
-    return NextResponse.json({ success: true, payRun });
-  } catch (error) {
-    console.error("Pay run STP-ready error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed",
-      },
-      { status: 400 }
-    );
-  }
+  return access.run(async () => {
+    try {
+      const { id } = await params;
+      const payRun = await markPayRunStpReady(id);
+      return NextResponse.json({ success: true, payRun });
+    } catch (error) {
+      console.error("Pay run STP-ready error:", error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Failed",
+        },
+        { status: 400 }
+      );
+    }
+  });
 }

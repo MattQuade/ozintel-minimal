@@ -16,3 +16,4 @@ ios/App/build
 ios/DerivedData
 *.keystore
 *.jks
+tsconfig.tsbuildinfo

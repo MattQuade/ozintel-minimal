@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
         pubOps: false,
         forestryOps: false,
       },
+      shares: { pubOps: [] },
       lastAlert: null,
     };
     users.push(user);
@@ -96,6 +97,31 @@ export async function PUT(req: NextRequest) {
         ...users[idx].permissions,
         ...(body.permissions as Partial<UserPermissions>),
       };
+    }
+    if (body.shares && typeof body.shares === "object") {
+      const incoming = body.shares as { pubOps?: unknown };
+      const pubOps = Array.isArray(incoming.pubOps)
+        ? incoming.pubOps
+            .map((e) => String(e || "").trim().toLowerCase())
+            .filter(Boolean)
+        : users[idx].shares?.pubOps || [];
+      const nextShares = [...new Set(pubOps)].filter(
+        (e) => e !== users[idx].email.toLowerCase()
+      );
+      users[idx].shares = { pubOps: nextShares };
+
+      // Ensure grantees can pass the Pub Ops gate to open this owner's silo.
+      for (const granteeEmail of nextShares) {
+        const gIdx = users.findIndex(
+          (u) => u.email.toLowerCase() === granteeEmail
+        );
+        if (gIdx >= 0) {
+          users[gIdx].permissions = {
+            ...users[gIdx].permissions,
+            pubOps: true,
+          };
+        }
+      }
     }
     if (typeof body.name === "string") users[idx].name = body.name.trim();
     if (typeof body.phone === "string") users[idx].phone = body.phone.trim();

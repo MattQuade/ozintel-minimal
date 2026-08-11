@@ -10,6 +10,12 @@ export type UserPermissions = {
   pubOps: boolean;
   forestryOps: boolean;
 };
+
+/** Per-module share lists: emails allowed to open THIS user's siloed data. */
+export type UserShares = {
+  pubOps: string[];
+};
+
 export type LastAlert = {
   at: string;
   lat: number | null;
@@ -24,6 +30,7 @@ export type User = {
   smsCount: number;
   smsMonth: string;
   permissions: UserPermissions;
+  shares: UserShares;
   lastAlert?: LastAlert | null;
 };
 function currentMonthKey() {
@@ -57,6 +64,14 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
       forestryOps: Boolean((permissionsRaw as UserPermissions).forestryOps),
     };
   }
+
+  const sharesRaw = (raw as { shares?: Partial<UserShares> }).shares;
+  const pubOpsShares = Array.isArray(sharesRaw?.pubOps)
+    ? sharesRaw!.pubOps
+        .map((e) => String(e || "").trim().toLowerCase())
+        .filter(Boolean)
+    : [];
+
   return {
     name: raw.name || "Unknown",
     email: String(raw.email).trim(),
@@ -65,6 +80,7 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     smsCount,
     smsMonth: month,
     permissions,
+    shares: { pubOps: [...new Set(pubOpsShares)] },
     lastAlert: raw.lastAlert ?? null,
   };
 }
@@ -76,6 +92,7 @@ export function publicUser(user: User) {
     status: user.status,
     smsCount: user.smsCount,
     permissions: user.permissions,
+    shares: user.shares,
   };
 }
 function extractUsersArray(parsed: unknown): {
@@ -169,6 +186,9 @@ export async function readUsers(): Promise<User[]> {
     if (u.smsMonth !== month || Number(u.smsCount || 0) !== next.smsCount) {
       changed = true;
     }
+    if (!(u as { shares?: unknown }).shares) {
+      changed = true;
+    }
     return next;
   });
   if (changed) await writeUsers(normalized);
@@ -232,6 +252,20 @@ export async function findUserByEmail(email: string) {
       (u) => u.email.trim().toLowerCase() === String(email || "").trim().toLowerCase()
     ) || null
   );
+}
+
+/** Owner emails that explicitly shared Pub Ops data with this grantee. */
+export async function listPubOpsShareOwnersFor(
+  granteeEmail: string
+): Promise<string[]> {
+  const needle = String(granteeEmail || "").trim().toLowerCase();
+  if (!needle) return [];
+  const users = await readUsers();
+  return users
+    .filter((u) =>
+      (u.shares?.pubOps || []).some((e) => e.toLowerCase() === needle)
+    )
+    .map((u) => u.email.trim().toLowerCase());
 }
 
 export async function findUserForRestore(query: string) {

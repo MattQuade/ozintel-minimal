@@ -9,25 +9,26 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
+  return access.run(async () => {
+    try {
+      const url = new URL(req.url);
+      const asAt =
+        url.searchParams.get("asAt") || new Date().toISOString().slice(0, 10);
 
-  try {
-    const url = new URL(req.url);
-    const asAt =
-      url.searchParams.get("asAt") || new Date().toISOString().slice(0, 10);
+      const [entries, coa, banks] = await Promise.all([
+        readLedger(),
+        readCoa(),
+        readBankAccounts(),
+      ]);
+      const report = buildBalanceSheet(entries, coa, asAt, banks);
 
-    const [entries, coa, banks] = await Promise.all([
-      readLedger(),
-      readCoa(),
-      readBankAccounts(),
-    ]);
-    const report = buildBalanceSheet(entries, coa, asAt, banks);
-
-    return NextResponse.json(report);
-  } catch (error) {
-    console.error("Balance Sheet Error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to build balance sheet" },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json(report);
+    } catch (error) {
+      console.error("Balance Sheet Error:", error);
+      return NextResponse.json(
+        { success: false, error: "Failed to build balance sheet" },
+        { status: 500 }
+      );
+    }
+  });
 }
