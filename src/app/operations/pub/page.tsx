@@ -56,17 +56,20 @@ export default function PubOperationsPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
+  const [dataOwnerEmail, setDataOwnerEmail] = useState("");
 
   const applyPayload = (data: {
     month?: string;
     totals?: KegTotals;
     entries?: KegEntry[];
     archives?: string[];
+    dataOwnerEmail?: string;
   }) => {
     if (data.month) setMonth(data.month);
     if (data.totals) setTotals(data.totals);
     if (data.entries) setEntries(data.entries);
     if (data.archives) setArchives(data.archives);
+    if (data.dataOwnerEmail) setDataOwnerEmail(data.dataOwnerEmail);
   };
 
   const load = useCallback(async () => {
@@ -237,6 +240,18 @@ export default function PubOperationsPage() {
       <p style={{ color: "#94a3b8", marginTop: 0 }}>
         Keg Tracker {month ? `· ${month}` : ""}
       </p>
+      {dataOwnerEmail && (
+        <p
+          style={{
+            color: "#fdba74",
+            fontSize: "0.85rem",
+            margin: "0 auto 8px",
+            maxWidth: 420,
+          }}
+        >
+          Data owner: {dataOwnerEmail}
+        </p>
+      )}
 
       <div
         style={{

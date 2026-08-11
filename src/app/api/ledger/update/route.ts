@@ -9,23 +9,24 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
-
-  try {
-    const body = await req.json();
-    const id = String(body.id || "").trim();
-    if (!id) {
-      return NextResponse.json({ error: "id is required" }, { status: 400 });
+  return access.run(async () => {
+    try {
+      const body = await req.json();
+      const id = String(body.id || "").trim();
+      if (!id) {
+        return NextResponse.json({ error: "id is required" }, { status: 400 });
+      }
+      const updated = await updateLedgerEntry({ ...body, id });
+      if (Array.isArray(updated.receiptIds) && updated.receiptIds.length > 0) {
+        await registerLedgerEntryOnReceipts(updated.receiptIds, updated.id);
+      }
+      return NextResponse.json({ success: true, entry: updated });
+    } catch (err) {
+      console.error(err);
+      const message =
+        err instanceof Error ? err.message : "Failed to update entry";
+      const status = message === "Entry not found" ? 404 : 500;
+      return NextResponse.json({ error: message }, { status });
     }
-    const updated = await updateLedgerEntry({ ...body, id });
-    if (Array.isArray(updated.receiptIds) && updated.receiptIds.length > 0) {
-      await registerLedgerEntryOnReceipts(updated.receiptIds, updated.id);
-    }
-    return NextResponse.json({ success: true, entry: updated });
-  } catch (err) {
-    console.error(err);
-    const message =
-      err instanceof Error ? err.message : "Failed to update entry";
-    const status = message === "Entry not found" ? 404 : 500;
-    return NextResponse.json({ error: message }, { status });
-  }
+  });
 }

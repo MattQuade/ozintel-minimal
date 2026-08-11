@@ -1,4 +1,8 @@
 import path from "path";
+import {
+  getDataOwnerEmail,
+  normalizeOwnerEmail,
+} from "@/lib/dataOwnerContext";
 
 /**
  * Where user JSON and future module data are stored.
@@ -23,9 +27,35 @@ export function getRepoSeedUsersPath(): string {
   return path.join(process.cwd(), "data", "users.json");
 }
 
-/** Pub Operations data folder (kegs, etc.) — separate from alerts/accounting. */
+/**
+ * Per-user module root: data/owners/{email}/…
+ * Requires runWithDataOwner() (or an explicit ownerEmail).
+ */
+export function getOwnerDataRoot(ownerEmail?: string): string {
+  const email = normalizeOwnerEmail(ownerEmail || getDataOwnerEmail() || "");
+  if (!email) {
+    throw new Error(
+      "Data owner context missing — module data is siloed per user"
+    );
+  }
+  // Keep path segment filesystem-safe (email is already lowercased).
+  const safe = email.replace(/[/\\]/g, "_");
+  return path.join(getDataDir(), "owners", safe);
+}
+
+function ownerOrThrow(): string {
+  const email = getDataOwnerEmail();
+  if (!email) {
+    throw new Error(
+      "Data owner context missing — module data is siloed per user"
+    );
+  }
+  return email;
+}
+
+/** Pub Operations data folder (kegs, etc.) — siloed per owner. */
 export function getPubOpsDataDir(): string {
-  return path.join(getDataDir(), "operations", "pub");
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "operations", "pub");
 }
 
 export function getKegsFilePath(): string {
@@ -41,9 +71,9 @@ export function getKegsArchiveFilePath(month: string): string {
   return path.join(getKegsArchiveDir(), `kegs-${month}.json`);
 }
 
-/** Forestry Operations data folder (reports/photos) on persistent disk. */
+/** Forestry Operations data folder (reports/photos) — siloed per owner. */
 export function getForestryDataDir(): string {
-  return path.join(getDataDir(), "operations", "forestry");
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "operations", "forestry");
 }
 
 export function getForestryReportsFilePath(): string {
@@ -55,11 +85,11 @@ export function getForestryPhotosDir(): string {
 }
 
 /**
- * Accounting data folder — separate from pub ops / forestry / alerts users.
+ * Accounting data folder — siloed per owner.
  * Lives on OZINTEL_DATA_DIR when set (Render disk).
  */
 export function getAccountingDataDir(): string {
-  return path.join(getDataDir(), "accounting");
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "accounting");
 }
 
 export function getLedgerFilePath(): string {
@@ -122,4 +152,17 @@ export function getRepoSeedRulesPath(): string {
 
 export function getRepoSeedBankAccountsPath(): string {
   return path.join(process.cwd(), "data", "bank-accounts.json");
+}
+
+/** Pre-silo legacy paths (migration only). */
+export function getLegacyPubOpsDataDir(): string {
+  return path.join(getDataDir(), "operations", "pub");
+}
+
+export function getLegacyForestryDataDir(): string {
+  return path.join(getDataDir(), "operations", "forestry");
+}
+
+export function getLegacyAccountingDataDir(): string {
+  return path.join(getDataDir(), "accounting");
 }

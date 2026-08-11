@@ -21,6 +21,9 @@ type UserProfile = {
     pubOps: boolean;
     forestryOps: boolean;
   };
+  shares?: {
+    pubOps: string[];
+  };
   lastAlert?: {
     timestamp: number;
     lat: number;
@@ -436,6 +439,34 @@ export default function HomePage() {
     }
   };
 
+  const updatePubOpsShare = async (ownerEmail: string, granteeEmail: string, enabled: boolean) => {
+    const owner = allUsers.find(u => u.email === ownerEmail);
+    if (!owner) return;
+    const current = new Set((owner.shares?.pubOps || []).map(e => e.toLowerCase()));
+    const g = granteeEmail.toLowerCase();
+    if (enabled) current.add(g);
+    else current.delete(g);
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: ownerEmail,
+          shares: { pubOps: [...current] },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllUsers(data.users);
+      } else {
+        alert(data.error || 'Failed to update Pub Ops share');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update Pub Ops share');
+    }
+  };
+
   /** Prefer DOM/FormData so mobile autofill still works even if React state lagged. */
   const readContactFields = (
     form: HTMLFormElement,
@@ -776,6 +807,9 @@ export default function HomePage() {
                     {selectedEditUser?.email === u.email && (
                       <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
                         <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
+                        <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          Each user only sees their own Accounting / Pub / Forestry data.
+                        </p>
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
                           <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting
                         </label>
@@ -785,6 +819,36 @@ export default function HomePage() {
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
                           <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops
                         </label>
+                        <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #334155' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: '#f97316' }}>
+                            Share this user’s Pub Ops data with:
+                          </p>
+                          <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            Shared users open this keg counter (not their own empty one). Pub Ops permission is enabled automatically.
+                          </p>
+                          {approvedUsersList
+                            .filter((other) => other.email.toLowerCase() !== u.email.toLowerCase())
+                            .map((other) => {
+                              const shared = (u.shares?.pubOps || []).some(
+                                (e) => e.toLowerCase() === other.email.toLowerCase()
+                              );
+                              return (
+                                <label
+                                  key={other.email}
+                                  style={{ display: 'block', margin: '4px 0', cursor: 'pointer', fontSize: '0.85rem' }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={shared}
+                                    onChange={(e) =>
+                                      updatePubOpsShare(u.email, other.email, e.target.checked)
+                                    }
+                                  />{' '}
+                                  {other.name} ({other.email})
+                                </label>
+                              );
+                            })}
+                        </div>
                       </div>
                     )}
                   </div>

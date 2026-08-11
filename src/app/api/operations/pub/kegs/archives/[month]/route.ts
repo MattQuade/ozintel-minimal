@@ -10,26 +10,28 @@ type Params = { params: Promise<{ month: string }> };
 export async function GET(req: NextRequest, { params }: Params) {
   const access = await requireOpsAccess(req, "pubOps");
   if (!access.ok) return access.response;
-  try {
-    const { month } = await params;
-    const snapshot = await readArchive(month);
-    if (!snapshot) {
+  return access.run(async () => {
+    try {
+      const { month } = await params;
+      const snapshot = await readArchive(month);
+      if (!snapshot) {
+        return NextResponse.json(
+          { success: false, error: "Archive not found" },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        ...snapshot,
+        locked: true,
+        entries: [...snapshot.entries].reverse(),
+      });
+    } catch (error) {
+      console.error(error);
       return NextResponse.json(
-        { success: false, error: "Archive not found" },
-        { status: 404 }
+        { success: false, error: "Failed to load archive" },
+        { status: 500 }
       );
     }
-    return NextResponse.json({
-      success: true,
-      ...snapshot,
-      locked: true,
-      entries: [...snapshot.entries].reverse(),
-    });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json(
-      { success: false, error: "Failed to load archive" },
-      { status: 500 }
-    );
-  }
+  });
 }
