@@ -51,6 +51,145 @@ function collapse(s: string): string {
     .trim();
 }
 
+const NUMBER_FILLER = new Set([
+  "and",
+  "dash",
+  "hyphen",
+  "minus",
+  "inv",
+  "invoice",
+  "invoices",
+  "number",
+  "no",
+]);
+
+/** True for digits, inv-246, or spoken number words (two, forty, hundred). */
+export function isSpokenNumberToken(t: string): boolean {
+  const x = String(t || "")
+    .toLowerCase()
+    .trim();
+  if (!x) return false;
+  if (/^\d+$/.test(x)) return true;
+  if (/^inv-?\d+$/i.test(x)) return true;
+  if (x === "hundred" || x === "thousand") return true;
+  if (NUMBER_FILLER.has(x)) return x === "and" || x === "dash" || x === "hyphen" || x === "minus";
+  return SIMPLE[x] != null || TEENS[x] != null || TENS[x] != null;
+}
+
+function parseCardinal(tokens: string[]): number | null {
+  let total = 0;
+  let current = 0;
+  let used = false;
+  for (const raw of tokens) {
+    const t = raw.toLowerCase();
+    if (t === "and" || t === "dash" || t === "hyphen" || t === "minus") continue;
+    const inv = t.match(/^inv-?(\d+)$/i);
+    if (inv) {
+      current += parseInt(inv[1], 10);
+      used = true;
+      continue;
+    }
+    if (/^\d+$/.test(t)) {
+      current += parseInt(t, 10);
+      used = true;
+      continue;
+    }
+    if (SIMPLE[t] != null) {
+      current += Number(SIMPLE[t]);
+      used = true;
+      continue;
+    }
+    if (TEENS[t] != null) {
+      current += Number(TEENS[t]);
+      used = true;
+      continue;
+    }
+    if (TENS[t] != null) {
+      current += TENS[t];
+      used = true;
+      continue;
+    }
+    if (t === "hundred") {
+      current = (current || 1) * 100;
+      used = true;
+      continue;
+    }
+    if (t === "thousand") {
+      total += (current || 1) * 1000;
+      current = 0;
+      used = true;
+    }
+  }
+  total += current;
+  return used && total > 0 ? total : null;
+}
+
+/**
+ * Spoken or typed invoice number → digits, e.g. "two four six" / "246" / "inv 0246" → "246".
+ */
+export function parseSpokenInvoiceDigits(phrase: string): string | null {
+  const raw = String(phrase || "")
+    .toLowerCase()
+    .replace(/[^\w\s-]+/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) return null;
+
+  const tokens = raw
+    .split(/\s+/)
+    .filter((t) => t && t !== "inv" && t !== "invoice" && t !== "invoices" && t !== "number");
+  if (!tokens.length) return null;
+
+  const hasScale = tokens.some((t) => t === "hundred" || t === "thousand");
+  if (hasScale) {
+    const n = parseCardinal(tokens);
+    return n != null ? String(n) : null;
+  }
+
+  const parts: string[] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    const inv = t.match(/^inv-?(\d+)$/i);
+    if (inv) {
+      parts.push(inv[1]);
+      i += 1;
+      continue;
+    }
+    if (/^\d+$/.test(t)) {
+      parts.push(t);
+      i += 1;
+      continue;
+    }
+    if (TENS[t] != null) {
+      const next = tokens[i + 1];
+      if (next && SIMPLE[next] != null && SIMPLE[next].length === 1) {
+        parts.push(String(TENS[t] + Number(SIMPLE[next])));
+        i += 2;
+        continue;
+      }
+      parts.push(String(TENS[t]));
+      i += 1;
+      continue;
+    }
+    if (TEENS[t] != null) {
+      parts.push(TEENS[t]);
+      i += 1;
+      continue;
+    }
+    if (SIMPLE[t] != null) {
+      parts.push(SIMPLE[t]);
+      i += 1;
+      continue;
+    }
+    i += 1;
+  }
+
+  const out = parts.join("").replace(/^0+(?=\d)/, "");
+  return /\d/.test(out) ? out : null;
+}
+
 /**
  * Convert a spoken/typed suffix phrase to e.g. "-0709-26".
  * Returns null if nothing useful was parsed.

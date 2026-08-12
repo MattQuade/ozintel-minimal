@@ -68,7 +68,7 @@ export default function VoiceNavBar({
     const cmd = parsePlatformVoiceCommand(raw);
     if (!cmd) {
       setError(
-        `Didn’t catch that. Try “Open Accounting”, “Edit invoice”, or “Add date to invoice number”.`
+        `Didn’t catch that. Try “Open Accounting”, “Open Railway Hotel 246”, or “Edit invoice”.`
       );
       return;
     }

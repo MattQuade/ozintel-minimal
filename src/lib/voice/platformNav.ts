@@ -5,6 +5,8 @@
 import {
   applyInvoiceNumberSuffix,
   invoiceDateSuffixFromDate,
+  isSpokenNumberToken,
+  parseSpokenInvoiceDigits,
   parseSpokenNumberSuffix,
 } from "@/lib/voice/spokenNumberSuffix";
 
@@ -48,6 +50,14 @@ export type PlatformVoiceAction =
   | {
       type: "go_back";
       label: string;
+    }
+  | {
+      type: "open_invoice";
+      label: string;
+      /** Spoken customer name; empty means match by number only. */
+      customerQuery: string;
+      /** Digits from the spoken/typed invoice number, e.g. "246". */
+      numberQuery: string;
     }
   | {
       type: "email_invoice";
@@ -446,6 +456,55 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
   return null;
 }
 
+const OPEN_INVOICE_PREFIX =
+  /^(?:open|go to|goto|show(?:\s+me)?|launch|take me to|navigate to)\s+(?:the\s+)?/;
+
+function isInvoiceNumberFiller(t: string): boolean {
+  return /^(invoice|invoices|inv|number|no)$/.test(t);
+}
+
+/**
+ * "Open Railway Hotel 246" / "Open Mangoplah Hotel two four five" / "Open invoice 246"
+ */
+function parseOpenInvoiceCommand(t: string): PlatformVoiceAction | null {
+  if (!OPEN_INVOICE_PREFIX.test(t)) return null;
+  const rest = t.replace(OPEN_INVOICE_PREFIX, "").trim();
+  if (!rest) return null;
+
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return null;
+
+  let i = tokens.length;
+  while (i > 0 && isSpokenNumberToken(tokens[i - 1])) i -= 1;
+  while (i > 0 && isInvoiceNumberFiller(tokens[i - 1]) && i < tokens.length) {
+    i -= 1;
+  }
+
+  const numberTokens = tokens.slice(i);
+  if (!numberTokens.length) return null;
+
+  const numberQuery = parseSpokenInvoiceDigits(numberTokens.join(" "));
+  if (!numberQuery) return null;
+
+  const customerQuery = tokens
+    .slice(0, i)
+    .join(" ")
+    .replace(/^(the\s+)?(invoice|invoices|inv)\s+/i, "")
+    .replace(/\s+(the\s+)?(invoice|invoices|inv)$/i, "")
+    .trim();
+
+  const label = customerQuery
+    ? `Open ${customerQuery} ${numberQuery}`
+    : `Open invoice ${numberQuery}`;
+
+  return {
+    type: "open_invoice",
+    label,
+    customerQuery,
+    numberQuery,
+  };
+}
+
 /**
  * Map a spoken/typed command to navigation or an invoice action.
  */
@@ -463,6 +522,9 @@ export function parsePlatformVoiceCommand(
 
   const edit = parseEditCommand(t);
   if (edit) return edit;
+
+  const openInvoice = parseOpenInvoiceCommand(t);
+  if (openInvoice) return openInvoice;
 
   for (const rule of RULES) {
     if (rule.test(t)) {
@@ -486,6 +548,7 @@ export function parsePlatformVoiceNav(
 
 export const PLATFORM_VOICE_EXAMPLES = [
   "Open Accounting",
+  "Open Railway Hotel 246",
   "Select customer",
   "Email invoice",
   "Go back",

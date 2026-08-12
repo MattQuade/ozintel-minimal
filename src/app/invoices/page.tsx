@@ -129,8 +129,9 @@ function InvoicesContent() {
       <VoiceNavBar
         variant="hub"
         examples={[
+          'Open Railway Hotel 246',
+          'Open Mangoplah Hotel 245',
           'Select customer',
-          'Select customer Wagga Rugby',
           'Create new invoice',
           'Edit invoice',
         ]}

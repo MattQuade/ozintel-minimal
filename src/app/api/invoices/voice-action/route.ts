@@ -44,6 +44,36 @@ function latestDraft(invoices: Invoice[]): Invoice | null {
   return drafts[0];
 }
 
+/** INV-0246 or INV-0246-0709-26 → 246 */
+function primaryInvoiceSeq(number: string): number | null {
+  const raw = String(number || "").trim();
+  const inv = raw.match(/INV-(\d+)/i);
+  if (inv) return parseInt(inv[1], 10);
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const n = parseInt(digits, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function invoicesMatchingNumber(
+  invoices: Invoice[],
+  numberQuery: string
+): Invoice[] {
+  const q = parseInt(String(numberQuery || "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(q)) return [];
+  return invoices.filter((inv) => primaryInvoiceSeq(inv.number) === q);
+}
+
+function newestInvoice(list: Invoice[]): Invoice {
+  const copy = [...list];
+  copy.sort((a, b) =>
+    String(b.updatedAt || b.createdAt || "").localeCompare(
+      String(a.updatedAt || a.createdAt || "")
+    )
+  );
+  return copy[0];
+}
+
 /**
  * Execute voice actions that need server state (edit target, number suffix).
  * Body: { transcript: string, invoiceId?: string }
@@ -68,7 +98,7 @@ export async function POST(req: Request) {
           {
             success: false,
             error:
-              "Didn’t catch that. Try “Open Accounting”, “Edit invoice”, or “Add date to invoice number”.",
+              "Didn’t catch that. Try “Open Accounting”, “Open Railway Hotel 246”, or “Edit invoice”.",
           },
           { status: 400 }
         );
@@ -88,6 +118,103 @@ export async function POST(req: Request) {
           success: true,
           action: "stop_listening",
           label: cmd.label,
+        });
+      }
+
+      if (cmd.type === "open_invoice") {
+        const invoices = await readInvoices();
+        const byNumber = invoicesMatchingNumber(invoices, cmd.numberQuery);
+        let invoice: Invoice | null = null;
+
+        if (cmd.customerQuery) {
+          const customers = [
+            ...new Map(
+              invoices.map((inv) => [
+                inv.customerId,
+                { id: inv.customerId, name: inv.customerName },
+              ])
+            ).values(),
+          ];
+          const { match, ambiguous, candidates } = matchCustomerByVoice(
+            cmd.customerQuery,
+            customers
+          );
+          if (ambiguous) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Several customers match “${cmd.customerQuery}” — pick one`,
+                candidates,
+                ambiguous: true,
+              },
+              { status: 409 }
+            );
+          }
+          if (match) {
+            const forCustomer = byNumber.filter(
+              (inv) => inv.customerId === match.id
+            );
+            if (forCustomer.length === 1) invoice = forCustomer[0];
+            else if (forCustomer.length > 1) invoice = newestInvoice(forCustomer);
+            else if (byNumber.length === 1) invoice = byNumber[0];
+            else {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: `No invoice ${cmd.numberQuery} for ${match.name}`,
+                },
+                { status: 404 }
+              );
+            }
+          } else if (byNumber.length === 1) {
+            invoice = byNumber[0];
+          } else if (byNumber.length > 1) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Several invoices match ${cmd.numberQuery} — say the customer name too`,
+              },
+              { status: 409 }
+            );
+          } else {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `No invoice matching “${cmd.customerQuery} ${cmd.numberQuery}”`,
+              },
+              { status: 404 }
+            );
+          }
+        } else if (byNumber.length === 1) {
+          invoice = byNumber[0];
+        } else if (byNumber.length > 1) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Several invoices match ${cmd.numberQuery} — say the customer, e.g. “Open Railway Hotel ${cmd.numberQuery}”`,
+            },
+            { status: 409 }
+          );
+        } else {
+          return NextResponse.json(
+            { success: false, error: `No invoice ${cmd.numberQuery}` },
+            { status: 404 }
+          );
+        }
+
+        if (!invoice) {
+          return NextResponse.json(
+            { success: false, error: `No invoice ${cmd.numberQuery}` },
+            { status: 404 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          action: "open_invoice",
+          href: `/invoices/${invoice.id}`,
+          label: `Open ${invoice.number} — ${invoice.customerName}`,
+          invoice: { id: invoice.id, number: invoice.number },
         });
       }
 

@@ -136,7 +136,7 @@ export default function VoiceHandsfreeDock() {
             ? `Say the customer name (heard “${raw}”).`
             : isAwaitingInvoiceNumberSuffix()
               ? `Say the number suffix (heard “${raw}”).`
-              : `Didn’t catch “${raw}”. Try again, or say “stop listening”.`
+              : `Didn’t catch “${raw}”. Try “Open Railway Hotel 246”, or say “stop listening”.`
         );
         return;
       }
