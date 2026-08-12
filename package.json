@@ -18,7 +18,7 @@
     "next": "^16.2.7",
     "nodemailer": "^9.0.5",
     "papaparse": "^5.5.3",
-    "pdfkit": "^0.19.1",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -29,7 +29,6 @@
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
     "@types/papaparse": "^5.5.2",
-    "@types/pdfkit": "^0.17.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.19",
