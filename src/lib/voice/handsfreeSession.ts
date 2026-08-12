@@ -6,6 +6,13 @@
 export const HANDSFREE_STORAGE_KEY = "ozintel_voice_handsfree";
 export const AWAITING_CUSTOMER_KEY = "ozintel_voice_awaiting_customer";
 export const AWAITING_INVOICE_SUFFIX_KEY = "ozintel_voice_awaiting_invoice_suffix";
+export const PENDING_EMAIL_KEY = "ozintel_voice_pending_email";
+
+export type PendingInvoiceEmail = {
+  invoiceId: string;
+  to: string;
+  invoiceNumber: string;
+};
 
 export function isHandsfreeEnabled(): boolean {
   if (typeof window === "undefined") return false;
@@ -20,6 +27,7 @@ function clearAwaitingFlags() {
   try {
     sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
     sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+    sessionStorage.removeItem(PENDING_EMAIL_KEY);
   } catch {
     /* ignore */
   }
@@ -83,6 +91,34 @@ export function setAwaitingInvoiceNumberSuffix(on: boolean) {
       sessionStorage.setItem(AWAITING_INVOICE_SUFFIX_KEY, "1");
     } else {
       sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getPendingInvoiceEmail(): PendingInvoiceEmail | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PENDING_EMAIL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingInvoiceEmail;
+    if (!parsed?.invoiceId || !parsed?.to) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function setPendingInvoiceEmail(pending: PendingInvoiceEmail | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (pending) {
+      sessionStorage.removeItem(AWAITING_CUSTOMER_KEY);
+      sessionStorage.removeItem(AWAITING_INVOICE_SUFFIX_KEY);
+      sessionStorage.setItem(PENDING_EMAIL_KEY, JSON.stringify(pending));
+    } else {
+      sessionStorage.removeItem(PENDING_EMAIL_KEY);
     }
   } catch {
     /* ignore */

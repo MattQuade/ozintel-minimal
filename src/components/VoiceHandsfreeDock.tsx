@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  getPendingInvoiceEmail,
   isAwaitingCustomerName,
   isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
@@ -10,6 +11,7 @@ import {
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
   setHandsfreeEnabled,
+  setPendingInvoiceEmail,
 } from '@/lib/voice/handsfreeSession';
 import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
 import { parseSpokenNumberSuffix } from '@/lib/voice/spokenNumberSuffix';
@@ -143,6 +145,7 @@ export default function VoiceHandsfreeDock() {
         setHint('Stopped listening');
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
+        setPendingInvoiceEmail(null);
         stopRecognition(true);
         return;
       }
@@ -150,8 +153,46 @@ export default function VoiceHandsfreeDock() {
       if (cmd.type === 'go_back') {
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
+        setPendingInvoiceEmail(null);
         setHint('Going back…');
         router.back();
+        return;
+      }
+
+      if (cmd.type === 'cancel_send') {
+        if (getPendingInvoiceEmail()) {
+          setPendingInvoiceEmail(null);
+          setHint('Email cancelled');
+        }
+        return;
+      }
+
+      if (cmd.type === 'confirm_send') {
+        const pending = getPendingInvoiceEmail();
+        if (!pending) return;
+        processingRef.current = true;
+        setBusy(true);
+        setError('');
+        setHint(`Sending ${pending.invoiceNumber}…`);
+        try {
+          const res = await fetch(`/api/invoices/${pending.invoiceId}/email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true, to: pending.to }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Email failed');
+          }
+          setPendingInvoiceEmail(null);
+          setHint(data.label || `Sent to ${pending.to}`);
+          if (data.href) router.push(data.href);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Email failed');
+        } finally {
+          processingRef.current = false;
+          setBusy(false);
+        }
         return;
       }
 
@@ -218,6 +259,40 @@ export default function VoiceHandsfreeDock() {
           }
           setAwaitingCustomerName(false);
           setAwaitingInvoiceNumberSuffix(false);
+          setHint(data.label || cmd.label);
+          if (data.href) router.push(data.href);
+          return;
+        }
+
+        if (cmd.type === 'email_invoice') {
+          const pathId = pathnameRef.current.match(
+            /^\/invoices\/([^/]+)/
+          )?.[1];
+          const invoiceId =
+            pathId && pathId !== 'new' ? pathId : undefined;
+          const res = await fetch('/api/invoices/voice-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript: raw,
+              invoiceId,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not email invoice');
+          }
+          if (data.needsConfirm && data.invoiceId && data.to) {
+            setPendingInvoiceEmail({
+              invoiceId: data.invoiceId,
+              to: data.to,
+              invoiceNumber: data.invoiceNumber || '',
+            });
+            setHint(data.label || `Email to ${data.to}? Say send.`);
+            if (data.href) router.push(data.href);
+            return;
+          }
+          setPendingInvoiceEmail(null);
           setHint(data.label || cmd.label);
           if (data.href) router.push(data.href);
           return;
@@ -443,7 +518,9 @@ export default function VoiceHandsfreeDock() {
               {interim ||
                 hint ||
                 lastHeard ||
-                (typeof window !== 'undefined' && isAwaitingCustomerName()
+                (typeof window !== 'undefined' && getPendingInvoiceEmail()
+                  ? `Say send to email ${getPendingInvoiceEmail()?.invoiceNumber || ''}…`
+                  : typeof window !== 'undefined' && isAwaitingCustomerName()
                   ? 'Say the customer name…'
                   : typeof window !== 'undefined' &&
                       isAwaitingInvoiceNumberSuffix()

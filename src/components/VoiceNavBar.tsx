@@ -3,10 +3,12 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  getPendingInvoiceEmail,
   isHandsfreeEnabled,
   requestVoiceListen,
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
+  setPendingInvoiceEmail,
 } from '@/lib/voice/handsfreeSession';
 import {
   PLATFORM_VOICE_EXAMPLES,
@@ -81,8 +83,45 @@ export default function VoiceNavBar({
     if (cmd.type === 'go_back') {
       setAwaitingCustomerName(false);
       setAwaitingInvoiceNumberSuffix(false);
+      setPendingInvoiceEmail(null);
       setHint('Going back…');
       router.back();
+      return;
+    }
+
+    if (cmd.type === 'cancel_send') {
+      setPendingInvoiceEmail(null);
+      setHint('Email cancelled');
+      return;
+    }
+
+    if (cmd.type === 'confirm_send') {
+      const pending = getPendingInvoiceEmail();
+      if (!pending) {
+        setError('Nothing waiting to send — say “Email invoice” first');
+        return;
+      }
+      setBusy(true);
+      setHint(`Sending ${pending.invoiceNumber}…`);
+      try {
+        const res = await fetch(`/api/invoices/${pending.invoiceId}/email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: true, to: pending.to }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Email failed');
+        }
+        setPendingInvoiceEmail(null);
+        setHint(data.label || `Sent to ${pending.to}`);
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Email failed');
+        setBusy(false);
+        setHint('');
+      }
       return;
     }
 
@@ -154,6 +193,42 @@ export default function VoiceNavBar({
         }
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
+        setHint(data.label || cmd.label);
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed');
+        setBusy(false);
+        setHint('');
+      }
+      return;
+    }
+
+    if (cmd.type === 'email_invoice') {
+      setBusy(true);
+      setHint(`${cmd.label}…`);
+      try {
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcript: raw }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not email invoice');
+        }
+        if (data.needsConfirm && data.invoiceId && data.to) {
+          setPendingInvoiceEmail({
+            invoiceId: data.invoiceId,
+            to: data.to,
+            invoiceNumber: data.invoiceNumber || '',
+          });
+          setHint(data.label || `Email to ${data.to}? Say send.`);
+          if (data.href) router.push(data.href);
+          else setBusy(false);
+          return;
+        }
+        setPendingInvoiceEmail(null);
         setHint(data.label || cmd.label);
         if (data.href) router.push(data.href);
         else setBusy(false);

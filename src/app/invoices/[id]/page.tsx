@@ -89,6 +89,7 @@ export default function InvoiceDetailPage() {
   const [printMetaDirty, setPrintMetaDirty] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [numberDirty, setNumberDirty] = useState(false);
+  const [emailStatus, setEmailStatus] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +123,46 @@ export default function InvoiceDetailPage() {
       })
       .catch(() => {});
   }, [load]);
+
+  const emailInvoice = async () => {
+    if (!invoice) return;
+    setBusy(true);
+    setError('');
+    setEmailStatus('');
+    try {
+      const previewRes = await fetch(`/api/invoices/${id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: false }),
+      });
+      const preview = await previewRes.json();
+      if (!previewRes.ok || !preview.success) {
+        throw new Error(preview.error || 'Could not prepare email');
+      }
+      if (
+        !confirm(
+          `Email ${preview.invoiceNumber} to ${preview.to} from admin@ozintel.com.au?`
+        )
+      ) {
+        setBusy(false);
+        return;
+      }
+      const res = await fetch(`/api/invoices/${id}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, to: preview.to }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Email failed');
+      }
+      setEmailStatus(data.label || `Sent to ${preview.to}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Email failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const runAction = async (
     path: string,
@@ -319,6 +360,16 @@ export default function InvoiceDetailPage() {
             >
               Print / PDF
             </Link>
+            {invoice.status !== 'void' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={emailInvoice}
+                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                Email invoice
+              </button>
+            )}
             {invoice.status === 'draft' && (
               <>
                 <Link
@@ -385,6 +436,11 @@ export default function InvoiceDetailPage() {
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm">
             {error}
+          </div>
+        )}
+        {emailStatus && (
+          <div className="mb-4 p-3 rounded-xl bg-green-50 text-green-800 text-sm">
+            {emailStatus}
           </div>
         )}
 

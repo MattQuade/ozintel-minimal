@@ -8,6 +8,11 @@ import {
 import { readCustomers } from "@/lib/accounting/customers";
 import { matchCustomerByVoice } from "@/lib/invoices/voiceInvoiceParse";
 import {
+  resolveInvoiceRecipient,
+  sendInvoiceEmail,
+  smtpConfigured,
+} from "@/lib/invoices/sendInvoiceEmail";
+import {
   applyInvoiceNumberSuffix,
   invoiceDateSuffixFromDate,
   parsePlatformVoiceCommand,
@@ -15,6 +20,18 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function latestSendable(invoices: Invoice[], customerId?: string): Invoice | null {
+  let list = invoices.filter((i) => i.status !== "void");
+  if (customerId) list = list.filter((i) => i.customerId === customerId);
+  if (!list.length) return null;
+  list.sort((a, b) =>
+    String(b.updatedAt || b.createdAt || "").localeCompare(
+      String(a.updatedAt || a.createdAt || "")
+    )
+  );
+  return list[0];
+}
 
 function latestDraft(invoices: Invoice[]): Invoice | null {
   const drafts = invoices.filter((i) => i.status === "draft");
@@ -283,6 +300,95 @@ export async function POST(req: Request) {
           invoice: updated,
           suffix,
           previousNumber: invoice.number,
+        });
+      }
+
+      if (cmd.type === "confirm_send" || cmd.type === "cancel_send") {
+        return NextResponse.json({
+          success: true,
+          action: cmd.type,
+          label: cmd.label,
+        });
+      }
+
+      if (cmd.type === "email_invoice") {
+        const invoices = await readInvoices();
+        const requestedId = String(body.invoiceId || "").trim();
+        let invoice: Invoice | null = requestedId
+          ? invoices.find((i) => i.id === requestedId) || null
+          : null;
+
+        if (!invoice && cmd.customerQuery) {
+          const { match, ambiguous, candidates } = matchCustomerByVoice(
+            cmd.customerQuery,
+            await readCustomers()
+          );
+          if (ambiguous) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Several customers match “${cmd.customerQuery}” — pick one`,
+                candidates,
+                ambiguous: true,
+              },
+              { status: 409 }
+            );
+          }
+          if (!match) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `No customer matching “${cmd.customerQuery}”`,
+              },
+              { status: 404 }
+            );
+          }
+          invoice = latestSendable(invoices, match.id);
+          if (!invoice) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `No invoice found for ${match.name}`,
+              },
+              { status: 404 }
+            );
+          }
+        }
+
+        if (!invoice) invoice = latestSendable(invoices);
+        if (!invoice) {
+          return NextResponse.json(
+            { success: false, error: "No invoice to email" },
+            { status: 404 }
+          );
+        }
+
+        const { to, customerName } = await resolveInvoiceRecipient(invoice);
+        if (!body.confirm) {
+          return NextResponse.json({
+            success: true,
+            action: "email_invoice",
+            needsConfirm: true,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.number,
+            to,
+            customerName,
+            href: `/invoices/${invoice.id}`,
+            smtpReady: smtpConfigured(),
+            label: `Email ${invoice.number} to ${to}? Say send to confirm.`,
+          });
+        }
+
+        const sent = await sendInvoiceEmail({ invoice, to });
+        return NextResponse.json({
+          success: true,
+          action: "email_invoice",
+          sent: true,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          to: sent.to,
+          href: `/invoices/${invoice.id}`,
+          label: `Sent ${invoice.number} to ${sent.to}`,
         });
       }
 

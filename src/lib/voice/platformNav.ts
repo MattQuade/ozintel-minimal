@@ -50,6 +50,20 @@ export type PlatformVoiceAction =
       label: string;
     }
   | {
+      type: "email_invoice";
+      label: string;
+      /** Optional spoken customer name when not on an invoice page. */
+      customerQuery?: string;
+    }
+  | {
+      type: "confirm_send";
+      label: string;
+    }
+  | {
+      type: "cancel_send";
+      label: string;
+    }
+  | {
       type: "stop_listening";
       label: string;
     };
@@ -335,6 +349,38 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
     };
   }
 
+  if (
+    /^(send|yes|yeah|yep|confirm|do it|go ahead)$/.test(t) ||
+    /^(send|confirm)\s+(it|the\s+email|the\s+invoice)$/.test(t)
+  ) {
+    return { type: "confirm_send", label: "Send" };
+  }
+  if (/^(cancel|no|nope|abort|never mind|dont send|don't send)$/.test(t)) {
+    return { type: "cancel_send", label: "Cancel send" };
+  }
+
+  // "email invoice" / "send invoice" / "email invoice to Wagga Rugby"
+  if (
+    /^(email|mail|send)\s+(the\s+)?(tax\s+)?invoices?$/.test(t) ||
+    /^email\s+(the\s+)?customer$/.test(t)
+  ) {
+    return { type: "email_invoice", label: "Email invoice" };
+  }
+  const emailTo = t.match(
+    /^(?:email|mail|send)\s+(?:the\s+)?(?:tax\s+)?invoices?\s+(?:to\s+)?(.+)$/
+  );
+  if (emailTo) {
+    const customerQuery = emailTo[1].replace(/^to\s+/, "").trim();
+    if (customerQuery && !/^(the\s+)?customer$/.test(customerQuery)) {
+      return {
+        type: "email_invoice",
+        label: `Email invoice to ${customerQuery}`,
+        customerQuery,
+      };
+    }
+    return { type: "email_invoice", label: "Email invoice" };
+  }
+
   // "edit invoice number" — must be before plain "edit invoice"
   if (
     /^(edit|change|modify)\s+(the\s+)?invoice\s+numbers?$/.test(t) ||
@@ -441,7 +487,7 @@ export function parsePlatformVoiceNav(
 export const PLATFORM_VOICE_EXAMPLES = [
   "Open Accounting",
   "Select customer",
-  "Edit invoice number",
+  "Email invoice",
   "Go back",
   "Stop listening",
 ];
