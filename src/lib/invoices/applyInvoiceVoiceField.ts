@@ -4,6 +4,7 @@ import {
   type Invoice,
   type InvoiceLine,
 } from "@/lib/accounting/invoices";
+import { titleCaseSubject } from "@/lib/invoices/invoiceBrand";
 import { parseSpokenDate } from "@/lib/voice/spokenDate";
 import { parseSpokenAmount } from "@/lib/voice/spokenNumberSuffix";
 
@@ -105,9 +106,7 @@ function parseTax(value: string): boolean {
 }
 
 function titleCaseWords(s: string): string {
-  return String(s || "")
-    .trim()
-    .replace(/\s+/g, " ");
+  return titleCaseSubject(s);
 }
 
 function targetLine(

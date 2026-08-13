@@ -7,6 +7,7 @@ import {
   applyInvoiceNumberSuffix,
   invoiceDateSuffixFromDate,
   isSpokenNumberToken,
+  parseSpokenFullInvoiceNumber,
   parseSpokenInvoiceDigits,
   parseSpokenNumberSuffix,
 } from "@/lib/voice/spokenNumberSuffix";
@@ -33,6 +34,12 @@ export type PlatformVoiceAction =
       /** When set, apply immediately; otherwise wait for spoken suffix. */
       suffix?: string;
       useIssueDate?: boolean;
+      /** Replace the whole number, e.g. INV-0251. */
+      replacement?: string;
+    }
+  | {
+      type: "delete_invoice_number";
+      label: string;
     }
   | {
       type: "select_customer";
@@ -382,6 +389,18 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
     return { type: "email_invoice", label: "Email invoice" };
   }
 
+  // "delete invoice number" — fresh sequential number, not a suffix
+  if (
+    /^(delete|clear|reset|remove)\s+(the\s+)?(invoice\s+)?numbers?$/.test(t) ||
+    /^(delete|clear|reset|remove)\s+(the\s+)?invoice\s+numbers?$/.test(t) ||
+    /^new\s+invoice\s+number$/.test(t)
+  ) {
+    return {
+      type: "delete_invoice_number",
+      label: "Delete invoice number",
+    };
+  }
+
   // "edit invoice number" — must be before plain "edit invoice"
   if (
     /^(edit|change|modify)\s+(the\s+)?invoice\s+numbers?$/.test(t) ||
@@ -395,7 +414,7 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
     };
   }
 
-  // "edit invoice number dash zero seven zero nine dash twenty six"
+  // "edit invoice number dash zero seven…" or a full replacement "two four six"
   const numEdit = t.match(
     /^(?:edit|change|modify)\s+(?:the\s+)?invoice\s+numbers?\s+(.+)$/
   );
@@ -406,6 +425,14 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
         type: "edit_invoice_number",
         label: "Add date to invoice number",
         useIssueDate: true,
+      };
+    }
+    const replacement = parseSpokenFullInvoiceNumber(spoken);
+    if (replacement) {
+      return {
+        type: "edit_invoice_number",
+        label: `Invoice number ${replacement}`,
+        replacement,
       };
     }
     const suffix = parseSpokenNumberSuffix(spoken);
@@ -659,6 +686,7 @@ export const PLATFORM_VOICE_EXAMPLES = [
   "Select customer",
   "Email invoice",
   "Edit issue date",
+  "Delete invoice number",
   "Scroll down",
   "Go back",
   "Stop listening",

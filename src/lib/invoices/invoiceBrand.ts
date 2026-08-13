@@ -26,8 +26,33 @@ export const INVOICE_BRAND = {
   defaultSubject: envText("NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT", "Draught"),
 };
 
+const SUBJECT_SMALL = new Set(["a", "an", "and", "of", "the", "to", "for", "or"]);
+
+/** Capitalise each subject word: "draft packaged" → "Draft Packaged". */
+export function titleCaseSubject(raw: string): string {
+  const words = String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean);
+  return words
+    .map((word, i) => {
+      const pieces = word.split(/([-/,])/);
+      return pieces
+        .map((piece) => {
+          if (!/[a-zA-Z]/.test(piece)) return piece;
+          const lower = piece.toLowerCase();
+          if (i > 0 && SUBJECT_SMALL.has(lower)) return lower;
+          return lower.charAt(0).toUpperCase() + lower.slice(1);
+        })
+        .join("");
+    })
+    .join(" ");
+}
+
 export function invoiceSubjectLine(raw: string | undefined): string {
-  const s = String(raw || "").trim().replace(/:+\s*$/, "") ||
+  const s =
+    titleCaseSubject(String(raw || "").replace(/:+\s*$/, "")) ||
     INVOICE_BRAND.defaultSubject;
   return s ? `${s}:` : "";
 }

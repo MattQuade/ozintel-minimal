@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { titleCaseSubject } from '@/lib/invoices/invoiceBrand';
 import {
   computeLineTotals,
   isFreightLine,
@@ -77,7 +78,7 @@ function lessLabel(description: string): string {
 }
 
 function subjectValue(raw: string): string {
-  const s = String(raw || '').trim().replace(/:+\s*$/, '');
+  const s = titleCaseSubject(String(raw || '').replace(/:+\s*$/, ''));
   return s ? `${s}:` : '';
 }
 

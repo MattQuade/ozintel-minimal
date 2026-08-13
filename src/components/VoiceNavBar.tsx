@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   getPendingInvoiceEmail,
   getPendingInvoiceField,
+  isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
   notifyInvoiceUpdated,
   requestVoiceListen,
@@ -20,6 +21,10 @@ import {
   parsePlatformVoiceCommand,
 } from '@/lib/voice/platformNav';
 import { scrollPageByViewport } from '@/lib/voice/scrollPage';
+import {
+  parseSpokenFullInvoiceNumber,
+  parseSpokenNumberSuffix,
+} from '@/lib/voice/spokenNumberSuffix';
 import { getSpeechRecognitionCtor } from '@/lib/voice/speechRecognition';
 
 type Variant = 'home' | 'hub';
@@ -72,7 +77,32 @@ export default function VoiceNavBar({
     setError('');
     setHint('');
 
-    const cmd = parsePlatformVoiceCommand(raw);
+    let cmd = parsePlatformVoiceCommand(raw);
+    if (!cmd && isAwaitingInvoiceNumberSuffix()) {
+      if (/^(the\s+)?date(\s+suffix)?$/i.test(raw)) {
+        cmd = {
+          type: 'edit_invoice_number',
+          label: 'Add date to invoice number',
+          useIssueDate: true,
+        };
+      } else {
+        const replacement = parseSpokenFullInvoiceNumber(raw);
+        const suffix = replacement ? null : parseSpokenNumberSuffix(raw);
+        if (replacement) {
+          cmd = {
+            type: 'edit_invoice_number',
+            label: `Invoice number ${replacement}`,
+            replacement,
+          };
+        } else if (suffix) {
+          cmd = {
+            type: 'edit_invoice_number',
+            label: `Edit invoice number ${suffix}`,
+            suffix,
+          };
+        }
+      }
+    }
     const pendingField = getPendingInvoiceField();
     const interruptPending =
       cmd?.type === 'stop_listening' ||
@@ -210,13 +240,40 @@ export default function VoiceNavBar({
       return;
     }
 
+    if (cmd.type === 'delete_invoice_number') {
+      setBusy(true);
+      setHint(`${cmd.label}…`);
+      try {
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: raw,
+            invoiceId: invoiceIdFromPath(pathname),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not reset invoice number');
+        }
+        setAwaitingInvoiceNumberSuffix(false);
+        setHint(data.label || cmd.label);
+        notifyInvoiceUpdated();
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed');
+        setBusy(false);
+        setHint('');
+      }
+      return;
+    }
+
     if (cmd.type === 'edit_invoice_number') {
-      if (!cmd.suffix && !cmd.useIssueDate) {
+      if (!cmd.suffix && !cmd.useIssueDate && !cmd.replacement) {
         setAwaitingInvoiceNumberSuffix(true);
         setAwaitingCustomerName(false);
-        setHint(
-          'Say the suffix… e.g. dash zero seven zero nine dash twenty six'
-        );
+        setHint('Say the new number… e.g. two four six');
         return;
       }
       setBusy(true);
@@ -224,11 +281,16 @@ export default function VoiceNavBar({
       try {
         const spoken = cmd.useIssueDate
           ? 'edit invoice number date'
-          : `edit invoice number ${cmd.suffix}`;
+          : cmd.replacement
+            ? `edit invoice number ${cmd.replacement}`
+            : `edit invoice number ${cmd.suffix}`;
         const res = await fetch('/api/invoices/voice-action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: spoken }),
+          body: JSON.stringify({
+            transcript: spoken,
+            invoiceId: invoiceIdFromPath(pathname),
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -236,6 +298,7 @@ export default function VoiceNavBar({
         }
         setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
+        notifyInvoiceUpdated();
         if (data.href) router.push(data.href);
         else setBusy(false);
       } catch (err) {

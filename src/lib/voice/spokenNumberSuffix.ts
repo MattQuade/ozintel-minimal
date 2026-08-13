@@ -321,6 +321,47 @@ export function invoiceDateSuffixFromDate(
   return `-${dd}${mm}-${yy}`;
 }
 
+/**
+ * Spoken/typed full invoice number → INV-0246 or INV-0246-0709-26.
+ * Does not treat a leading “dash …” as a whole number (that stays a suffix).
+ */
+export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
+  const raw = String(phrase || "")
+    .toLowerCase()
+    .replace(/[^\w\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) return null;
+  if (/^(dash|hyphen|minus|-)\b/.test(raw)) return null;
+
+  const compact = raw.replace(/\s+/g, "");
+  const typed = compact.match(/^inv-?(\d+)((?:-\d+)*)$/i);
+  if (typed) {
+    const seq = typed[1].replace(/^0+(?=\d)/, "") || typed[1];
+    return `INV-${seq.padStart(4, "0")}${typed[2] || ""}`;
+  }
+  if (/^\d+$/.test(compact)) {
+    const seq = compact.replace(/^0+(?=\d)/, "") || compact;
+    return `INV-${seq.padStart(4, "0")}`;
+  }
+
+  const parts = raw
+    .split(/\s*(?:dash|hyphen|minus|-)\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!parts.length) return null;
+
+  const head = parts[0].replace(/^(inv|invoice|number|no)\s+/g, "").trim();
+  const seq = parseSpokenInvoiceDigits(head);
+  if (!seq) return null;
+  let out = `INV-${seq.padStart(4, "0")}`;
+  if (parts.length === 1) return out;
+
+  const suffix = parseSpokenNumberSuffix(parts.slice(1).join(" dash "));
+  if (suffix) out = `${out}${suffix}`;
+  return out;
+}
+
 /** Append or replace trailing -DDMM-YY (or custom) suffix on an invoice number. */
 export function applyInvoiceNumberSuffix(
   currentNumber: string,

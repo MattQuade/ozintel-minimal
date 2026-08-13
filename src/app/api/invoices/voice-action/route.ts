@@ -278,16 +278,53 @@ export async function POST(req: Request) {
         });
       }
 
+      if (cmd.type === "delete_invoice_number") {
+        const invoices = await readInvoices();
+        const requestedId = String(body.invoiceId || "").trim();
+        const invoice = requestedId
+          ? invoices.find((i) => i.id === requestedId) || null
+          : latestDraft(invoices);
+        if (!invoice) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "No draft invoice found to reset the number",
+            },
+            { status: 404 }
+          );
+        }
+        if (invoice.status !== "draft") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Only draft invoice numbers can change (${invoice.number} is ${invoice.status})`,
+            },
+            { status: 400 }
+          );
+        }
+        const updated = await upsertInvoice({
+          id: invoice.id,
+          number: "",
+        });
+        return NextResponse.json({
+          success: true,
+          action: "delete_invoice_number",
+          href: `/invoices/${updated.id}`,
+          label: `Number → ${updated.number}`,
+          invoice: updated,
+          previousNumber: invoice.number,
+        });
+      }
+
       if (cmd.type === "edit_invoice_number") {
-        if (!cmd.suffix && !cmd.useIssueDate) {
+        if (!cmd.suffix && !cmd.useIssueDate && !cmd.replacement) {
           return NextResponse.json({
             success: true,
             action: "edit_invoice_number",
             awaitingSuffix: true,
-            label: "Say the number suffix…",
+            label: "Say the new number, or a suffix…",
           });
         }
-        // Apply suffix using the same path as append_invoice_suffix
         const invoices = await readInvoices();
         const requestedId = String(body.invoiceId || "").trim();
         let invoice = requestedId
@@ -313,18 +350,24 @@ export async function POST(req: Request) {
           );
         }
 
-        const suffix = cmd.useIssueDate
-          ? invoiceDateSuffixFromDate(invoice.issueDate || invoice.orderDate)
-          : cmd.suffix;
+        const nextNumber = cmd.replacement
+          ? cmd.replacement
+          : applyInvoiceNumberSuffix(
+              invoice.number,
+              cmd.useIssueDate
+                ? invoiceDateSuffixFromDate(
+                    invoice.issueDate || invoice.orderDate
+                  )
+                : cmd.suffix || ""
+            );
 
-        if (!suffix) {
+        if (!nextNumber) {
           return NextResponse.json(
-            { success: false, error: "Could not parse the number suffix" },
+            { success: false, error: "Could not parse the invoice number" },
             { status: 400 }
           );
         }
 
-        const nextNumber = applyInvoiceNumberSuffix(invoice.number, suffix);
         if (nextNumber === invoice.number) {
           return NextResponse.json({
             success: true,
@@ -332,7 +375,6 @@ export async function POST(req: Request) {
             href: `/invoices/${invoice.id}`,
             label: `Number already ${invoice.number}`,
             invoice,
-            suffix,
           });
         }
 
@@ -347,7 +389,6 @@ export async function POST(req: Request) {
           href: `/invoices/${updated.id}`,
           label: `Number → ${updated.number}`,
           invoice: updated,
-          suffix,
           previousNumber: invoice.number,
         });
       }

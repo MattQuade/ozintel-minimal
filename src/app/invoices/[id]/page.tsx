@@ -449,6 +449,7 @@ export default function InvoiceDetailPage() {
             'Edit issue date',
             'Edit order date',
             'Add new line item',
+            'Delete invoice number',
             'Edit notes',
             'Scroll down',
             'Email invoice',

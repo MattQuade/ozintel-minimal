@@ -23,6 +23,7 @@ import {
   computeLineTotals,
   round2,
 } from "@/lib/accounting/invoiceMath";
+import { titleCaseSubject } from "@/lib/invoices/invoiceBrand";
 
 export type InvoiceStatus = "draft" | "authorised" | "paid" | "void";
 
@@ -375,9 +376,11 @@ export async function upsertInvoice(
       )
         .trim()
         .slice(0, 10);
-      const editableSubject = String(
-        input.subject !== undefined ? input.subject : existing.subject ?? ""
-      ).trim();
+      const editableSubject = titleCaseSubject(
+        String(
+          input.subject !== undefined ? input.subject : existing.subject ?? ""
+        )
+      );
       const next: Invoice = {
         ...existing,
         notes: editableNotes,
@@ -432,9 +435,11 @@ export async function upsertInvoice(
       )
         .trim()
         .slice(0, 10),
-      subject: String(
-        input.subject !== undefined ? input.subject : existing?.subject ?? ""
-      ).trim(),
+      subject: titleCaseSubject(
+        String(
+          input.subject !== undefined ? input.subject : existing?.subject ?? ""
+        )
+      ),
       lines,
       status: "draft",
       subtotal: totals.subtotal,
