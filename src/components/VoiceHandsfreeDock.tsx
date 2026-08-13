@@ -4,16 +4,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   getPendingInvoiceEmail,
+  getPendingInvoiceField,
   isAwaitingCustomerName,
   isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
+  notifyInvoiceUpdated,
   requestVoiceListen,
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
   setHandsfreeEnabled,
   setPendingInvoiceEmail,
+  setPendingInvoiceField,
+  todayIsoLocal,
 } from '@/lib/voice/handsfreeSession';
-import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
+import {
+  invoiceIdFromPath,
+  parsePlatformVoiceCommand,
+} from '@/lib/voice/platformNav';
 import { parseSpokenNumberSuffix } from '@/lib/voice/spokenNumberSuffix';
 import {
   getSpeechRecognitionCtor,
@@ -77,6 +84,52 @@ export default function VoiceHandsfreeDock() {
       if (!raw || processingRef.current) return;
 
       let cmd = parsePlatformVoiceCommand(raw);
+      const pendingField = getPendingInvoiceField();
+      const interruptPending =
+        cmd?.type === 'stop_listening' ||
+        cmd?.type === 'go_back' ||
+        cmd?.type === 'cancel_send';
+      const dictationField =
+        pendingField &&
+        (pendingField.field === 'notes' ||
+          pendingField.field === 'description' ||
+          pendingField.field === 'subject' ||
+          pendingField.field === 'matchKeyword');
+
+      if (pendingField && !interruptPending && (dictationField || !cmd)) {
+        processingRef.current = true;
+        setBusy(true);
+        setError('');
+        setHint('Saving…');
+        try {
+          const res = await fetch('/api/invoices/voice-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              field: pendingField.field,
+              value: raw,
+              invoiceId: pendingField.invoiceId,
+              lineIndex: pendingField.lineIndex,
+              createLine: pendingField.createLine,
+              asOfDate: todayIsoLocal(),
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not update invoice');
+          }
+          setPendingInvoiceField(null);
+          setHint(data.label || 'Saved');
+          notifyInvoiceUpdated();
+          if (data.href) router.push(data.href);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Update failed');
+        } finally {
+          processingRef.current = false;
+          setBusy(false);
+        }
+        return;
+      }
 
       // After “Select customer”, the next utterance is the customer name
       if (!cmd && isAwaitingCustomerName()) {
@@ -136,7 +189,9 @@ export default function VoiceHandsfreeDock() {
             ? `Say the customer name (heard “${raw}”).`
             : isAwaitingInvoiceNumberSuffix()
               ? `Say the number suffix (heard “${raw}”).`
-              : `Didn’t catch “${raw}”. Try “Open Railway Hotel 246”, or say “stop listening”.`
+              : getPendingInvoiceField()
+                ? `Say ${getPendingInvoiceField()?.prompt || 'the value'} (heard “${raw}”).`
+                : `Didn’t catch “${raw}”. Try “Open Railway Hotel 246”, or say “stop listening”.`
         );
         return;
       }
@@ -146,6 +201,7 @@ export default function VoiceHandsfreeDock() {
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
         setPendingInvoiceEmail(null);
+        setPendingInvoiceField(null);
         stopRecognition(true);
         return;
       }
@@ -154,6 +210,7 @@ export default function VoiceHandsfreeDock() {
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
         setPendingInvoiceEmail(null);
+        setPendingInvoiceField(null);
         setHint('Going back…');
         router.back();
         return;
@@ -163,6 +220,9 @@ export default function VoiceHandsfreeDock() {
         if (getPendingInvoiceEmail()) {
           setPendingInvoiceEmail(null);
           setHint('Email cancelled');
+        } else if (getPendingInvoiceField()) {
+          setPendingInvoiceField(null);
+          setHint('Cancelled');
         }
         return;
       }
@@ -213,6 +273,7 @@ export default function VoiceHandsfreeDock() {
           } else {
             setAwaitingCustomerName(false);
             setAwaitingInvoiceNumberSuffix(false);
+            setPendingInvoiceField(null);
           }
           router.push(cmd.href);
           return;
@@ -264,12 +325,41 @@ export default function VoiceHandsfreeDock() {
           return;
         }
 
+        if (cmd.type === 'add_line_item' || cmd.type === 'edit_invoice_field') {
+          const invoiceId = invoiceIdFromPath(pathnameRef.current);
+          const res = await fetch('/api/invoices/voice-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              transcript: raw,
+              invoiceId,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Could not edit invoice');
+          }
+          if (data.needsValue && data.field && data.invoiceId) {
+            setPendingInvoiceField({
+              invoiceId: data.invoiceId,
+              field: data.field,
+              prompt: data.prompt || data.label || 'Say the value…',
+              lineIndex: data.lineIndex,
+              createLine: Boolean(data.createLine),
+            });
+            setHint(data.prompt || data.label);
+            if (data.href) router.push(data.href);
+            return;
+          }
+          setPendingInvoiceField(null);
+          setHint(data.label || cmd.label);
+          notifyInvoiceUpdated();
+          if (data.href) router.push(data.href);
+          return;
+        }
+
         if (cmd.type === 'email_invoice') {
-          const pathId = pathnameRef.current.match(
-            /^\/invoices\/([^/]+)/
-          )?.[1];
-          const invoiceId =
-            pathId && pathId !== 'new' ? pathId : undefined;
+          const invoiceId = invoiceIdFromPath(pathnameRef.current);
           const res = await fetch('/api/invoices/voice-action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -301,7 +391,10 @@ export default function VoiceHandsfreeDock() {
         const res = await fetch('/api/invoices/voice-action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: raw }),
+          body: JSON.stringify({
+            transcript: raw,
+            invoiceId: invoiceIdFromPath(pathnameRef.current),
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -520,12 +613,14 @@ export default function VoiceHandsfreeDock() {
                 lastHeard ||
                 (typeof window !== 'undefined' && getPendingInvoiceEmail()
                   ? `Say send to email ${getPendingInvoiceEmail()?.invoiceNumber || ''}…`
-                  : typeof window !== 'undefined' && isAwaitingCustomerName()
-                  ? 'Say the customer name…'
-                  : typeof window !== 'undefined' &&
-                      isAwaitingInvoiceNumberSuffix()
-                    ? 'Say the number suffix…'
-                    : 'Say next command · “stop listening” to end')}
+                  : typeof window !== 'undefined' && getPendingInvoiceField()
+                    ? getPendingInvoiceField()?.prompt || 'Say the value…'
+                    : typeof window !== 'undefined' && isAwaitingCustomerName()
+                    ? 'Say the customer name…'
+                    : typeof window !== 'undefined' &&
+                        isAwaitingInvoiceNumberSuffix()
+                      ? 'Say the number suffix…'
+                      : 'Say next command · “stop listening” to end')}
             </p>
           </div>
           <button

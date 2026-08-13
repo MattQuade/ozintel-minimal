@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   getPendingInvoiceEmail,
+  getPendingInvoiceField,
   isHandsfreeEnabled,
+  notifyInvoiceUpdated,
   requestVoiceListen,
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
   setPendingInvoiceEmail,
+  setPendingInvoiceField,
+  todayIsoLocal,
 } from '@/lib/voice/handsfreeSession';
 import {
   PLATFORM_VOICE_EXAMPLES,
+  invoiceIdFromPath,
   parsePlatformVoiceCommand,
 } from '@/lib/voice/platformNav';
 import { getSpeechRecognitionCtor } from '@/lib/voice/speechRecognition';
@@ -30,6 +35,7 @@ export default function VoiceNavBar({
   examples = PLATFORM_VOICE_EXAMPLES,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [text, setText] = useState('');
@@ -66,15 +72,63 @@ export default function VoiceNavBar({
     setHint('');
 
     const cmd = parsePlatformVoiceCommand(raw);
+    const pendingField = getPendingInvoiceField();
+    const interruptPending =
+      cmd?.type === 'stop_listening' ||
+      cmd?.type === 'go_back' ||
+      cmd?.type === 'cancel_send';
+    const dictationField =
+      pendingField &&
+      (pendingField.field === 'notes' ||
+        pendingField.field === 'description' ||
+        pendingField.field === 'subject' ||
+        pendingField.field === 'matchKeyword');
+
+    if (pendingField && !interruptPending && (dictationField || !cmd)) {
+      setBusy(true);
+      setHint('Saving…');
+      try {
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            field: pendingField.field,
+            value: raw,
+            invoiceId: pendingField.invoiceId,
+            lineIndex: pendingField.lineIndex,
+            createLine: pendingField.createLine,
+            asOfDate: todayIsoLocal(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not update invoice');
+        }
+        setPendingInvoiceField(null);
+        setHint(data.label || 'Saved');
+        notifyInvoiceUpdated();
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Update failed');
+        setBusy(false);
+        setHint('');
+      }
+      return;
+    }
+
     if (!cmd) {
       setError(
-        `Didn’t catch that. Try “Open Accounting”, “Open Railway Hotel 246”, or “Edit invoice”.`
+        pendingField
+          ? `Say ${pendingField.prompt} (heard “${raw}”).`
+          : `Didn’t catch that. Try “Open Accounting”, “Open Railway Hotel 246”, or “Edit invoice”.`
       );
       return;
     }
 
     if (cmd.type === 'stop_listening') {
       requestVoiceListen(false);
+      setPendingInvoiceField(null);
       setHint('Stopped listening');
       setListening(false);
       return;
@@ -84,14 +138,20 @@ export default function VoiceNavBar({
       setAwaitingCustomerName(false);
       setAwaitingInvoiceNumberSuffix(false);
       setPendingInvoiceEmail(null);
+      setPendingInvoiceField(null);
       setHint('Going back…');
       router.back();
       return;
     }
 
     if (cmd.type === 'cancel_send') {
-      setPendingInvoiceEmail(null);
-      setHint('Email cancelled');
+      if (getPendingInvoiceEmail()) {
+        setPendingInvoiceEmail(null);
+        setHint('Email cancelled');
+      } else if (getPendingInvoiceField()) {
+        setPendingInvoiceField(null);
+        setHint('Cancelled');
+      }
       return;
     }
 
@@ -133,6 +193,7 @@ export default function VoiceNavBar({
       } else {
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
+        setPendingInvoiceField(null);
         setHint(`Opening ${cmd.label}…`);
       }
       setBusy(true);
@@ -204,6 +265,48 @@ export default function VoiceNavBar({
       return;
     }
 
+    if (cmd.type === 'add_line_item' || cmd.type === 'edit_invoice_field') {
+      setBusy(true);
+      setHint(`${cmd.label}…`);
+      try {
+        const res = await fetch('/api/invoices/voice-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: raw,
+            invoiceId: invoiceIdFromPath(pathname),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not edit invoice');
+        }
+        if (data.needsValue && data.field && data.invoiceId) {
+          setPendingInvoiceField({
+            invoiceId: data.invoiceId,
+            field: data.field,
+            prompt: data.prompt || data.label || 'Say the value…',
+            lineIndex: data.lineIndex,
+            createLine: Boolean(data.createLine),
+          });
+          setHint(data.prompt || data.label);
+          if (data.href) router.push(data.href);
+          else setBusy(false);
+          return;
+        }
+        setPendingInvoiceField(null);
+        setHint(data.label || cmd.label);
+        notifyInvoiceUpdated();
+        if (data.href) router.push(data.href);
+        else setBusy(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Command failed');
+        setBusy(false);
+        setHint('');
+      }
+      return;
+    }
+
     if (cmd.type === 'email_invoice') {
       setBusy(true);
       setHint(`${cmd.label}…`);
@@ -211,7 +314,10 @@ export default function VoiceNavBar({
         const res = await fetch('/api/invoices/voice-action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: raw }),
+          body: JSON.stringify({
+            transcript: raw,
+            invoiceId: invoiceIdFromPath(pathname),
+          }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -246,7 +352,10 @@ export default function VoiceNavBar({
       const res = await fetch('/api/invoices/voice-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: raw }),
+        body: JSON.stringify({
+          transcript: raw,
+          invoiceId: invoiceIdFromPath(pathname),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {

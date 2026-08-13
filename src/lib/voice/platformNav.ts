@@ -2,6 +2,7 @@
  * Platform voice commands: navigation + invoice actions.
  */
 
+import type { InvoiceVoiceField } from "@/lib/invoices/applyInvoiceVoiceField";
 import {
   applyInvoiceNumberSuffix,
   invoiceDateSuffixFromDate,
@@ -62,8 +63,17 @@ export type PlatformVoiceAction =
   | {
       type: "email_invoice";
       label: string;
-      /** Optional spoken customer name when not on an invoice page. */
-      customerQuery?: string;
+    }
+  | {
+      type: "add_line_item";
+      label: string;
+    }
+  | {
+      type: "edit_invoice_field";
+      label: string;
+      field: InvoiceVoiceField;
+      /** 1-based line when the user said “line 2”. */
+      lineIndex?: number;
     }
   | {
       type: "confirm_send";
@@ -255,30 +265,6 @@ function parseAppendSuffixCommand(t: string): PlatformVoiceAction | null {
       useIssueDate: true,
     };
   }
-
-  // "add dash zero seven … to invoice number"
-  const m = t.match(
-    /\b(?:add|append|put)\s+(.+?)\s+to\s+(?:the\s+)?invoice\s+numbers?\b/
-  );
-  if (m) {
-    const spoken = m[1].trim();
-    // If they said "date" alone in the capture, use issue date
-    if (/^(the\s+)?date(\s+suffix)?$/.test(spoken)) {
-      return {
-        type: "append_invoice_suffix",
-        label: "Add date to invoice number",
-        useIssueDate: true,
-      };
-    }
-    const suffix = parseSpokenNumberSuffix(spoken);
-    if (!suffix) return null;
-    return {
-      type: "append_invoice_suffix",
-      label: `Add ${suffix} to invoice number`,
-      suffix,
-    };
-  }
-
   return null;
 }
 
@@ -369,25 +355,11 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
     return { type: "cancel_send", label: "Cancel send" };
   }
 
-  // "email invoice" / "send invoice" / "email invoice to Wagga Rugby"
+  // "email invoice" / "send invoice"
   if (
     /^(email|mail|send)\s+(the\s+)?(tax\s+)?invoices?$/.test(t) ||
     /^email\s+(the\s+)?customer$/.test(t)
   ) {
-    return { type: "email_invoice", label: "Email invoice" };
-  }
-  const emailTo = t.match(
-    /^(?:email|mail|send)\s+(?:the\s+)?(?:tax\s+)?invoices?\s+(?:to\s+)?(.+)$/
-  );
-  if (emailTo) {
-    const customerQuery = emailTo[1].replace(/^to\s+/, "").trim();
-    if (customerQuery && !/^(the\s+)?customer$/.test(customerQuery)) {
-      return {
-        type: "email_invoice",
-        label: `Email invoice to ${customerQuery}`,
-        customerQuery,
-      };
-    }
     return { type: "email_invoice", label: "Email invoice" };
   }
 
@@ -505,6 +477,119 @@ function parseOpenInvoiceCommand(t: string): PlatformVoiceAction | null {
   };
 }
 
+const LINE_INDEX_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  last: -1,
+};
+
+function parseTrailingLineIndex(t: string): {
+  rest: string;
+  lineIndex?: number;
+} {
+  const m = t.match(
+    /^(.*?)(?:\s+(?:on\s+|for\s+)?(?:the\s+)?(?:line|item)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|last))$/
+  );
+  if (!m) return { rest: t };
+  const raw = m[2];
+  const n = /^\d+$/.test(raw) ? parseInt(raw, 10) : LINE_INDEX_WORDS[raw];
+  if (!n) return { rest: t };
+  return { rest: m[1].trim(), lineIndex: n };
+}
+
+function fieldAction(
+  field: InvoiceVoiceField,
+  label: string,
+  lineIndex?: number
+): PlatformVoiceAction {
+  return {
+    type: "edit_invoice_field",
+    field,
+    label,
+    lineIndex: lineIndex && lineIndex > 0 ? lineIndex : undefined,
+  };
+}
+
+/**
+ * Field edits once an invoice is open.
+ */
+function parseInvoiceFieldCommand(t: string): PlatformVoiceAction | null {
+  if (
+    /^(add|new)\s+(a\s+|an\s+|the\s+)?(new\s+)?line(\s+item)?$/.test(t) ||
+    /^add\s+(a\s+|an\s+)?new\s+line(\s+item)?$/.test(t) ||
+    /^add\s+line\s+item$/.test(t)
+  ) {
+    return { type: "add_line_item", label: "Add new line item" };
+  }
+
+  const { rest, lineIndex } = parseTrailingLineIndex(t);
+  const lineHint =
+    lineIndex && lineIndex > 0 ? ` line ${lineIndex}` : "";
+
+  if (/^(edit|change|modify)\s+(the\s+)?issue\s+dates?$/.test(rest)) {
+    return fieldAction("issueDate", "Edit issue date");
+  }
+  if (/^(edit|change|modify)\s+(the\s+)?order\s+dates?$/.test(rest)) {
+    return fieldAction("orderDate", "Edit order date");
+  }
+  if (/^(edit|change|modify)\s+(the\s+)?due\s+dates?$/.test(rest)) {
+    return fieldAction("dueDate", "Edit due date");
+  }
+  if (/^(edit|change|modify)\s+(the\s+)?subjects?$/.test(rest)) {
+    return fieldAction("subject", "Edit subject");
+  }
+  if (
+    /^(edit|change|modify)\s+(the\s+)?(bank\s+)?(match\s+)?keywords?$/.test(
+      rest
+    ) ||
+    /^(edit|change|modify)\s+(the\s+)?bank\s+match$/.test(rest)
+  ) {
+    return fieldAction("matchKeyword", "Edit bank match keyword");
+  }
+  if (
+    /^(edit|change|modify)\s+(the\s+)?notes?$/.test(rest) ||
+    /^notes$/.test(rest)
+  ) {
+    return fieldAction("notes", "Edit notes");
+  }
+  if (/^(edit|change|modify)\s+(the\s+)?descriptions?$/.test(rest)) {
+    return fieldAction("description", `Edit description${lineHint}`, lineIndex);
+  }
+  if (
+    /^(edit|change|modify)\s+(the\s+)?(qty|quantity|quantities)$/.test(rest)
+  ) {
+    return fieldAction("quantity", `Edit quantity${lineHint}`, lineIndex);
+  }
+  if (
+    /^(edit|change|modify)\s+(the\s+)?units?(?:\s+prices?)?$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?unit\s+prices?$/.test(rest)
+  ) {
+    return fieldAction("unitPrice", `Edit unit${lineHint}`, lineIndex);
+  }
+  if (/^(edit|change|modify)\s+(the\s+)?accounts?$/.test(rest)) {
+    return fieldAction("account", `Edit account${lineHint}`, lineIndex);
+  }
+  if (
+    /^(edit|change|modify)\s+(the\s+)?(tax|gst)$/.test(rest)
+  ) {
+    return fieldAction("tax", `Edit tax${lineHint}`, lineIndex);
+  }
+  return null;
+}
+
 /**
  * Map a spoken/typed command to navigation or an invoice action.
  */
@@ -522,6 +607,9 @@ export function parsePlatformVoiceCommand(
 
   const edit = parseEditCommand(t);
   if (edit) return edit;
+
+  const field = parseInvoiceFieldCommand(t);
+  if (field) return field;
 
   const openInvoice = parseOpenInvoiceCommand(t);
   if (openInvoice) return openInvoice;
@@ -551,9 +639,16 @@ export const PLATFORM_VOICE_EXAMPLES = [
   "Open Railway Hotel 246",
   "Select customer",
   "Email invoice",
+  "Edit issue date",
   "Go back",
   "Stop listening",
 ];
+
+export function invoiceIdFromPath(pathname: string): string | undefined {
+  const m = String(pathname || "").match(/^\/invoices\/([^/?#]+)/);
+  if (!m || m[1] === "new") return undefined;
+  return m[1];
+}
 
 export {
   applyInvoiceNumberSuffix,

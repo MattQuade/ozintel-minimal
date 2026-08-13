@@ -98,7 +98,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
   useEffect(() => {
     if (!invoiceId) return;
     let cancelled = false;
-    (async () => {
+    const loadInvoice = async () => {
       setLoading(true);
       setError('');
       try {
@@ -168,9 +168,15 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+    void loadInvoice();
+    const onUpdated = () => {
+      void loadInvoice();
+    };
+    window.addEventListener('ozintel-invoice-updated', onUpdated);
     return () => {
       cancelled = true;
+      window.removeEventListener('ozintel-invoice-updated', onUpdated);
     };
   }, [invoiceId]);
 

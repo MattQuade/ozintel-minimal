@@ -191,6 +191,41 @@ export function parseSpokenInvoiceDigits(phrase: string): string | null {
 }
 
 /**
+ * Spoken quantity or unit price: "2", "two", "two point five", "two hundred and eighty".
+ */
+export function parseSpokenAmount(phrase: string): number | null {
+  const raw = String(phrase || "")
+    .toLowerCase()
+    .replace(/\$/g, " ")
+    .replace(/\b(dollars?|bucks|each|ex\s+gst|including\s+gst|incl\s+gst)\b/g, " ")
+    .replace(/,/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) return null;
+
+  const typed = raw.match(/^-?\d+(?:\.\d+)?$/);
+  if (typed) {
+    const n = parseFloat(typed[0]);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const point = raw.match(/^(.*)\s+point\s+(.+)$/);
+  if (point) {
+    const whole = parseSpokenInvoiceDigits(point[1]);
+    const frac = parseSpokenInvoiceDigits(point[2]);
+    if (whole != null && frac != null) {
+      const n = parseFloat(`${whole}.${frac}`);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+
+  const digits = parseSpokenInvoiceDigits(raw);
+  if (digits == null) return null;
+  const n = parseFloat(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Convert a spoken/typed suffix phrase to e.g. "-0709-26".
  * Returns null if nothing useful was parsed.
  */

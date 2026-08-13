@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import VoiceNavBar from '@/components/VoiceNavBar';
 import InvoiceTaxDocument from '@/components/invoices/InvoiceTaxDocument';
 import { formatAuDate } from '@/lib/accounting/dates';
 import { computeLineTotals } from '@/lib/accounting/invoiceMath';
@@ -122,6 +123,15 @@ export default function InvoiceDetailPage() {
         if (list[0]) setPayBankId(list[0].id);
       })
       .catch(() => {});
+  }, [load]);
+
+  useEffect(() => {
+    const onUpdated = () => {
+      void load();
+    };
+    window.addEventListener('ozintel-invoice-updated', onUpdated);
+    return () =>
+      window.removeEventListener('ozintel-invoice-updated', onUpdated);
   }, [load]);
 
   const emailInvoice = async () => {
@@ -432,6 +442,17 @@ export default function InvoiceDetailPage() {
             )}
           </div>
         </div>
+
+        <VoiceNavBar
+          variant="hub"
+          examples={[
+            'Edit issue date',
+            'Edit order date',
+            'Add new line item',
+            'Edit notes',
+            'Email invoice',
+          ]}
+        />
 
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm">

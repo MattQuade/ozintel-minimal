@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
+  getInvoiceById,
   readInvoices,
   upsertInvoice,
   type Invoice,
 } from "@/lib/accounting/invoices";
 import { readCustomers } from "@/lib/accounting/customers";
 import { matchCustomerByVoice } from "@/lib/invoices/voiceInvoiceParse";
+import {
+  applyInvoiceVoiceField,
+  fieldPrompt,
+  type InvoiceVoiceField,
+} from "@/lib/invoices/applyInvoiceVoiceField";
 import {
   resolveInvoiceRecipient,
   sendInvoiceEmail,
@@ -84,6 +90,44 @@ export async function POST(req: Request) {
   return access.run(async () => {
     try {
       const body = await req.json().catch(() => ({}));
+      const field = String(body.field || "").trim() as InvoiceVoiceField | "";
+      if (field) {
+        const invoiceId = String(body.invoiceId || "").trim();
+        if (!invoiceId) {
+          return NextResponse.json(
+            { success: false, error: "Open an invoice first" },
+            { status: 400 }
+          );
+        }
+        const invoice = await getInvoiceById(invoiceId);
+        if (!invoice) {
+          return NextResponse.json(
+            { success: false, error: "Invoice not found" },
+            { status: 404 }
+          );
+        }
+        const applied = await applyInvoiceVoiceField({
+          invoice,
+          field,
+          value: String(body.value ?? body.transcript ?? ""),
+          lineIndex:
+            typeof body.lineIndex === "number" ? body.lineIndex : undefined,
+          createLine: Boolean(body.createLine),
+          asOfDate: String(body.asOfDate || ""),
+        });
+        return NextResponse.json({
+          success: true,
+          action: "edit_invoice_field",
+          reload: true,
+          href: applied.href,
+          label: applied.label,
+          invoice: {
+            id: applied.invoice.id,
+            number: applied.invoice.number,
+          },
+        });
+      }
+
       const transcript = String(body.transcript || "").trim();
       if (!transcript) {
         return NextResponse.json(
@@ -438,49 +482,56 @@ export async function POST(req: Request) {
         });
       }
 
+      if (cmd.type === "add_line_item" || cmd.type === "edit_invoice_field") {
+        const invoiceId = String(body.invoiceId || "").trim();
+        if (!invoiceId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Open an invoice first, then say that command",
+            },
+            { status: 400 }
+          );
+        }
+        const invoice = await getInvoiceById(invoiceId);
+        if (!invoice) {
+          return NextResponse.json(
+            { success: false, error: "Invoice not found" },
+            { status: 404 }
+          );
+        }
+        const nextField: InvoiceVoiceField =
+          cmd.type === "add_line_item" ? "description" : cmd.field;
+        const lineEdit =
+          cmd.type === "add_line_item" ||
+          nextField === "description" ||
+          nextField === "quantity" ||
+          nextField === "unitPrice" ||
+          nextField === "account" ||
+          nextField === "tax";
+        return NextResponse.json({
+          success: true,
+          action: cmd.type,
+          needsValue: true,
+          field: nextField,
+          createLine: cmd.type === "add_line_item",
+          lineIndex:
+            cmd.type === "edit_invoice_field" ? cmd.lineIndex : undefined,
+          invoiceId: invoice.id,
+          href: lineEdit
+            ? `/invoices/${invoice.id}/edit`
+            : `/invoices/${invoice.id}`,
+          prompt: fieldPrompt(nextField),
+          label: fieldPrompt(nextField),
+        });
+      }
+
       if (cmd.type === "email_invoice") {
         const invoices = await readInvoices();
         const requestedId = String(body.invoiceId || "").trim();
         let invoice: Invoice | null = requestedId
           ? invoices.find((i) => i.id === requestedId) || null
           : null;
-
-        if (!invoice && cmd.customerQuery) {
-          const { match, ambiguous, candidates } = matchCustomerByVoice(
-            cmd.customerQuery,
-            await readCustomers()
-          );
-          if (ambiguous) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: `Several customers match “${cmd.customerQuery}” — pick one`,
-                candidates,
-                ambiguous: true,
-              },
-              { status: 409 }
-            );
-          }
-          if (!match) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: `No customer matching “${cmd.customerQuery}”`,
-              },
-              { status: 404 }
-            );
-          }
-          invoice = latestSendable(invoices, match.id);
-          if (!invoice) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: `No invoice found for ${match.name}`,
-              },
-              { status: 404 }
-            );
-          }
-        }
 
         if (!invoice) invoice = latestSendable(invoices);
         if (!invoice) {
