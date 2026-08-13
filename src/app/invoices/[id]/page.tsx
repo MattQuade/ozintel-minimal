@@ -7,6 +7,7 @@ import AccountingGate from '@/components/AccountingGate';
 import VoiceNavBar from '@/components/VoiceNavBar';
 import InvoiceTaxDocument from '@/components/invoices/InvoiceTaxDocument';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
 import { computeLineTotals } from '@/lib/accounting/invoiceMath';
 
 type InvoiceLine = {
@@ -103,7 +104,7 @@ export default function InvoiceDetailPage() {
       setOrderDate(String(data.orderDate || '').slice(0, 10));
       setSubject(String(data.subject || ''));
       setPrintMetaDirty(false);
-      setInvoiceNumber(String(data.number || ''));
+      setInvoiceNumber(displayInvoiceNumber(String(data.number || '')));
       setNumberDirty(false);
       setPayAmount(
         data.amountDue > 0 ? String(data.amountDue) : ''
@@ -192,7 +193,7 @@ export default function InvoiceDetailPage() {
       if (!res.ok || !data.success) throw new Error(data.error || 'Action failed');
       setInvoice(data.invoice);
       if (data.invoice?.number) {
-        setInvoiceNumber(String(data.invoice.number));
+        setInvoiceNumber(displayInvoiceNumber(String(data.invoice.number)));
         setNumberDirty(false);
       }
       if (data.invoice?.amountDue != null) {
@@ -270,7 +271,7 @@ export default function InvoiceDetailPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Save failed');
       setInvoice(data.invoice);
-      setInvoiceNumber(String(data.invoice.number || ''));
+      setInvoiceNumber(displayInvoiceNumber(String(data.invoice.number || '')));
       setNumberDirty(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -346,7 +347,9 @@ export default function InvoiceDetailPage() {
                   </button>
                 </div>
               ) : (
-                <h1 className="text-3xl font-bold">{invoice.number}</h1>
+                <h1 className="text-3xl font-bold">
+                  {displayInvoiceNumber(invoice.number)}
+                </h1>
               )}
               <span
                 className={`px-2.5 py-0.5 rounded-md text-xs font-medium capitalize ${

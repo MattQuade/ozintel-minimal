@@ -3,7 +3,7 @@ import type { Invoice } from "@/lib/accounting/invoices";
 import { getCustomerById } from "@/lib/accounting/customers";
 import { buildInvoiceEmail } from "@/lib/invoices/buildInvoiceEmail";
 import { buildInvoicePdf } from "@/lib/invoices/buildInvoicePdf";
-import { INVOICE_BRAND } from "@/lib/invoices/invoiceBrand";
+import { INVOICE_BRAND, displayInvoiceNumber } from "@/lib/invoices/invoiceBrand";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -71,7 +71,7 @@ export async function sendInvoiceEmail(input: {
   }
   const { subject, text, html } = buildInvoiceEmail(invoice);
   const pdf = await buildInvoicePdf(invoice);
-  const safeNumber = String(invoice.number || "invoice").replace(
+  const safeNumber = displayInvoiceNumber(invoice.number || "invoice").replace(
     /[^\w.-]+/g,
     "-"
   );

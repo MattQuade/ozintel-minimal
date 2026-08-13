@@ -26,6 +26,11 @@ export const INVOICE_BRAND = {
   defaultSubject: envText("NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT", "Draught"),
 };
 
+/** Print/display number — drop legacy INV-; the row already says Invoice No. */
+export function displayInvoiceNumber(number: string): string {
+  return String(number || "").trim().replace(/^INV-/i, "");
+}
+
 const SUBJECT_SMALL = new Set(["a", "an", "and", "of", "the", "to", "for", "or"]);
 
 /** Capitalise each subject word: "draft packaged" → "Draft Packaged". */

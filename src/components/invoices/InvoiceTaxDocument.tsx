@@ -2,7 +2,10 @@
 
 import { useMemo } from 'react';
 import { formatAuDate } from '@/lib/accounting/dates';
-import { titleCaseSubject } from '@/lib/invoices/invoiceBrand';
+import {
+  displayInvoiceNumber,
+  titleCaseSubject,
+} from '@/lib/invoices/invoiceBrand';
 import {
   computeLineTotals,
   isFreightLine,
@@ -160,7 +163,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
               </>
             ) : null}
             <div>Invoice No.:</div>
-            <div>{invoice.number}</div>
+            <div>{displayInvoiceNumber(invoice.number)}</div>
             {subject ? (
               <>
                 <div>Subject:</div>

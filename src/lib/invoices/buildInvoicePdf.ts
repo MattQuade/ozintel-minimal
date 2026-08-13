@@ -9,6 +9,7 @@ import {
 import type { Invoice } from "@/lib/accounting/invoices";
 import {
   INVOICE_BRAND,
+  displayInvoiceNumber,
   fmtMoney,
   invoiceSubjectLine,
   lessLabel,
@@ -124,7 +125,7 @@ export async function buildInvoicePdf(invoice: Invoice): Promise<Buffer> {
   ];
   const orderDate = String(invoice.orderDate || "").trim();
   if (orderDate) meta.push(["Order Date:", formatAuDate(orderDate)]);
-  meta.push(["Invoice No.:", invoice.number]);
+  meta.push(["Invoice No.:", displayInvoiceNumber(invoice.number)]);
   const subject = invoiceSubjectLine(invoice.subject);
   if (subject) meta.push(["Subject:", subject]);
 

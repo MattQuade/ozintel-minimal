@@ -34,7 +34,7 @@ export type PlatformVoiceAction =
       /** When set, apply immediately; otherwise wait for spoken suffix. */
       suffix?: string;
       useIssueDate?: boolean;
-      /** Replace the whole number, e.g. INV-0251. */
+      /** Replace the whole number, e.g. 0251. */
       replacement?: string;
     }
   | {

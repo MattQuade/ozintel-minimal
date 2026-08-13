@@ -322,7 +322,7 @@ export function invoiceDateSuffixFromDate(
 }
 
 /**
- * Spoken/typed full invoice number → INV-0246 or INV-0246-0709-26.
+ * Spoken/typed full invoice number → 0246 or 0246-0709-26.
  * Does not treat a leading “dash …” as a whole number (that stays a suffix).
  */
 export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
@@ -335,14 +335,10 @@ export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
   if (/^(dash|hyphen|minus|-)\b/.test(raw)) return null;
 
   const compact = raw.replace(/\s+/g, "");
-  const typed = compact.match(/^inv-?(\d+)((?:-\d+)*)$/i);
-  if (typed) {
+  const typed = compact.match(/^(?:inv-?)?(\d+)((?:-\d+)*)$/i);
+  if (typed && /^\d/.test(typed[1])) {
     const seq = typed[1].replace(/^0+(?=\d)/, "") || typed[1];
-    return `INV-${seq.padStart(4, "0")}${typed[2] || ""}`;
-  }
-  if (/^\d+$/.test(compact)) {
-    const seq = compact.replace(/^0+(?=\d)/, "") || compact;
-    return `INV-${seq.padStart(4, "0")}`;
+    return `${seq.padStart(4, "0")}${typed[2] || ""}`;
   }
 
   const parts = raw
@@ -354,7 +350,7 @@ export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
   const head = parts[0].replace(/^(inv|invoice|number|no)\s+/g, "").trim();
   const seq = parseSpokenInvoiceDigits(head);
   if (!seq) return null;
-  let out = `INV-${seq.padStart(4, "0")}`;
+  let out = seq.padStart(4, "0");
   if (parts.length === 1) return out;
 
   const suffix = parseSpokenNumberSuffix(parts.slice(1).join(" dash "));
@@ -367,7 +363,7 @@ export function applyInvoiceNumberSuffix(
   currentNumber: string,
   suffix: string
 ): string {
-  const base = String(currentNumber || "").trim();
+  const base = String(currentNumber || "").trim().replace(/^INV-/i, "");
   let s = String(suffix || "").trim();
   if (!s) return base;
   if (!s.startsWith("-")) s = `-${s}`;

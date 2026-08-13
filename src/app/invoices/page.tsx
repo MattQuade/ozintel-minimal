@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
 import VoiceNavBar from '@/components/VoiceNavBar';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
 
 type Invoice = {
   id: string;
@@ -192,7 +193,7 @@ function InvoicesContent() {
                     href={`/invoices/${inv.id}`}
                     className="font-medium text-orange-700 hover:underline"
                   >
-                    {inv.number}
+                    {displayInvoiceNumber(inv.number)}
                   </Link>
                 </td>
                 <td className="p-3">{inv.customerName}</td>

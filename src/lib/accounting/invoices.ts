@@ -258,13 +258,19 @@ export async function createDraftFromCustomerLast(
   };
 }
 
+function invoiceSeq(number: string): number {
+  const m = String(number || "")
+    .trim()
+    .match(/^(?:INV-)?(\d+)/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 function nextInvoiceNumber(invoices: Invoice[]): string {
   let max = 0;
   for (const inv of invoices) {
-    const m = String(inv.number || "").match(/INV-(\d+)/i);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
+    max = Math.max(max, invoiceSeq(inv.number));
   }
-  return `INV-${String(max + 1).padStart(4, "0")}`;
+  return String(max + 1).padStart(4, "0");
 }
 
 function assertUniqueInvoiceNumber(
@@ -272,12 +278,15 @@ function assertUniqueInvoiceNumber(
   number: string,
   excludeId?: string
 ) {
-  const normalized = number.trim().toLowerCase();
+  const normalized = number.trim().replace(/^INV-/i, "").toLowerCase();
   if (!normalized) throw new Error("Invoice number is required");
   const clash = invoices.find(
     (inv) =>
       inv.id !== excludeId &&
-      String(inv.number || "").trim().toLowerCase() === normalized
+      String(inv.number || "")
+        .trim()
+        .replace(/^INV-/i, "")
+        .toLowerCase() === normalized
   );
   if (clash) {
     throw new Error(`Invoice number "${number.trim()}" is already in use`);
@@ -412,7 +421,9 @@ export async function upsertInvoice(
     const requestedNumber = String(
       input.number !== undefined ? input.number : existing?.number || ""
     ).trim();
-    const number = requestedNumber || nextInvoiceNumber(invoices);
+    const number = (
+      requestedNumber || nextInvoiceNumber(invoices)
+    ).replace(/^INV-/i, "");
     assertUniqueInvoiceNumber(invoices, number, existing?.id);
 
     const base: Invoice = {

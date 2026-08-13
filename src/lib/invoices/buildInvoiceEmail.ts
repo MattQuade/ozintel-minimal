@@ -8,6 +8,7 @@ import {
 import type { Invoice } from "@/lib/accounting/invoices";
 import {
   INVOICE_BRAND,
+  displayInvoiceNumber,
   fmtMoney,
   invoiceSubjectLine,
   lessLabel,
@@ -81,7 +82,7 @@ export function buildInvoiceEmail(invoice: Invoice): {
       <tr><td style="width:8rem">To:</td><td>${esc(invoice.customerName)}</td></tr>
       <tr><td>Date:</td><td>${esc(formatAuDate(invoice.issueDate))}</td></tr>
       ${orderDate ? `<tr><td>Order Date:</td><td>${esc(formatAuDate(orderDate))}</td></tr>` : ""}
-      <tr><td>Invoice No.:</td><td>${esc(invoice.number)}</td></tr>
+      <tr><td>Invoice No.:</td><td>${esc(displayInvoiceNumber(invoice.number))}</td></tr>
       ${subjectLine ? `<tr><td>Subject:</td><td>${esc(subjectLine)}</td></tr>` : ""}
     </table>
     <table style="width:100%;border-collapse:collapse;margin-top:20px">
@@ -110,7 +111,7 @@ export function buildInvoiceEmail(invoice: Invoice): {
     `To: ${invoice.customerName}`,
     `Date: ${formatAuDate(invoice.issueDate)}`,
     orderDate ? `Order Date: ${formatAuDate(orderDate)}` : "",
-    `Invoice No.: ${invoice.number}`,
+    `Invoice No.: ${displayInvoiceNumber(invoice.number)}`,
     subjectLine ? `Subject: ${subjectLine}` : "",
     "",
     ...textLines,
@@ -131,7 +132,7 @@ export function buildInvoiceEmail(invoice: Invoice): {
     .join("\n");
 
   return {
-    subject: `Tax Invoice ${invoice.number} — ${brand.businessName}`,
+    subject: `Tax Invoice ${displayInvoiceNumber(invoice.number)} — ${brand.businessName}`,
     text,
     html,
   };

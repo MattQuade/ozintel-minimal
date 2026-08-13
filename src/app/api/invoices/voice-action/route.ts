@@ -50,14 +50,12 @@ function latestDraft(invoices: Invoice[]): Invoice | null {
   return drafts[0];
 }
 
-/** INV-0246 or INV-0246-0709-26 → 246 */
+/** 0246, INV-0246, or 0246-0709-26 → 246 */
 function primaryInvoiceSeq(number: string): number | null {
   const raw = String(number || "").trim();
-  const inv = raw.match(/INV-(\d+)/i);
-  if (inv) return parseInt(inv[1], 10);
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return null;
-  const n = parseInt(digits, 10);
+  const m = raw.match(/^(?:INV-)?(\d+)/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
   return Number.isFinite(n) ? n : null;
 }
 

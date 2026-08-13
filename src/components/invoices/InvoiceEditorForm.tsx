@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatAuDate } from '@/lib/accounting/dates';
+import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
 import {
   computeInvoiceTotals,
   computeLineTotals,
@@ -118,7 +119,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         setSubject(String(data.subject || ''));
         setNotes(String(data.notes || ''));
         setMatchKeyword(String(data.matchKeyword || ''));
-        setInvoiceNumber(String(data.number || ''));
+        setInvoiceNumber(displayInvoiceNumber(String(data.number || '')));
         const loaded: LineDraft[] = Array.isArray(data.lines)
           ? data.lines.map(
               (
