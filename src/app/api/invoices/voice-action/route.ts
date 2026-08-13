@@ -262,6 +262,14 @@ export async function POST(req: Request) {
         });
       }
 
+      if (cmd.type === "scroll_down" || cmd.type === "scroll_up") {
+        return NextResponse.json({
+          success: true,
+          action: cmd.type,
+          label: cmd.label,
+        });
+      }
+
       if (cmd.type === "go_back") {
         return NextResponse.json({
           success: true,

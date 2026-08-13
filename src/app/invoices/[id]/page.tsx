@@ -450,6 +450,7 @@ export default function InvoiceDetailPage() {
             'Edit order date',
             'Add new line item',
             'Edit notes',
+            'Scroll down',
             'Email invoice',
           ]}
         />

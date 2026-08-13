@@ -53,6 +53,10 @@ export type PlatformVoiceAction =
       label: string;
     }
   | {
+      type: "scroll_down" | "scroll_up";
+      label: string;
+    }
+  | {
       type: "open_invoice";
       label: string;
       /** Spoken customer name; empty means match by number only. */
@@ -343,6 +347,21 @@ function parseEditCommand(t: string): PlatformVoiceAction | null {
       type: "go_back",
       label: "Go back",
     };
+  }
+
+  if (
+    /^(scroll|page)\s+down$/.test(t) ||
+    /^scroll\s+(the\s+)?(page|screen)\s+down$/.test(t) ||
+    /^down\s+(the\s+)?(page|screen)$/.test(t)
+  ) {
+    return { type: "scroll_down", label: "Scroll down" };
+  }
+  if (
+    /^(scroll|page)\s+up$/.test(t) ||
+    /^scroll\s+(the\s+)?(page|screen)\s+up$/.test(t) ||
+    /^up\s+(the\s+)?(page|screen)$/.test(t)
+  ) {
+    return { type: "scroll_up", label: "Scroll up" };
   }
 
   if (
@@ -640,6 +659,7 @@ export const PLATFORM_VOICE_EXAMPLES = [
   "Select customer",
   "Email invoice",
   "Edit issue date",
+  "Scroll down",
   "Go back",
   "Stop listening",
 ];

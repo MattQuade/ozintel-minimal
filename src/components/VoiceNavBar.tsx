@@ -19,6 +19,7 @@ import {
   invoiceIdFromPath,
   parsePlatformVoiceCommand,
 } from '@/lib/voice/platformNav';
+import { scrollPageByViewport } from '@/lib/voice/scrollPage';
 import { getSpeechRecognitionCtor } from '@/lib/voice/speechRecognition';
 
 type Variant = 'home' | 'hub';
@@ -76,7 +77,9 @@ export default function VoiceNavBar({
     const interruptPending =
       cmd?.type === 'stop_listening' ||
       cmd?.type === 'go_back' ||
-      cmd?.type === 'cancel_send';
+      cmd?.type === 'cancel_send' ||
+      cmd?.type === 'scroll_down' ||
+      cmd?.type === 'scroll_up';
     const dictationField =
       pendingField &&
       (pendingField.field === 'notes' ||
@@ -141,6 +144,12 @@ export default function VoiceNavBar({
       setPendingInvoiceField(null);
       setHint('Going back…');
       router.back();
+      return;
+    }
+
+    if (cmd.type === 'scroll_down' || cmd.type === 'scroll_up') {
+      scrollPageByViewport(cmd.type === 'scroll_up' ? 'up' : 'down');
+      setHint(cmd.label);
       return;
     }
 
