@@ -94,7 +94,8 @@ export default function ReportsPage() {
           >
             <h2 className="text-2xl font-semibold mb-2">BAS / GST</h2>
             <p className="text-gray-500">
-              Quarterly GST collected and paid from taxable ledger lines.
+              Accrual Activity Statement: 1A, 1B, G1–G11, W1/W2 from posted pay
+              runs. Lock the quarter before you copy figures into ATO Online.
             </p>
           </Link>
         </div>

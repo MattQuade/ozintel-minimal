@@ -588,7 +588,8 @@ export async function authoriseInvoice(id: string): Promise<Invoice> {
         accountCode: code,
         accountName: name || acc?.name || "",
         hasGST: false,
-        noGST: true,
+        noGST: Boolean(gst <= 0.009),
+        taxCode: gst > 0.009 ? "GST" : "FRE",
         /** Tax-exclusive revenue — BAS converts when gstExclusive */
         ...(gst > 0.009
           ? { gstExclusive: true, gstAmount: gst }
@@ -614,6 +615,7 @@ export async function authoriseInvoice(id: string): Promise<Invoice> {
         accountName: gstAcc?.name || "GST",
         hasGST: false,
         noGST: true,
+        taxCode: "N-T" as const,
         reconciled: false,
         source: "invoice",
         invoiceId: inv.id,
@@ -748,7 +750,8 @@ export async function voidInvoice(id: string): Promise<Invoice> {
         accountCode: code,
         accountName: name || acc?.name || "",
         hasGST: false,
-        noGST: true,
+        noGST: Boolean(gst <= 0.009),
+        taxCode: gst > 0.009 ? "GST" : "FRE",
         ...(gst > 0.009
           ? { gstExclusive: true, gstAmount: gst }
           : {}),
@@ -773,6 +776,7 @@ export async function voidInvoice(id: string): Promise<Invoice> {
         accountName: gstAcc?.name || "GST",
         hasGST: false,
         noGST: true,
+        taxCode: "N-T" as const,
         reconciled: false,
         source: "invoice-void",
         invoiceId: inv.id,
@@ -870,6 +874,7 @@ export async function recordInvoicePayment(
         bankAccountName: bank.name,
         hasGST: false,
         noGST: true,
+        taxCode: "N-T" as const,
         reconciled,
         source: "invoice-payment",
         invoiceId: inv.id,
@@ -888,6 +893,7 @@ export async function recordInvoicePayment(
         accountName: ar?.name || "Accounts Receivable",
         hasGST: false,
         noGST: true,
+        taxCode: "N-T" as const,
         reconciled,
         source: "invoice-payment",
         invoiceId: inv.id,

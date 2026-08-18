@@ -11,6 +11,8 @@ import {
   getRepoSeedLedgerPath,
   getRepoSeedRulesPath,
 } from "@/lib/dataPaths";
+import { stampLedgerGstFields } from "@/lib/accounting/gstTax";
+import { assertDatesUnlocked } from "@/lib/accounting/basPeriods";
 
 export type CoaAccount = {
   code: string;
@@ -37,6 +39,11 @@ export type LedgerEntry = {
   timestamp?: string;
   hasGST?: boolean;
   noGST?: boolean;
+  /** GST | CAP | FRE | EXP | INP | N-T */
+  taxCode?: string;
+  gstAmount?: number;
+  gstExclusive?: boolean;
+  amountIncludesGst?: boolean;
   reconciled?: boolean;
   /** Receipt evidence ids stored under data/accounting/receipts/ */
   receiptIds?: string[];
@@ -244,6 +251,8 @@ export async function appendLedgerEntries(
   savedEntries: LedgerEntry[];
 }> {
   return withLedgerLock(async () => {
+    await assertDatesUnlocked(incoming.map((e) => String(e.date || "")));
+    const coa = await readCoa();
     const ledger = await readLedgerUnlocked();
     const stamped = incoming.map((e, index) => {
       const receiptIds = Array.isArray(e.receiptIds)
@@ -251,9 +260,15 @@ export async function appendLedgerEntries(
             (x): x is string => typeof x === "string" && Boolean(x.trim())
           )
         : undefined;
+      const gst = stampLedgerGstFields(e, coa);
       return ensureEntryId(
         {
           ...e,
+          taxCode: gst.taxCode,
+          gstAmount: gst.gstAmount,
+          noGST: gst.noGST,
+          hasGST: gst.hasGST,
+          amountIncludesGst: gst.amountIncludesGst,
           ...(receiptIds && receiptIds.length > 0 ? { receiptIds } : {}),
           timestamp: e.timestamp || new Date().toISOString(),
           id: e.id || `LE${Date.now()}-${index}`,
@@ -279,10 +294,21 @@ export async function updateLedgerEntry(
     const ledger = await readLedgerUnlocked();
     const idx = ledger.findIndex((e) => e.id === patch.id);
     if (idx < 0) throw new Error("Entry not found");
-    const updated: LedgerEntry = {
+    const merged: LedgerEntry = {
       ...ledger[idx],
       ...patch,
       id: ledger[idx].id,
+    };
+    await assertDatesUnlocked([ledger[idx].date, merged.date]);
+    const coa = await readCoa();
+    const gst = stampLedgerGstFields(merged, coa);
+    const updated: LedgerEntry = {
+      ...merged,
+      taxCode: gst.taxCode,
+      gstAmount: gst.gstAmount,
+      noGST: gst.noGST,
+      hasGST: gst.hasGST,
+      amountIncludesGst: gst.amountIncludesGst,
     };
     ledger[idx] = updated;
     await writeLedgerUnlocked(ledger);
@@ -301,6 +327,8 @@ export async function deleteLedgerEntries(ids: string[]): Promise<number> {
   if (idSet.size === 0) return 0;
   return withLedgerLock(async () => {
     const ledger = await readLedgerUnlocked();
+    const toDelete = ledger.filter((e) => idSet.has(e.id));
+    await assertDatesUnlocked(toDelete.map((e) => e.date));
     const next = ledger.filter((e) => !idSet.has(e.id));
     const deleted = ledger.length - next.length;
     if (deleted > 0) await writeLedgerUnlocked(next);
@@ -309,7 +337,12 @@ export async function deleteLedgerEntries(ids: string[]): Promise<number> {
 }
 
 export async function resetLedger() {
-  return withLedgerLock(() => writeLedgerUnlocked([]));
+  return withLedgerLock(async () => {
+    await assertDatesUnlocked(
+      (await readLedgerUnlocked()).map((e) => e.date)
+    );
+    await writeLedgerUnlocked([]);
+  });
 }
 
 export async function readCoa(): Promise<CoaAccount[]> {

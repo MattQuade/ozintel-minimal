@@ -5,6 +5,18 @@ import {
   parseFlexibleDate,
   toIsoDateInput,
 } from "@/lib/accounting/dates";
+import {
+  GST_METHOD,
+  accountCodeOf,
+  gstAbsOnLine,
+  resolveTaxCode,
+  signedGst,
+  signedInclusive,
+  type BasBoxId,
+  type BasSourceLine,
+  type GstTaxCode,
+  type PayRunForBas,
+} from "@/lib/accounting/gstTax";
 
 export type ReportLine = {
   code: string;
@@ -34,19 +46,38 @@ export type BalanceSheetReport = {
   entryCount: number;
 };
 
+export type BasBox = {
+  id: BasBoxId;
+  label: string;
+  amount: number;
+  lineCount: number;
+  lines: BasSourceLine[];
+};
+
 export type BasReport = {
+  gstMethod: typeof GST_METHOD;
   period: { from: string; to: string; label: string };
+  boxes: BasBox[];
   gstCollected: number;
   gstPaid: number;
   netGst: number;
   g1TotalSales: number;
+  g2ExportSales: number;
+  g3GstFreeSales: number;
+  g4InputTaxedSales: number;
+  g5: number;
+  g6: number;
+  g7Adjustments: number;
+  g8: number;
+  g9GstOnSales: number;
   g10CapitalPurchases: number;
   g11NonCapitalPurchases: number;
   wagesTotal: number;
-  paygWithheldEstimate: number;
+  paygWithheld: number;
   taxableSalesCount: number;
   taxablePurchaseCount: number;
   entryCount: number;
+  payRunCount: number;
   note: string;
 };
 
@@ -339,48 +370,64 @@ export function buildBalanceSheet(
   };
 }
 
-function isGstFree(
-  entry: LedgerEntry,
-  coaByCode: Map<string, CoaAccount>
-): boolean {
-  if (entry.noGST === true) return true;
-  if (entry.hasGST === false) return true;
-  if (entry.hasGST === true) return false;
-  const code = resolveAccountCode(entry);
-  const coa = code ? coaByCode.get(code) : undefined;
-  if (coa?.noGST) return true;
-  const name = resolveAccountName(entry, coaByCode).toLowerCase();
-  if (
-    name.includes("wage") ||
-    name.includes("salary") ||
-    name.includes("payg") ||
-    name.includes("super")
-  ) {
-    return true;
-  }
-  return false;
+function pushLine(
+  buckets: Map<BasBoxId, BasSourceLine[]>,
+  id: BasBoxId,
+  line: BasSourceLine
+) {
+  const list = buckets.get(id) || [];
+  list.push(line);
+  buckets.set(id, list);
+}
+
+function box(
+  id: BasBoxId,
+  label: string,
+  amount: number,
+  buckets: Map<BasBoxId, BasSourceLine[]>
+): BasBox {
+  const lines = buckets.get(id) || [];
+  return {
+    id,
+    label,
+    amount: round2(amount),
+    lineCount: lines.length,
+    lines,
+  };
+}
+
+function payRunsInPeriod(payRuns: PayRunForBas[], from: string, to: string) {
+  return payRuns.filter((run) => {
+    if (run.status !== "posted" && run.status !== "stp_submitted") return false;
+    const day = toIsoDateInput(run.paymentDate || "");
+    return Boolean(day) && day >= from && day <= to;
+  });
 }
 
 /**
- * Simple BAS-style GST summary (GST-inclusive amounts ÷ 11).
- * G1 = taxable sales (ex GST), G10 = capital, G11 = non-capital purchases (ex GST).
- * PAYG: prefer credits to 909 PAYGW Payable from payroll; else 15% of wages (indicative).
+ * Accrual Activity Statement.
+ * Sales tax point = invoice / ledger date. Purchases = ledger date.
+ * W1/W2 from posted pay runs (payment date). Super is not W1.
  */
 export function buildBasSummary(
   entries: LedgerEntry[],
   coa: CoaAccount[],
   from: string,
-  to: string
+  to: string,
+  payRuns: PayRunForBas[] = []
 ): BasReport {
   const coaByCode = new Map(coa.map((a) => [a.code, a]));
   const fy = getAuFyBounds(new Date(from + "T12:00:00"));
+  const buckets = new Map<BasBoxId, BasSourceLine[]>();
+
+  let g1 = 0;
+  let g2 = 0;
+  let g3 = 0;
+  let g4 = 0;
+  let g10 = 0;
+  let g11 = 0;
   let gstCollected = 0;
   let gstPaid = 0;
-  let g1Inc = 0;
-  let g10Inc = 0;
-  let g11Inc = 0;
-  let wagesTotal = 0;
-  let paygFromLedger = 0;
   let taxableSalesCount = 0;
   let taxablePurchaseCount = 0;
   let entryCount = 0;
@@ -391,99 +438,147 @@ export function buildBasSummary(
     entryCount += 1;
 
     const type = String(entry.type || "");
-    const amount = Number(entry.amount) || 0;
-    const abs = Math.abs(amount);
-    if (abs < 0.005) continue;
+    const taxCode: GstTaxCode = resolveTaxCode(entry, coaByCode);
+    if (taxCode === "N-T") continue;
+    if (type !== "Revenue" && type !== "Expense" && taxCode !== "CAP") continue;
 
-    const code = resolveAccountCode(entry);
-    const coaAcc = code ? coaByCode.get(code) : undefined;
-    const name = resolveAccountName(entry, coaByCode).toLowerCase();
+    const gstAbs = gstAbsOnLine(entry, taxCode);
+    const incl = signedInclusive(entry, taxCode, gstAbs);
+    if (Math.abs(incl) < 0.005 && gstAbs < 0.005) continue;
 
-    // Payroll posts Cr 909 (negative amount) = PAYG withheld
-    if (code === "909") {
-      paygFromLedger += amount < 0 ? abs : -abs;
-    }
+    const gstSigned = signedGst(entry, taxCode, gstAbs, incl);
+    const sourceLine: BasSourceLine = {
+      id: String(entry.id || ""),
+      date: String(entry.date || ""),
+      description: String(entry.description || ""),
+      accountCode: accountCodeOf(entry) || resolveAccountCode(entry),
+      accountName: resolveAccountName(entry, coaByCode),
+      taxCode,
+      amount: round2(incl),
+      gstAmount: round2(gstSigned),
+      source: String(entry.source || ""),
+    };
 
-    const isWages =
-      type === "Expense" &&
-      (code === "1965" ||
-        code === "5001" ||
-        name.includes("wage") ||
-        name.includes("salary") ||
-        name.includes("superannuation"));
-
-    if (isWages) {
-      wagesTotal += abs;
-    }
-
-    // Invoice authorise posts tax-exclusive revenue + separate 820 GST.
-    // Convert to inclusive equivalent so existing G1 (÷11) math stays valid.
-    const gstExclusive = entry.gstExclusive === true;
-    if (gstExclusive && type === "Revenue") {
-      const gstAmt =
-        typeof entry.gstAmount === "number" && Number.isFinite(entry.gstAmount)
-          ? Math.abs(Number(entry.gstAmount))
-          : abs * 0.1;
-      const incl = abs + gstAmt;
-      // Credits (authorise) are negative amounts; voids reverse as positive.
-      const sign = (Number(entry.amount) || 0) < 0 ? 1 : -1;
-      g1Inc += sign * incl;
-      gstCollected += sign * gstAmt;
-      if (sign > 0) taxableSalesCount += 1;
+    if (type === "Revenue") {
+      g1 += incl;
+      pushLine(buckets, "G1", sourceLine);
+      if (taxCode === "EXP") {
+        g2 += incl;
+        pushLine(buckets, "G2", sourceLine);
+      } else if (taxCode === "FRE") {
+        g3 += incl;
+        pushLine(buckets, "G3", sourceLine);
+      } else if (taxCode === "INP") {
+        g4 += incl;
+        pushLine(buckets, "G4", sourceLine);
+      } else if (taxCode === "GST" || taxCode === "CAP") {
+        gstCollected += gstSigned;
+        pushLine(buckets, "1A", sourceLine);
+        if (incl > 0.009) taxableSalesCount += 1;
+      }
       continue;
     }
 
-    if (type !== "Revenue" && type !== "Expense") continue;
-    if (isGstFree(entry, coaByCode)) continue;
-
-    if (type === "Revenue") {
-      g1Inc += abs;
-      gstCollected += abs / 11;
-      taxableSalesCount += 1;
-    } else {
-      const capital =
-        Boolean(coaAcc?.isCapital) ||
-        code === "5100" ||
-        name.includes("capital purchase");
-      if (capital) {
-        g10Inc += abs;
-      } else {
-        g11Inc += abs;
-      }
-      gstPaid += abs / 11;
-      taxablePurchaseCount += 1;
+    // Purchases (expense or capital asset)
+    if (taxCode === "CAP") {
+      g10 += incl;
+      gstPaid += gstSigned;
+      pushLine(buckets, "G10", sourceLine);
+      pushLine(buckets, "1B", sourceLine);
+      if (incl > 0.009) taxablePurchaseCount += 1;
+    } else if (taxCode === "GST") {
+      g11 += incl;
+      gstPaid += gstSigned;
+      pushLine(buckets, "G11", sourceLine);
+      pushLine(buckets, "1B", sourceLine);
+      if (incl > 0.009) taxablePurchaseCount += 1;
     }
   }
 
+  const inPeriod = payRunsInPeriod(payRuns, from, to);
+  const wagesTotal = round2(
+    inPeriod.reduce((s, r) => s + (Number(r.totals?.gross) || 0), 0)
+  );
+  const paygWithheld = round2(
+    inPeriod.reduce((s, r) => s + (Number(r.totals?.paygWithheld) || 0), 0)
+  );
+
+  for (const run of inPeriod) {
+    const payLine: BasSourceLine = {
+      id: `payrun:${run.number || run.paymentDate}`,
+      date: run.paymentDate,
+      description: `Pay run ${run.number || ""} ${run.periodStart || ""}–${run.periodEnd || ""}`.trim(),
+      accountCode: "W1",
+      accountName: "Posted pay run",
+      taxCode: "N-T",
+      amount: round2(Number(run.totals?.gross) || 0),
+      gstAmount: 0,
+      source: "payroll",
+    };
+    pushLine(buckets, "W1", { ...payLine });
+    pushLine(buckets, "W2", {
+      ...payLine,
+      accountCode: "W2",
+      amount: round2(Number(run.totals?.paygWithheld) || 0),
+    });
+  }
+
+  const g5 = round2(g2 + g3 + g4);
+  const g6 = round2(g1 - g5);
+  const g7 = 0;
+  const g8 = round2(g6 + g7);
+  const g9 = round2(g8 / 11);
   const netGst = round2(gstCollected - gstPaid);
-  const paygLedger = round2(Math.max(0, paygFromLedger));
-  const paygFallback = round2(wagesTotal * 0.15);
-  const useLedgerPayg = paygLedger > 0.009;
-  const paygWithheldEstimate = useLedgerPayg ? paygLedger : paygFallback;
+
+  const periodLabel =
+    from === fy.from && to === fy.to
+      ? `FY ${fy.label}`
+      : formatAuDateRange(from, to);
+
+  const boxes: BasBox[] = [
+    box("G1", "G1 Total sales (incl GST)", g1, buckets),
+    box("G2", "G2 Export sales", g2, buckets),
+    box("G3", "G3 Other GST-free sales", g3, buckets),
+    box("G4", "G4 Input taxed sales", g4, buckets),
+    box("G5", "G5 G2 + G3 + G4", g5, buckets),
+    box("G6", "G6 Sales subject to GST (G1 − G5)", g6, buckets),
+    box("G7", "G7 Adjustments", g7, buckets),
+    box("G8", "G8 Sales subject to GST after adjustments", g8, buckets),
+    box("G9", "G9 GST on sales (G8 ÷ 11)", g9, buckets),
+    box("1A", "1A GST on sales", gstCollected, buckets),
+    box("G10", "G10 Capital purchases (incl GST)", g10, buckets),
+    box("G11", "G11 Non-capital purchases (incl GST)", g11, buckets),
+    box("1B", "1B GST on purchases", gstPaid, buckets),
+    box("W1", "W1 Total salary, wages and other payments", wagesTotal, buckets),
+    box("W2", "W2 Amount withheld from payments shown at W1", paygWithheld, buckets),
+  ];
 
   return {
-    period: {
-      from,
-      to,
-      label:
-        from === fy.from && to === fy.to
-          ? `FY ${fy.label}`
-          : formatAuDateRange(from, to),
-    },
+    gstMethod: GST_METHOD,
+    period: { from, to, label: periodLabel },
+    boxes,
     gstCollected: round2(gstCollected),
     gstPaid: round2(gstPaid),
     netGst,
-    g1TotalSales: round2(g1Inc - g1Inc / 11),
-    g10CapitalPurchases: round2(g10Inc - g10Inc / 11),
-    g11NonCapitalPurchases: round2(g11Inc - g11Inc / 11),
-    wagesTotal: round2(wagesTotal),
-    paygWithheldEstimate,
+    g1TotalSales: round2(g1),
+    g2ExportSales: round2(g2),
+    g3GstFreeSales: round2(g3),
+    g4InputTaxedSales: round2(g4),
+    g5,
+    g6,
+    g7Adjustments: g7,
+    g8,
+    g9GstOnSales: g9,
+    g10CapitalPurchases: round2(g10),
+    g11NonCapitalPurchases: round2(g11),
+    wagesTotal,
+    paygWithheld,
     taxableSalesCount,
     taxablePurchaseCount,
     entryCount,
-    note: useLedgerPayg
-      ? "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG from ledger account 909 (payroll)."
-      : "Assumes GST-inclusive amounts. Capital = COA isCapital / 5100. PAYG estimate = 15% of wages (no 909 payroll postings in period).",
+    payRunCount: inPeriod.length,
+    note:
+      "Accrual GST: sales on invoice date, purchases on ledger date. W1/W2 from posted pay runs (payment date), excluding super. Pub sales are GST-taxable — G2/G3 should be $0. G7 adjustments are not entered yet. 1A uses tax on each line; G9 is G8÷11 and may differ by rounding.",
   };
 }
 

@@ -4,12 +4,20 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
 import ReceiptAttach from '@/components/ReceiptAttach';
+import {
+  GST_TAX_CODES,
+  TAX_CODE_LABELS,
+  resolveTaxCode,
+  type GstTaxCode,
+} from '@/lib/accounting/gstTax';
 
 type CoaOption = {
   code: string;
   name: string;
   type: string;
   noGST?: boolean;
+  isCapital?: boolean;
+  isBank?: boolean;
 };
 
 type LineItem = {
@@ -19,6 +27,7 @@ type LineItem = {
   debit: number;
   credit: number;
   hasGST: boolean;
+  taxCode: GstTaxCode;
 };
 
 export default function NewJournalEntry() {
@@ -27,7 +36,7 @@ export default function NewJournalEntry() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [reference, setReference] = useState('');
   const [lines, setLines] = useState<LineItem[]>([
-    { id: '1', accountCode: '', description: '', debit: 0, credit: 0, hasGST: true },
+    { id: '1', accountCode: '', description: '', debit: 0, credit: 0, hasGST: true, taxCode: 'GST' },
   ]);
   const [receiptIds, setReceiptIds] = useState<string[]>([]);
 
@@ -48,6 +57,7 @@ export default function NewJournalEntry() {
         debit: 0,
         credit: 0,
         hasGST: true,
+        taxCode: 'GST',
       },
     ]);
   };
@@ -59,7 +69,23 @@ export default function NewJournalEntry() {
         const next = { ...line, [field]: value };
         if (field === 'accountCode') {
           const acc = coa.find((a) => a.code === value);
-          if (acc) next.hasGST = !acc.noGST;
+          if (acc) {
+            next.hasGST = !acc.noGST;
+            next.taxCode = resolveTaxCode(
+              {
+                type: acc.type,
+                accountCode: acc.code,
+                accountName: acc.name,
+                noGST: acc.noGST,
+                hasGST: !acc.noGST,
+                source: 'journal',
+              },
+              new Map(coa.map((a) => [a.code, a]))
+            );
+          }
+        }
+        if (field === 'hasGST') {
+          next.taxCode = value ? 'GST' : next.taxCode === 'N-T' ? 'N-T' : 'FRE';
         }
         return next;
       })
@@ -95,6 +121,7 @@ export default function NewJournalEntry() {
           accountName: acc?.name || '',
           hasGST: line.hasGST,
           noGST: !line.hasGST,
+          taxCode: line.taxCode,
           reconciled: false,
           source: 'journal',
           timestamp: new Date().toISOString(),
@@ -110,11 +137,14 @@ export default function NewJournalEntry() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entries }),
       });
-      if (!res.ok) throw new Error('fail');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'fail');
+      }
       alert('Journal entry saved successfully');
       router.push('/journal');
-    } catch {
-      alert('Failed to save entry');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to save entry');
     }
   };
 
@@ -154,6 +184,7 @@ export default function NewJournalEntry() {
                 <th className="text-right p-3 font-medium">Debit</th>
                 <th className="text-right p-3 font-medium">Credit</th>
                 <th className="text-center p-3 font-medium w-24">GST</th>
+                <th className="text-left p-3 font-medium w-36">Tax code</th>
                 <th className="w-12"></th>
               </tr>
             </thead>
@@ -211,6 +242,19 @@ export default function NewJournalEntry() {
                       checked={line.hasGST}
                       onChange={(e) => updateLine(line.id, 'hasGST', e.target.checked)}
                     />
+                  </td>
+                  <td className="p-3">
+                    <select
+                      value={line.taxCode}
+                      onChange={(e) => updateLine(line.id, 'taxCode', e.target.value)}
+                      className="w-full border rounded-lg p-2 text-sm"
+                    >
+                      {GST_TAX_CODES.map((code) => (
+                        <option key={code} value={code}>
+                          {code} · {TAX_CODE_LABELS[code]}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="p-3">
                     <button

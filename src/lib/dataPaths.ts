@@ -124,6 +124,14 @@ export function getPayRunsFilePath(): string {
   return path.join(getAccountingDataDir(), "payruns.json");
 }
 
+export function getAccountingSettingsFilePath(): string {
+  return path.join(getAccountingDataDir(), "settings.json");
+}
+
+export function getBasPeriodsFilePath(): string {
+  return path.join(getAccountingDataDir(), "bas-periods.json");
+}
+
 /** Receipt evidence files + metadata (ATO-justifiable expense attachments). */
 export function getReceiptsDir(): string {
   return path.join(getAccountingDataDir(), "receipts");
