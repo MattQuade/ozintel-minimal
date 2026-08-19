@@ -59,7 +59,7 @@ function normalizeRestoreQuery(query: string) {
 
 function setUserCookie(email: string) {
   if (typeof document === 'undefined') return;
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; max-age=${COOKIE_MAX_AGE}; path=/; SameSite=Lax`;
+  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; max-age=${COOKIE_MAX_AGE}; path=/; SameSite=Lax; Secure`;
 }
 
 function getUserCookie(): string | null {
@@ -70,13 +70,18 @@ function getUserCookie(): string | null {
 
 function clearUserCookie() {
   if (typeof document === 'undefined') return;
-  document.cookie = `${COOKIE_NAME}=; max-age=0; path=/; SameSite=Lax`;
+  document.cookie = `${COOKIE_NAME}=; max-age=0; path=/; SameSite=Lax; Secure`;
 }
 
 type HomeClientProps = {
   initialSignup?: string | null;
   initialRestore?: string | null;
+  initialContact?: string | null;
+  initialContactList?: string | null;
   initialSignupReason?: string | null;
+  initialUser?: UserProfile | null;
+  initialSafeContacts?: Contact[];
+  initialEmergencyContacts?: Contact[];
 };
 
 function signupStatusMessage(signup: string | null | undefined, reason?: string | null) {
@@ -92,9 +97,15 @@ function signupStatusMessage(signup: string | null | undefined, reason?: string 
   return '';
 }
 
-function restoreStatusMessage(restore: string | null | undefined, reason?: string | null) {
+function restoreStatusMessage(
+  restore: string | null | undefined,
+  reason?: string | null,
+  hasUser?: boolean
+) {
   if (restore === 'ok') {
-    return '✅ Account restored. Status is shown below.';
+    return hasUser
+      ? '✅ Account restored — your status is shown above.'
+      : '✅ Account restored. If status is missing, pull to refresh this page.';
   }
   if (restore === 'missing') {
     return `❌ ${reason || 'No account found. Use the signup email or mobile.'}`;
@@ -105,13 +116,40 @@ function restoreStatusMessage(restore: string | null | undefined, reason?: strin
   return '';
 }
 
+function contactStatusMessage(
+  contact: string | null | undefined,
+  list?: string | null,
+  reason?: string | null
+) {
+  if (contact === 'added') {
+    const kind = list === 'emergency' ? 'Emergency' : 'Safe';
+    return `✅ ${kind} contact saved.`;
+  }
+  if (contact === 'removed') {
+    return '✅ Contact removed.';
+  }
+  if (contact === 'error') {
+    return `❌ ${reason || 'Could not save contact.'}`;
+  }
+  return '';
+}
+
 export default function HomePage({
   initialSignup = null,
   initialRestore = null,
+  initialContact = null,
+  initialContactList = null,
   initialSignupReason = null,
+  initialUser = null,
+  initialSafeContacts = [],
+  initialEmergencyContacts = [],
 }: HomeClientProps) {
-  const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
-  const [emergencyContacts, setEmergencyContacts] = useState<Contact[]>([]);
+  const [safeContacts, setSafeContacts] = useState<Contact[]>(
+    () => initialSafeContacts || []
+  );
+  const [emergencyContacts, setEmergencyContacts] = useState<Contact[]>(
+    () => initialEmergencyContacts || []
+  );
   
   const [safePhone, setSafePhone] = useState<string>('');
   const [safeName, setSafeName] = useState<string>('');
@@ -120,7 +158,12 @@ export default function HomePage({
   
   const [status, setStatus] = useState<string>(() =>
     signupStatusMessage(initialSignup, initialSignupReason) ||
-    restoreStatusMessage(initialRestore, initialSignupReason)
+    restoreStatusMessage(
+      initialRestore,
+      initialSignupReason,
+      Boolean(initialUser)
+    ) ||
+    contactStatusMessage(initialContact, initialContactList, initialSignupReason)
   );
   const [smsCount, setSmsCount] = useState<number>(0);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
@@ -131,7 +174,9 @@ export default function HomePage({
   const [signUpName, setSignUpName] = useState<string>('');
   const [signUpEmail, setSignUpEmail] = useState<string>('');
   const [signUpPhone, setSignUpPhone] = useState<string>('');
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(
+    () => initialUser
+  );
 
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [adminEmailInput, setAdminEmailInput] = useState<string>('');
@@ -149,12 +194,29 @@ export default function HomePage({
   const [restoreEmail, setRestoreEmail] = useState('');
   const [dataDirConfigured, setDataDirConfigured] = useState<boolean | null>(null);
 
+  const loadContactsFromServer = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.safe)) setSafeContacts(data.safe);
+        if (Array.isArray(data.emergency)) setEmergencyContacts(data.emergency);
+      }
+    } catch (err) {
+      console.error('Contacts load error:', err);
+    }
+  };
+
   const restoreFromServer = async (query: string, silent = false) => {
     try {
       const normalizedQuery = normalizeRestoreQuery(query);
       const res = await fetch(`${API_BASE}/api/users/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
         body: JSON.stringify({ query: normalizedQuery }),
       });
       const data = await res.json();
@@ -163,6 +225,7 @@ export default function HomePage({
         setCurrentUser(found);
         localStorage.setItem('ozintel_current_user', JSON.stringify(found));
         setUserCookie(found.email);
+        await loadContactsFromServer();
         if (!silent) {
           if (found.status === 'approved') {
             setStatus("✅ Account restored – you are approved and ready to send alerts.");
@@ -179,7 +242,7 @@ export default function HomePage({
       localStorage.removeItem('ozintel_current_user');
       setCurrentUser(null);
       if (!silent) {
-        alert(
+        setStatus(
           data.error ||
             "No account found with those details. Use the email, mobile number, or exact full name from signup."
         );
@@ -187,22 +250,78 @@ export default function HomePage({
       return false;
     } catch (err) {
       console.error("Restore error:", err);
-      if (!silent) alert("Could not restore account. Please try again.");
+      if (!silent) setStatus("Could not restore account. Please try again.");
     }
     return false;
   };
 
   useEffect(() => {
     try {
-      const storedSafe = localStorage.getItem('ozintel_safe_contacts');
-      const storedEmergency = localStorage.getItem('ozintel_emergency_contacts');
       const storedUser = localStorage.getItem('ozintel_current_user');
       const adminAuth = localStorage.getItem('ozintel_admin_auth');
 
-      if (storedSafe) setSafeContacts(JSON.parse(storedSafe));
-      if (storedEmergency) setEmergencyContacts(JSON.parse(storedEmergency));
-      if (storedUser) setCurrentUser(JSON.parse(storedUser));
+      // Prefer server session (cookie → SSR) over stale localStorage.
+      if (initialUser) {
+        localStorage.setItem('ozintel_current_user', JSON.stringify(initialUser));
+        setUserCookie(initialUser.email);
+      } else if (storedUser) {
+        setCurrentUser(JSON.parse(storedUser));
+      }
       if (adminAuth === 'true') setIsAdminAuthenticated(true);
+
+      if (initialUser) {
+        const storedSafe = localStorage.getItem('ozintel_safe_contacts');
+        const storedEmergency = localStorage.getItem('ozintel_emergency_contacts');
+        const localSafe: Contact[] = storedSafe ? JSON.parse(storedSafe) : [];
+        const localEmergency: Contact[] = storedEmergency
+          ? JSON.parse(storedEmergency)
+          : [];
+        const serverEmpty =
+          (initialSafeContacts || []).length === 0 &&
+          (initialEmergencyContacts || []).length === 0;
+        if (
+          serverEmpty &&
+          (localSafe.length > 0 || localEmergency.length > 0)
+        ) {
+          void (async () => {
+            for (const c of localSafe) {
+              await fetch(`${API_BASE}/api/contacts`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+                body: JSON.stringify({ list: 'safe', ...c }),
+              });
+            }
+            for (const c of localEmergency) {
+              await fetch(`${API_BASE}/api/contacts`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+                body: JSON.stringify({ list: 'emergency', ...c }),
+              });
+            }
+            await loadContactsFromServer();
+          })();
+        }
+      } else {
+        const storedSafe = localStorage.getItem('ozintel_safe_contacts');
+        const storedEmergency = localStorage.getItem(
+          'ozintel_emergency_contacts'
+        );
+        if (storedSafe && (initialSafeContacts || []).length === 0) {
+          setSafeContacts(JSON.parse(storedSafe));
+        }
+        if (
+          storedEmergency &&
+          (initialEmergencyContacts || []).length === 0
+        ) {
+          setEmergencyContacts(JSON.parse(storedEmergency));
+        }
+      }
     } catch (e) {
       console.error("Storage load error:", e);
     }
@@ -210,7 +329,7 @@ export default function HomePage({
     fetchUsers();
 
     const cookieEmail = getUserCookie();
-    if (cookieEmail) {
+    if (cookieEmail && !initialUser) {
       restoreFromServer(cookieEmail, true);
     }
   }, []);
@@ -270,26 +389,43 @@ export default function HomePage({
     }
   };
 
-  // Surface ?signup= / ?restore= from native form POST redirects (no-JS path).
+  // Surface ?signup= / ?restore= / ?contact= from native form POST redirects.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const signup = params.get('signup') || initialSignup;
     const restore = params.get('restore') || initialRestore;
+    const contact = params.get('contact') || initialContact;
+    const list = params.get('list') || initialContactList;
     const reason = params.get('reason') || initialSignupReason;
     const signupMsg = signupStatusMessage(signup, reason);
-    const restoreMsg = restoreStatusMessage(restore, reason);
+    const restoreMsg = restoreStatusMessage(
+      restore,
+      reason,
+      Boolean(currentUser || initialUser)
+    );
+    const contactMsg = contactStatusMessage(contact, list, reason);
     if (signupMsg) {
       setStatus(signupMsg);
       if (signup === 'ok' || signup === 'exists') setShowSignUp(false);
     } else if (restoreMsg) {
       setStatus(restoreMsg);
       if (restore === 'ok') setShowRestore(false);
+    } else if (contactMsg) {
+      setStatus(contactMsg);
     }
-    if (params.has('signup') || params.has('restore')) {
+    if (params.has('signup') || params.has('restore') || params.has('contact')) {
       window.history.replaceState({}, '', '/');
     }
-  }, [initialSignup, initialRestore, initialSignupReason]);
+  }, [
+    initialSignup,
+    initialRestore,
+    initialContact,
+    initialContactList,
+    initialSignupReason,
+    initialUser,
+    currentUser,
+  ]);
 
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,7 +695,7 @@ export default function HomePage({
     };
   };
 
-  const addSafeContact = (e?: React.FormEvent<HTMLFormElement>) => {
+  const addSafeContact = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     const form = e?.currentTarget;
     const { phone, name } = form
@@ -567,25 +703,62 @@ export default function HomePage({
       : { phone: safePhone.trim(), name: safeName.trim() };
 
     if (!phone || !name) {
-      alert('Please enter both a phone number and a name for the safe contact.');
+      setStatus('❌ Please enter both a phone number and a name for the safe contact.');
+      return;
+    }
+    if (!currentUser && !getUserCookie()) {
+      setStatus('❌ Restore your account first, then add contacts.');
       return;
     }
 
-    const updated = [...safeContacts, { name, phone }];
-    saveContacts(updated, emergencyContacts);
-    setSafePhone('');
-    setSafeName('');
-    setStatus(`✅ Safe contact added: ${name}`);
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ list: 'safe', name, phone }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        saveContacts(data.safe || [], data.emergency || emergencyContacts);
+        setSafePhone('');
+        setSafeName('');
+        if (form) form.reset();
+        setStatus(`✅ Safe contact added: ${name}`);
+      } else {
+        setStatus('❌ ' + (data.error || 'Could not save safe contact.'));
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('❌ Could not save safe contact. Try again.');
+    }
   };
 
-  const removeSafeContact = (index: number) => {
+  const removeSafeContact = async (index: number) => {
     const contact = safeContacts[index];
     if (!window.confirm(`Remove safe arrival contact "${contact.name} (${contact.phone})"?`)) return;
-    const updated = safeContacts.filter((_, i) => i !== index);
-    saveContacts(updated, emergencyContacts);
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ list: 'safe', action: 'remove', index }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        saveContacts(data.safe || [], data.emergency || emergencyContacts);
+        setStatus('✅ Contact removed.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const addEmergencyContact = (e?: React.FormEvent<HTMLFormElement>) => {
+  const addEmergencyContact = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     const form = e?.currentTarget;
     const { phone, name } = form
@@ -593,22 +766,59 @@ export default function HomePage({
       : { phone: emergencyPhone.trim(), name: emergencyName.trim() };
 
     if (!phone || !name) {
-      alert('Please enter both a phone number and a name for the emergency contact.');
+      setStatus('❌ Please enter both a phone number and a name for the emergency contact.');
+      return;
+    }
+    if (!currentUser && !getUserCookie()) {
+      setStatus('❌ Restore your account first, then add contacts.');
       return;
     }
 
-    const updated = [...emergencyContacts, { name, phone }];
-    saveContacts(safeContacts, updated);
-    setEmergencyPhone('');
-    setEmergencyName('');
-    setStatus(`✅ Emergency contact added: ${name}`);
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ list: 'emergency', name, phone }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        saveContacts(data.safe || safeContacts, data.emergency || []);
+        setEmergencyPhone('');
+        setEmergencyName('');
+        if (form) form.reset();
+        setStatus(`✅ Emergency contact added: ${name}`);
+      } else {
+        setStatus('❌ ' + (data.error || 'Could not save emergency contact.'));
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('❌ Could not save emergency contact. Try again.');
+    }
   };
 
-  const removeEmergencyContact = (index: number) => {
+  const removeEmergencyContact = async (index: number) => {
     const contact = emergencyContacts[index];
     if (!window.confirm(`Remove emergency contact "${contact.name} (${contact.phone})"?`)) return;
-    const updated = emergencyContacts.filter((_, i) => i !== index);
-    saveContacts(safeContacts, updated);
+    try {
+      const res = await fetch(`${API_BASE}/api/contacts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ list: 'emergency', action: 'remove', index }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        saveContacts(data.safe || safeContacts, data.emergency || []);
+        setStatus('✅ Contact removed.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const sendSMSViaMessageMedia = async (
@@ -1326,38 +1536,46 @@ export default function HomePage({
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Safe Arrival Contacts</h2>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
-          Contacts stay on this device only (not uploaded).
+          Saved to your OzIntel account (works after Restore).
         </p>
         {safeContacts.map((contact, index) => (
-          <div key={index} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div key={`${contact.phone}-${index}`} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <span>{contact.name} ({contact.phone})</span>
-            <button type="button" onClick={() => removeSafeContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            <form method="POST" action="/api/contacts" onSubmit={(e) => { e.preventDefault(); void removeSafeContact(index); }} style={{ margin: 0 }}>
+              <input type="hidden" name="list" value="safe" />
+              <input type="hidden" name="action" value="remove" />
+              <input type="hidden" name="index" value={String(index)} />
+              <button type="submit" style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            </form>
           </div>
         ))}
         <form
+          method="POST"
+          action="/api/contacts"
           onSubmit={addSafeContact}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}
         >
+          <input type="hidden" name="list" value="safe" />
           <input
             name="phone"
             type="tel"
+            required
             inputMode="tel"
             autoComplete="tel"
             placeholder="+61412345678"
-            value={safePhone}
-            onChange={e => setSafePhone(e.target.value)}
+            defaultValue=""
             style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
           />
           <input
             name="name"
             type="text"
+            required
             autoComplete="name"
             placeholder="Name"
-            value={safeName}
-            onChange={e => setSafeName(e.target.value)}
+            defaultValue=""
             style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
           />
-          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(14,165,233,0.35)', touchAction: 'manipulation' }}>
             Add Safe
           </button>
         </form>
@@ -1366,38 +1584,46 @@ export default function HomePage({
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Emergency Contacts</h2>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
-          Contacts stay on this device only (not uploaded).
+          Saved to your OzIntel account (works after Restore).
         </p>
         {emergencyContacts.map((contact, index) => (
-          <div key={index} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div key={`${contact.phone}-${index}`} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <span>{contact.name} ({contact.phone})</span>
-            <button type="button" onClick={() => removeEmergencyContact(index)} style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            <form method="POST" action="/api/contacts" onSubmit={(e) => { e.preventDefault(); void removeEmergencyContact(index); }} style={{ margin: 0 }}>
+              <input type="hidden" name="list" value="emergency" />
+              <input type="hidden" name="action" value="remove" />
+              <input type="hidden" name="index" value={String(index)} />
+              <button type="submit" style={{ background: '#dc3545', color: 'white', padding: '6px 12px', fontSize: '0.9rem', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Remove</button>
+            </form>
           </div>
         ))}
         <form
+          method="POST"
+          action="/api/contacts"
           onSubmit={addEmergencyContact}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '15px' }}
         >
+          <input type="hidden" name="list" value="emergency" />
           <input
             name="phone"
             type="tel"
+            required
             inputMode="tel"
             autoComplete="tel"
             placeholder="+61412345678"
-            value={emergencyPhone}
-            onChange={e => setEmergencyPhone(e.target.value)}
+            defaultValue=""
             style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
           />
           <input
             name="name"
             type="text"
+            required
             autoComplete="name"
             placeholder="Name"
-            value={emergencyName}
-            onChange={e => setEmergencyName(e.target.value)}
+            defaultValue=""
             style={{ width: '90%', maxWidth: '400px', padding: '14px', borderRadius: '8px', border: '1px solid #475569', background: '#1e2937', color: 'white' }}
           />
-          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          <button type="submit" style={{ padding: '12px 20px', fontSize: '1rem', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', WebkitTapHighlightColor: 'rgba(14,165,233,0.35)', touchAction: 'manipulation' }}>
             Add Emergency
           </button>
         </form>
