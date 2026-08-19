@@ -9,7 +9,7 @@ export type AlertCoords = { lat: number; lng: number };
 
 const GEO_OPTIONS = {
   enableHighAccuracy: true,
-  timeout: 12000,
+  timeout: 3500,
   maximumAge: 60000,
 } as const;
 
