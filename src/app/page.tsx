@@ -7,6 +7,7 @@ export const revalidate = 0;
 
 type HomeSearchParams = {
   signup?: string;
+  restore?: string;
   reason?: string;
 };
 
@@ -21,6 +22,7 @@ export default async function HomePage({
   return (
     <HomeClient
       initialSignup={sp.signup || null}
+      initialRestore={sp.restore || null}
       initialSignupReason={sp.reason || null}
     />
   );

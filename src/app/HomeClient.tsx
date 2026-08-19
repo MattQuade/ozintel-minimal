@@ -75,6 +75,7 @@ function clearUserCookie() {
 
 type HomeClientProps = {
   initialSignup?: string | null;
+  initialRestore?: string | null;
   initialSignupReason?: string | null;
 };
 
@@ -91,8 +92,22 @@ function signupStatusMessage(signup: string | null | undefined, reason?: string 
   return '';
 }
 
+function restoreStatusMessage(restore: string | null | undefined, reason?: string | null) {
+  if (restore === 'ok') {
+    return '✅ Account restored. Status is shown below.';
+  }
+  if (restore === 'missing') {
+    return `❌ ${reason || 'No account found. Use the signup email or mobile.'}`;
+  }
+  if (restore === 'error') {
+    return `❌ Restore failed: ${reason || 'Please try again.'}`;
+  }
+  return '';
+}
+
 export default function HomePage({
   initialSignup = null,
+  initialRestore = null,
   initialSignupReason = null,
 }: HomeClientProps) {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
@@ -104,7 +119,8 @@ export default function HomePage({
   const [emergencyName, setEmergencyName] = useState<string>('');
   
   const [status, setStatus] = useState<string>(() =>
-    signupStatusMessage(initialSignup, initialSignupReason)
+    signupStatusMessage(initialSignup, initialSignupReason) ||
+    restoreStatusMessage(initialRestore, initialSignupReason)
   );
   const [smsCount, setSmsCount] = useState<number>(0);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
@@ -254,22 +270,26 @@ export default function HomePage({
     }
   };
 
-  // Surface ?signup=ok|exists|error from native form POST redirects (no-JS path).
+  // Surface ?signup= / ?restore= from native form POST redirects (no-JS path).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const signup = params.get('signup') || initialSignup;
-    if (!signup) return;
+    const restore = params.get('restore') || initialRestore;
     const reason = params.get('reason') || initialSignupReason;
-    const msg = signupStatusMessage(signup, reason);
-    if (msg) setStatus(msg);
-    if (signup === 'ok' || signup === 'exists') {
-      setShowSignUp(false);
+    const signupMsg = signupStatusMessage(signup, reason);
+    const restoreMsg = restoreStatusMessage(restore, reason);
+    if (signupMsg) {
+      setStatus(signupMsg);
+      if (signup === 'ok' || signup === 'exists') setShowSignUp(false);
+    } else if (restoreMsg) {
+      setStatus(restoreMsg);
+      if (restore === 'ok') setShowRestore(false);
     }
-    if (params.has('signup')) {
+    if (params.has('signup') || params.has('restore')) {
       window.history.replaceState({}, '', '/');
     }
-  }, [initialSignup, initialSignupReason]);
+  }, [initialSignup, initialRestore, initialSignupReason]);
 
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,11 +354,16 @@ export default function HomePage({
 
   const handleRestoreAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    const query = normalizeRestoreQuery(restoreEmail);
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const query = normalizeRestoreQuery(
+      String(fd.get('restore') || fd.get('query') || '').trim() || restoreEmail
+    );
     if (!query) {
-      alert("Please enter your email, mobile number, or full name from signup.");
+      setStatus('❌ Please enter your email, mobile number, or full name from signup.');
       return;
     }
+    setStatus('Restoring account…');
     const success = await restoreFromServer(query);
     if (success) {
       setShowRestore(false);
@@ -761,6 +786,42 @@ export default function HomePage({
       
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
+
+      {currentUser && (
+        <div style={{ 
+          background: currentUser.status === 'approved' ? '#14532d' : currentUser.status === 'blocked' ? '#450a0a' : '#78350f', 
+          border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : currentUser.status === 'blocked' ? '#ef4444' : '#f59e0b'}`, 
+          padding: '12px 20px', 
+          borderRadius: '10px', 
+          margin: '15px auto', 
+          maxWidth: '400px' 
+        }}>
+          <p style={{ margin: 0, fontSize: '1rem' }}>
+            Account: <strong>{currentUser.name}</strong> ({currentUser.email})<br />
+            Status: <strong style={{ 
+              color: currentUser.status === 'approved' ? '#4ade80' : currentUser.status === 'blocked' ? '#f87171' : '#fbbf24' 
+            }}>
+              {currentUser.status === 'approved' ? '✅ Approved' : 
+               currentUser.status === 'blocked' ? '🚫 Blocked' : 
+               '⏳ Pending Admin Approval'}
+            </strong>
+          </p>
+        </div>
+      )}
+
+      <p
+        role="status"
+        style={{
+          margin: '15px auto',
+          fontSize: '1.15rem',
+          minHeight: status ? '30px' : 0,
+          color: '#22c55e',
+          maxWidth: '420px',
+          fontWeight: 600,
+        }}
+      >
+        {status}
+      </p>
 
       {showAdminLogin && !isAdminAuthenticated && (
         <form onSubmit={handleAdminLogin} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '15px auto', maxWidth: '400px', border: '1px solid #334155' }}>
@@ -1187,6 +1248,8 @@ export default function HomePage({
           {showRestore ? 'Close Restore' : 'Restore My Account'}
         </summary>
         <form
+          method="POST"
+          action="/api/users/restore"
           onSubmit={handleRestoreAccount}
           style={{
             background: '#1e2937',
@@ -1221,9 +1284,9 @@ export default function HomePage({
             <input
               name="restore"
               type="text"
+              required
               placeholder="Email, phone, or full name"
-              value={restoreEmail}
-              onChange={(e) => setRestoreEmail(e.target.value)}
+              defaultValue={restoreEmail}
               autoComplete="username"
               style={{
                 width: '100%',
@@ -1255,42 +1318,6 @@ export default function HomePage({
           </div>
         </form>
       </details>
-
-      {currentUser && (
-        <div style={{ 
-          background: currentUser.status === 'approved' ? '#14532d' : currentUser.status === 'blocked' ? '#450a0a' : '#78350f', 
-          border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : currentUser.status === 'blocked' ? '#ef4444' : '#f59e0b'}`, 
-          padding: '12px 20px', 
-          borderRadius: '10px', 
-          margin: '15px auto', 
-          maxWidth: '400px' 
-        }}>
-          <p style={{ margin: 0, fontSize: '1rem' }}>
-            Account: <strong>{currentUser.name}</strong> ({currentUser.email})<br />
-            Status: <strong style={{ 
-              color: currentUser.status === 'approved' ? '#4ade80' : currentUser.status === 'blocked' ? '#f87171' : '#fbbf24' 
-            }}>
-              {currentUser.status === 'approved' ? '✅ Approved' : 
-               currentUser.status === 'blocked' ? '🚫 Blocked' : 
-               '⏳ Pending Admin Approval'}
-            </strong>
-          </p>
-        </div>
-      )}
-
-      <p
-        role="status"
-        style={{
-          margin: '15px auto',
-          fontSize: '1.15rem',
-          minHeight: '30px',
-          color: '#22c55e',
-          maxWidth: '420px',
-          fontWeight: 600,
-        }}
-      >
-        {status}
-      </p>
 
       <div style={{ background: '#1e2937', padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '300px', fontSize: '1.1rem', color: '#cbd5e1' }}>
         SMS Sent this month: <strong style={{ color: '#22c55e', fontSize: '1.3rem' }}>{currentUser ? (currentUser.smsCount || 0) : 0}</strong>

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicUser, readUsers, writeUsers, type User } from "@/lib/users";
 import { notifyAdminNewSignup } from "@/lib/sms/sendSms";
+import { publicHomeUrl } from "@/lib/publicOrigin";
+import { setSessionEmailCookie } from "@/lib/sessionCookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const COOKIE_NAME = "ozintel_user_email";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function wantsHtmlRedirect(req: NextRequest): boolean {
   const mode = (req.headers.get("sec-fetch-mode") || "").toLowerCase();
@@ -27,18 +26,8 @@ function redirectHome(
   params: Record<string, string>,
   cookieEmail?: string
 ) {
-  const url = new URL("/", req.url);
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-  const res = NextResponse.redirect(url, 303);
-  if (cookieEmail) {
-    res.cookies.set(COOKIE_NAME, cookieEmail, {
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-      sameSite: "lax",
-    });
-  }
+  const res = NextResponse.redirect(publicHomeUrl(req, params), 303);
+  if (cookieEmail) setSessionEmailCookie(res, cookieEmail);
   return res;
 }
 
@@ -132,11 +121,7 @@ export async function POST(req: NextRequest) {
       user: publicUser(user),
       users: users.map(publicUser),
     });
-    res.cookies.set(COOKIE_NAME, user.email, {
-      maxAge: COOKIE_MAX_AGE,
-      path: "/",
-      sameSite: "lax",
-    });
+    setSessionEmailCookie(res, user.email);
     return res;
   } catch (error) {
     console.error(error);

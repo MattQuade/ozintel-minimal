@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findUserByEmail, publicUser } from "@/lib/users";
+import { SESSION_COOKIE_NAME } from "@/lib/sessionCookie";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const COOKIE_NAME = "ozintel_user_email";
-
 function readEmailFromRequest(req: NextRequest): string {
-  const fromCookie = req.cookies.get(COOKIE_NAME)?.value;
+  const fromCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (fromCookie) {
     try {
       return decodeURIComponent(fromCookie).trim();
