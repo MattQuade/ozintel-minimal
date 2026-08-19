@@ -54,15 +54,27 @@ async function getNativeLocation(): Promise<AlertCoords | null> {
 /**
  * Returns coordinates for Safe Arrival / SEND HELP SMS, or null if unavailable.
  * Uses Capacitor Geolocation on native; otherwise browser geolocation.
+ * Hard-capped so a hung geo prompt cannot block alert send forever.
  */
 export async function getAlertLocation(): Promise<AlertCoords | null> {
-  try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (Capacitor.isNativePlatform()) {
-      return await getNativeLocation();
+  const work = async (): Promise<AlertCoords | null> => {
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform()) {
+        return await getNativeLocation();
+      }
+    } catch {
+      // Capacitor unavailable (SSR / plain web) — fall through
     }
+    return getBrowserLocation();
+  };
+
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
   } catch {
-    // Capacitor unavailable (SSR / plain web) — fall through
+    return null;
   }
-  return getBrowserLocation();
 }

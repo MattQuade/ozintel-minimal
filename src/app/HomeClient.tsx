@@ -78,6 +78,9 @@ type HomeClientProps = {
   initialRestore?: string | null;
   initialContact?: string | null;
   initialContactList?: string | null;
+  initialAlert?: string | null;
+  initialAlertSent?: string | null;
+  initialAlertFailed?: string | null;
   initialSignupReason?: string | null;
   initialUser?: UserProfile | null;
   initialSafeContacts?: Contact[];
@@ -134,11 +137,36 @@ function contactStatusMessage(
   return '';
 }
 
+function alertStatusMessage(
+  alert: string | null | undefined,
+  sent?: string | null,
+  failed?: string | null,
+  reason?: string | null
+) {
+  if (alert === 'safe-ok') {
+    const n = sent || '1';
+    const failNote = failed ? ` (${failed} failed)` : '';
+    return `✅ Safe arrival alert sent to ${n} contact${n === '1' ? '' : 's'}${failNote}.`;
+  }
+  if (alert === 'emergency-ok') {
+    const n = sent || '1';
+    const failNote = failed ? ` (${failed} failed)` : '';
+    return `🚨 Emergency alert sent to ${n} contact${n === '1' ? '' : 's'}${failNote}.`;
+  }
+  if (alert === 'error') {
+    return `❌ ${reason || 'Could not send alert.'}`;
+  }
+  return '';
+}
+
 export default function HomePage({
   initialSignup = null,
   initialRestore = null,
   initialContact = null,
   initialContactList = null,
+  initialAlert = null,
+  initialAlertSent = null,
+  initialAlertFailed = null,
   initialSignupReason = null,
   initialUser = null,
   initialSafeContacts = [],
@@ -163,7 +191,13 @@ export default function HomePage({
       initialSignupReason,
       Boolean(initialUser)
     ) ||
-    contactStatusMessage(initialContact, initialContactList, initialSignupReason)
+    contactStatusMessage(initialContact, initialContactList, initialSignupReason) ||
+    alertStatusMessage(
+      initialAlert,
+      initialAlertSent,
+      initialAlertFailed,
+      initialSignupReason
+    )
   );
   const [smsCount, setSmsCount] = useState<number>(0);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
@@ -389,7 +423,7 @@ export default function HomePage({
     }
   };
 
-  // Surface ?signup= / ?restore= / ?contact= from native form POST redirects.
+  // Surface ?signup= / ?restore= / ?contact= / ?alert= from native form POST redirects.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -397,6 +431,9 @@ export default function HomePage({
     const restore = params.get('restore') || initialRestore;
     const contact = params.get('contact') || initialContact;
     const list = params.get('list') || initialContactList;
+    const alertParam = params.get('alert') || initialAlert;
+    const sent = params.get('sent') || initialAlertSent;
+    const failed = params.get('failed') || initialAlertFailed;
     const reason = params.get('reason') || initialSignupReason;
     const signupMsg = signupStatusMessage(signup, reason);
     const restoreMsg = restoreStatusMessage(
@@ -405,6 +442,7 @@ export default function HomePage({
       Boolean(currentUser || initialUser)
     );
     const contactMsg = contactStatusMessage(contact, list, reason);
+    const alertMsg = alertStatusMessage(alertParam, sent, failed, reason);
     if (signupMsg) {
       setStatus(signupMsg);
       if (signup === 'ok' || signup === 'exists') setShowSignUp(false);
@@ -413,8 +451,15 @@ export default function HomePage({
       if (restore === 'ok') setShowRestore(false);
     } else if (contactMsg) {
       setStatus(contactMsg);
+    } else if (alertMsg) {
+      setStatus(alertMsg);
     }
-    if (params.has('signup') || params.has('restore') || params.has('contact')) {
+    if (
+      params.has('signup') ||
+      params.has('restore') ||
+      params.has('contact') ||
+      params.has('alert')
+    ) {
       window.history.replaceState({}, '', '/');
     }
   }, [
@@ -422,6 +467,9 @@ export default function HomePage({
     initialRestore,
     initialContact,
     initialContactList,
+    initialAlert,
+    initialAlertSent,
+    initialAlertFailed,
     initialSignupReason,
     initialUser,
     currentUser,
@@ -946,42 +994,121 @@ export default function HomePage({
     setStatus('⏹ Cancelling send...');
   };
 
-  const sendSafeArrival = async () => {
+  const sendSafeArrival = async (e?: React.FormEvent<HTMLFormElement>) => {
+    // If React is alive, enhance with a short location attempt then JSON POST.
+    // If this handler never runs, the native form POST to /api/alerts still works.
+    e?.preventDefault();
+    if (isSendingAlert) return;
+
     if (!currentUser || currentUser.status !== 'approved') {
-      alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
+      setStatus('❌ Restore an approved account before sending alerts.');
       return;
     }
-
     if (safeContacts.length === 0) {
-      alert("No safe arrival contacts configured.");
+      setStatus('❌ Add at least one Safe Arrival contact first.');
       return;
     }
 
-    await sendAlertWithRetry(
-      safeContacts,
-      "I have arrived safely.",
-      "SAFE ARRIVAL",
-      "✅ Safe arrival alert sent successfully!"
-    );
+    setIsSendingAlert(true);
+    setStatus('Sending Safe Arrival alert...');
+    try {
+      const loc = await Promise.race([
+        getAlertLocation(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      const res = await fetch(`${API_BASE}/api/alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'safe',
+          lat: loc?.lat ?? null,
+          lng: loc?.lng ?? null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setStatus(
+          alertStatusMessage(
+            'safe-ok',
+            String(data.sent || 1),
+            data.failed ? String(data.failed) : null
+          )
+        );
+        await refreshCurrentUser();
+      } else {
+        setStatus('❌ ' + (data.error || 'Could not send safe alert.'));
+      }
+    } catch (err) {
+      console.error(err);
+      // Last resort: native form submit without JS fetch
+      if (e?.currentTarget) {
+        e.currentTarget.submit();
+        return;
+      }
+      setStatus('❌ Could not send safe alert. Try again.');
+    } finally {
+      setIsSendingAlert(false);
+    }
   };
 
-  const sendEmergencyAlert = async () => {
+  const sendEmergencyAlert = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    if (isSendingAlert) return;
+
     if (!currentUser || currentUser.status !== 'approved') {
-      alert("You must be an approved user to send alerts.\nPlease sign up / restore your account and wait for admin approval.");
+      setStatus('❌ Restore an approved account before sending alerts.');
       return;
     }
-
     if (emergencyContacts.length === 0) {
-      alert("No emergency contacts configured.");
+      setStatus('❌ Add at least one Emergency contact first.');
       return;
     }
 
-    await sendAlertWithRetry(
-      emergencyContacts,
-      "I need immediate assistance!",
-      "EMERGENCY",
-      "🚨 Emergency alert dispatched!"
-    );
+    setIsSendingAlert(true);
+    setStatus('Sending Emergency alert...');
+    try {
+      const loc = await Promise.race([
+        getAlertLocation(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      const res = await fetch(`${API_BASE}/api/alerts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'emergency',
+          lat: loc?.lat ?? null,
+          lng: loc?.lng ?? null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        setStatus(
+          alertStatusMessage(
+            'emergency-ok',
+            String(data.sent || 1),
+            data.failed ? String(data.failed) : null
+          )
+        );
+        await refreshCurrentUser();
+      } else {
+        setStatus('❌ ' + (data.error || 'Could not send emergency alert.'));
+      }
+    } catch (err) {
+      console.error(err);
+      if (e?.currentTarget) {
+        e.currentTarget.submit();
+        return;
+      }
+      setStatus('❌ Could not send emergency alert. Try again.');
+    } finally {
+      setIsSendingAlert(false);
+    }
   };
 
   const pendingUsers = allUsers.filter(u => u.status === 'pending');
@@ -1210,53 +1337,62 @@ export default function HomePage({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={sendSafeArrival}
-        disabled={isSendingAlert}
-        style={{
-          padding: '20px',
-          fontSize: '1.3rem',
-          margin: '15px',
-          border: 'none',
-          borderRadius: '12px',
-          width: '90%',
-          maxWidth: '400px',
-          cursor: isSendingAlert ? 'not-allowed' : 'pointer',
-          background: '#22c55e',
-          color: 'white',
-          fontWeight: 'bold',
-          opacity: isSendingAlert ? 0.7 : 1,
-          WebkitTapHighlightColor: 'rgba(34, 197, 94, 0.35)',
-          touchAction: 'manipulation',
-        }}
+      <form
+        method="POST"
+        action="/api/alerts"
+        onSubmit={sendSafeArrival}
+        style={{ margin: '15px auto', width: '90%', maxWidth: '400px' }}
       >
-        ✅ SAFE ARRIVAL
-      </button>
-      <br />
-      <button
-        type="button"
-        onClick={sendEmergencyAlert}
-        disabled={isSendingAlert}
-        style={{
-          padding: '20px',
-          fontSize: '1.3rem',
-          margin: '15px',
-          border: 'none',
-          borderRadius: '12px',
-          width: '90%',
-          maxWidth: '400px',
-          cursor: isSendingAlert ? 'not-allowed' : 'pointer',
-          background: '#ef4444',
-          color: 'white',
-          fontWeight: 'bold',
-          opacity: isSendingAlert ? 0.7 : 1,
-          WebkitTapHighlightColor: 'rgba(239, 68, 68, 0.35)',
-          touchAction: 'manipulation',
-        }}
+        <input type="hidden" name="type" value="safe" />
+        <button
+          type="submit"
+          disabled={isSendingAlert}
+          style={{
+            padding: '20px',
+            fontSize: '1.3rem',
+            border: 'none',
+            borderRadius: '12px',
+            width: '100%',
+            cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+            background: '#22c55e',
+            color: 'white',
+            fontWeight: 'bold',
+            opacity: isSendingAlert ? 0.7 : 1,
+            WebkitTapHighlightColor: 'rgba(34, 197, 94, 0.35)',
+            touchAction: 'manipulation',
+          }}
+        >
+          {isSendingAlert ? 'Sending…' : '✅ SAFE ARRIVAL'}
+        </button>
+      </form>
+      <form
+        method="POST"
+        action="/api/alerts"
+        onSubmit={sendEmergencyAlert}
+        style={{ margin: '15px auto', width: '90%', maxWidth: '400px' }}
       >
-        🚨 SEND HELP
-      </button>
+        <input type="hidden" name="type" value="emergency" />
+        <button
+          type="submit"
+          disabled={isSendingAlert}
+          style={{
+            padding: '20px',
+            fontSize: '1.3rem',
+            border: 'none',
+            borderRadius: '12px',
+            width: '100%',
+            cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+            background: '#ef4444',
+            color: 'white',
+            fontWeight: 'bold',
+            opacity: isSendingAlert ? 0.7 : 1,
+            WebkitTapHighlightColor: 'rgba(239, 68, 68, 0.35)',
+            touchAction: 'manipulation',
+          }}
+        >
+          {isSendingAlert ? 'Sending…' : '🚨 SEND HELP'}
+        </button>
+      </form>
       {isSendingAlert && (
         <button
           type="button"

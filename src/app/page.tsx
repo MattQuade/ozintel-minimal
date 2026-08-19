@@ -13,6 +13,9 @@ type HomeSearchParams = {
   restore?: string;
   contact?: string;
   list?: string;
+  alert?: string;
+  sent?: string;
+  failed?: string;
   reason?: string;
 };
 
@@ -60,6 +63,9 @@ export default async function HomePage({
       initialRestore={sp.restore || null}
       initialContact={sp.contact || null}
       initialContactList={sp.list || null}
+      initialAlert={sp.alert || null}
+      initialAlertSent={sp.sent || null}
+      initialAlertFailed={sp.failed || null}
       initialSignupReason={sp.reason || null}
       initialUser={initialUser}
       initialSafeContacts={initialSafe}
