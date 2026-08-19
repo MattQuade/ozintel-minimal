@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readUsers, writeUsers } from "@/lib/users";
+import { sendViaMessageMedia } from "@/lib/sms/sendSms";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 function haversineKm(
   lat1: number,
   lng1: number,
@@ -17,6 +20,7 @@ function haversineKm(
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
 function formatDuration(ms: number) {
   const totalMins = Math.max(0, Math.floor(ms / 60000));
   const hours = Math.floor(totalMins / 60);
@@ -24,6 +28,7 @@ function formatDuration(ms: number) {
   if (hours <= 0) return `${mins}m`;
   return `${hours}h ${mins}m`;
 }
+
 function formatTime(date: Date) {
   return date.toLocaleString("en-AU", {
     timeZone: "Australia/Sydney",
@@ -36,41 +41,7 @@ function formatTime(date: Date) {
     hour12: true,
   });
 }
-async function sendViaMessageMedia(phone: string, message: string) {
-  const mode = process.env.SMS_MODE || "mock";
-  if (mode === "mock") {
-    console.log("[SMS mock]", phone, message.slice(0, 80));
-    return { ok: true, mocked: true };
-  }
-  const apiKey = process.env.MESSAGEMEDIA_API_KEY;
-  const apiSecret = process.env.MESSAGEMEDIA_API_SECRET;
-  if (!apiKey || !apiSecret) {
-    throw new Error("MessageMedia credentials missing");
-  }
-  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
-  const res = await fetch("https://api.messagemedia.com/v1/messages", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      messages: [
-        {
-          content: message,
-          destination_number: phone,
-          format: "SMS",
-        },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`MessageMedia failed: ${res.status} ${text}`);
-  }
-  return { ok: true, mocked: false };
-}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

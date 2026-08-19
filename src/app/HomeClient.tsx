@@ -73,7 +73,28 @@ function clearUserCookie() {
   document.cookie = `${COOKIE_NAME}=; max-age=0; path=/; SameSite=Lax`;
 }
 
-export default function HomePage() {
+type HomeClientProps = {
+  initialSignup?: string | null;
+  initialSignupReason?: string | null;
+};
+
+function signupStatusMessage(signup: string | null | undefined, reason?: string | null) {
+  if (signup === 'ok') {
+    return '✅ Registration submitted! Pending admin approval.';
+  }
+  if (signup === 'exists') {
+    return '⚠️ That email is already registered. Use Restore My Account.';
+  }
+  if (signup === 'error') {
+    return `❌ Signup failed: ${reason || 'Please try again.'}`;
+  }
+  return '';
+}
+
+export default function HomePage({
+  initialSignup = null,
+  initialSignupReason = null,
+}: HomeClientProps) {
   const [safeContacts, setSafeContacts] = useState<Contact[]>([]);
   const [emergencyContacts, setEmergencyContacts] = useState<Contact[]>([]);
   
@@ -82,10 +103,13 @@ export default function HomePage() {
   const [emergencyPhone, setEmergencyPhone] = useState<string>('');
   const [emergencyName, setEmergencyName] = useState<string>('');
   
-  const [status, setStatus] = useState<string>('');
+  const [status, setStatus] = useState<string>(() =>
+    signupStatusMessage(initialSignup, initialSignupReason)
+  );
   const [smsCount, setSmsCount] = useState<number>(0);
   const [isSendingAlert, setIsSendingAlert] = useState(false);
   const cancelSendRef = useRef(false);
+  const [signupBusy, setSignupBusy] = useState(false);
 
   const [showSignUp, setShowSignUp] = useState<boolean>(false);
   const [signUpName, setSignUpName] = useState<string>('');
@@ -230,8 +254,26 @@ export default function HomePage() {
     }
   };
 
+  // Surface ?signup=ok|exists|error from native form POST redirects (no-JS path).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const signup = params.get('signup') || initialSignup;
+    if (!signup) return;
+    const reason = params.get('reason') || initialSignupReason;
+    const msg = signupStatusMessage(signup, reason);
+    if (msg) setStatus(msg);
+    if (signup === 'ok' || signup === 'exists') {
+      setShowSignUp(false);
+    }
+    if (params.has('signup')) {
+      window.history.replaceState({}, '', '/');
+    }
+  }, [initialSignup, initialSignupReason]);
+
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (signupBusy) return;
     const form = e.currentTarget as HTMLFormElement;
     const fd = new FormData(form);
     const name =
@@ -241,46 +283,52 @@ export default function HomePage() {
     const phone =
       String(fd.get('phone') || '').trim() || signUpPhone.trim();
     if (!name || !email || !phone) {
-      alert("Please fill in all sign-up fields.");
+      setStatus('❌ Please fill in all sign-up fields.');
       return;
     }
 
+    setSignupBusy(true);
+    setStatus('Submitting registration…');
     try {
-      const res = await fetch(`${API_BASE}/api/users`, {
+      // /api/signup creates the user and notifies admin in the background —
+      // do not call /api/send-sms here (that used to hang the whole UI).
+      const res = await fetch(`${API_BASE}/api/signup`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone })
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ name, email, phone }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (data.success) {
-        setAllUsers(data.users);
+        if (Array.isArray(data.users)) setAllUsers(data.users);
         setCurrentUser(data.user);
         localStorage.setItem('ozintel_current_user', JSON.stringify(data.user));
         setUserCookie(data.user.email);
-
-        await fetch(`${API_BASE}/api/send-sms`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phone: '+61416619600',
-            message: `ADMIN ALERT - NEW SIGNUP\nName: ${data.user.name}\nEmail: ${data.user.email}\nPhone: ${data.user.phone}\nPlease approve in Admin Panel.`,
-            alertType: "SIGNUP_REQUEST"
-          })
-        });
-
         setShowSignUp(false);
         setSignUpName('');
         setSignUpEmail('');
         setSignUpPhone('');
-        setStatus("✅ Registration submitted! Pending admin approval.");
+        setStatus('✅ Registration submitted! Pending admin approval.');
+      } else if (res.status === 409 || data.error === 'User already exists') {
+        setStatus(
+          '⚠️ That email is already registered. Use Restore My Account.'
+        );
       } else {
-        alert("Signup failed: " + (data.error || "Unknown error"));
+        setStatus('❌ Signup failed: ' + (data.error || 'Unknown error'));
       }
     } catch (err) {
       console.error(err);
-      alert("Signup failed. Please try again.");
+      // If fetch fails (offline / dead JS mid-flight), let the browser try
+      // a native form POST on the next submit — but still show feedback now.
+      setStatus(
+        '❌ Signup could not complete in-app. Tap Submit again — it will use the backup form path.'
+      );
+    } finally {
+      setSignupBusy(false);
     }
   };
 
@@ -997,6 +1045,8 @@ export default function HomePage() {
           {showSignUp ? 'Close Sign Up' : 'Sign Up - $11.00/month'}
         </summary>
         <form
+          method="POST"
+          action="/api/signup"
           onSubmit={handleSignUpSubmit}
           style={{
             background: '#1e2937',
@@ -1017,13 +1067,14 @@ export default function HomePage() {
               alignItems: 'center',
             }}
           >
+            {/* Uncontrolled inputs so native POST works even if React state is stuck */}
             <input
               name="name"
               type="text"
+              required
               autoComplete="name"
               placeholder="Full Name"
-              value={signUpName}
-              onChange={(e) => setSignUpName(e.target.value)}
+              defaultValue={signUpName}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -1036,10 +1087,10 @@ export default function HomePage() {
             <input
               name="email"
               type="email"
+              required
               autoComplete="email"
               placeholder="Email Address"
-              value={signUpEmail}
-              onChange={(e) => setSignUpEmail(e.target.value)}
+              defaultValue={signUpEmail}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -1052,11 +1103,11 @@ export default function HomePage() {
             <input
               name="phone"
               type="tel"
+              required
               autoComplete="tel"
               inputMode="tel"
               placeholder="+61412345678"
-              value={signUpPhone}
-              onChange={(e) => setSignUpPhone(e.target.value)}
+              defaultValue={signUpPhone}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -1068,22 +1119,37 @@ export default function HomePage() {
             />
             <button
               type="submit"
+              disabled={signupBusy}
               style={{
                 padding: '12px 20px',
                 width: '100%',
                 fontSize: '1rem',
-                background: '#22c55e',
+                background: signupBusy ? '#64748b' : '#22c55e',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: 'pointer',
+                cursor: signupBusy ? 'wait' : 'pointer',
                 fontWeight: 'bold',
                 WebkitTapHighlightColor: 'rgba(34, 197, 94, 0.35)',
                 touchAction: 'manipulation',
               }}
             >
-              Submit Registration
+              {signupBusy ? 'Submitting…' : 'Submit Registration'}
             </button>
+            {status ? (
+              <p
+                role="status"
+                style={{
+                  margin: '4px 0 0 0',
+                  color: '#22c55e',
+                  fontSize: '1rem',
+                  textAlign: 'center',
+                  width: '100%',
+                }}
+              >
+                {status}
+              </p>
+            ) : null}
           </div>
         </form>
       </details>
@@ -1212,7 +1278,19 @@ export default function HomePage() {
         </div>
       )}
 
-      <p style={{ margin: '15px', fontSize: '1.1rem', minHeight: '30px', color: '#22c55e' }}>{status}</p>
+      <p
+        role="status"
+        style={{
+          margin: '15px auto',
+          fontSize: '1.15rem',
+          minHeight: '30px',
+          color: '#22c55e',
+          maxWidth: '420px',
+          fontWeight: 600,
+        }}
+      >
+        {status}
+      </p>
 
       <div style={{ background: '#1e2937', padding: '12px 20px', borderRadius: '10px', margin: '15px auto', maxWidth: '300px', fontSize: '1.1rem', color: '#cbd5e1' }}>
         SMS Sent this month: <strong style={{ color: '#22c55e', fontSize: '1.3rem' }}>{currentUser ? (currentUser.smsCount || 0) : 0}</strong>

@@ -5,8 +5,23 @@ import HomeClient from './HomeClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default async function HomePage() {
+type HomeSearchParams = {
+  signup?: string;
+  reason?: string;
+};
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<HomeSearchParams>;
+}) {
   // Touch request headers so Next does not fully statically cache this route.
   await headers();
-  return <HomeClient />;
+  const sp = (await searchParams) || {};
+  return (
+    <HomeClient
+      initialSignup={sp.signup || null}
+      initialSignupReason={sp.reason || null}
+    />
+  );
 }

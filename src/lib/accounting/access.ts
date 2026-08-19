@@ -13,10 +13,6 @@ export type AccountingUser = {
 
 export type OpsPermission = "pubOps" | "forestryOps";
 
-function emailsMatch(a: string, b: string) {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -32,39 +28,38 @@ async function fetchWithTimeout(
 }
 
 async function loadCurrentUser(): Promise<AccountingUser | null> {
-  let email = "";
+  // Prefer cookie-scoped /api/me — avoids downloading the full user list
+  // and works even when localStorage is empty or stale.
+  try {
+    const res = await fetchWithTimeout("/api/me", { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.user) {
+        try {
+          localStorage.setItem(
+            "ozintel_current_user",
+            JSON.stringify(data.user)
+          );
+        } catch {
+          /* ignore quota / private mode */
+        }
+        return data.user as AccountingUser;
+      }
+    }
+  } catch {
+    // fall through to local cache
+  }
+
   try {
     const stored = localStorage.getItem("ozintel_current_user");
     if (stored) {
-      const local = JSON.parse(stored) as AccountingUser;
-      email = local.email || "";
+      return JSON.parse(stored) as AccountingUser;
     }
   } catch {
     // ignore bad local storage
   }
 
-  if (!email && typeof document !== "undefined") {
-    const match = document.cookie.match(/(?:^|; )ozintel_user_email=([^;]+)/);
-    if (match) email = decodeURIComponent(match[1]);
-  }
-
-  if (!email) return null;
-
-  const res = await fetchWithTimeout("/api/users");
-  const data = await res.json();
-  if (!data.success || !Array.isArray(data.users)) return null;
-
-  const found = data.users.find((u: AccountingUser) =>
-    emailsMatch(u.email, email)
-  );
-  if (!found) return null;
-
-  try {
-    localStorage.setItem("ozintel_current_user", JSON.stringify(found));
-  } catch {
-    /* ignore quota / private mode */
-  }
-  return found;
+  return null;
 }
 
 /** True when the restored/approved user has Accounting permission in Admin. */
