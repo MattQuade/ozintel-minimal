@@ -10,6 +10,14 @@ main {
   background-color: #f9fafb;
 }
 
+/* iOS home Sign Up / Restore — hide disclosure triangle on summary */
+summary::-webkit-details-marker {
+  display: none;
+}
+summary {
+  list-style: none;
+}
+
 /* Hide native number input steppers (invoice unit/qty typing) */
 input.no-spinner::-webkit-outer-spin-button,
 input.no-spinner::-webkit-inner-spin-button {

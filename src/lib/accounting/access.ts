@@ -17,6 +17,20 @@ function emailsMatch(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  ms = 8000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function loadCurrentUser(): Promise<AccountingUser | null> {
   let email = "";
   try {
@@ -36,7 +50,7 @@ async function loadCurrentUser(): Promise<AccountingUser | null> {
 
   if (!email) return null;
 
-  const res = await fetch("/api/users");
+  const res = await fetchWithTimeout("/api/users");
   const data = await res.json();
   if (!data.success || !Array.isArray(data.users)) return null;
 
@@ -45,7 +59,11 @@ async function loadCurrentUser(): Promise<AccountingUser | null> {
   );
   if (!found) return null;
 
-  localStorage.setItem("ozintel_current_user", JSON.stringify(found));
+  try {
+    localStorage.setItem("ozintel_current_user", JSON.stringify(found));
+  } catch {
+    /* ignore quota / private mode */
+  }
   return found;
 }
 
