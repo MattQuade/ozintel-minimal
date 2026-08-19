@@ -30,9 +30,17 @@ export default function AccountingGate({
 
   useEffect(() => {
     let cancelled = false;
+    const failSafe = window.setTimeout(() => {
+      if (cancelled) return;
+      router.replace(
+        `/accounting/pending?module=${encodeURIComponent("Accounting")}&section=${encodeURIComponent(section)}`
+      );
+      setAllowed(false);
+    }, 10000);
     (async () => {
       const ok = await checkAccountingAccess();
       if (cancelled) return;
+      window.clearTimeout(failSafe);
       if (!ok) {
         router.replace(
           `/accounting/pending?module=${encodeURIComponent("Accounting")}&section=${encodeURIComponent(section)}`
@@ -44,6 +52,7 @@ export default function AccountingGate({
     })();
     return () => {
       cancelled = true;
+      window.clearTimeout(failSafe);
     };
   }, [router, section]);
 
@@ -59,7 +68,21 @@ export default function AccountingGate({
           textAlign: "center",
         }}
       >
-        Checking accounting access…
+        <p style={{ marginBottom: 16 }}>Checking accounting access…</p>
+        <a
+          href="/"
+          style={{
+            display: "inline-block",
+            color: "#0f172a",
+            background: "#e2e8f0",
+            textDecoration: "none",
+            fontWeight: 600,
+            padding: "10px 16px",
+            borderRadius: 10,
+          }}
+        >
+          ← Back to Alerts
+        </a>
       </main>
     );
   }

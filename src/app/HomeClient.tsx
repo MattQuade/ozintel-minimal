@@ -232,7 +232,15 @@ export default function HomePage() {
 
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!signUpName.trim() || !signUpEmail.trim() || !signUpPhone.trim()) {
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const name =
+      String(fd.get('name') || '').trim() || signUpName.trim();
+    const email =
+      String(fd.get('email') || '').trim() || signUpEmail.trim();
+    const phone =
+      String(fd.get('phone') || '').trim() || signUpPhone.trim();
+    if (!name || !email || !phone) {
       alert("Please fill in all sign-up fields.");
       return;
     }
@@ -241,11 +249,7 @@ export default function HomePage() {
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: signUpName.trim(),
-          email: signUpEmail.trim(),
-          phone: signUpPhone.trim()
-        })
+        body: JSON.stringify({ name, email, phone })
       });
 
       const data = await res.json();
@@ -958,87 +962,233 @@ export default function HomePage() {
         </button>
       )}
       <br />
-      
-      <button
-        type="button"
-        onClick={() => {
-          setShowSignUp((open) => !open);
-          setShowRestore(false);
+
+      {/* Native <details> so Sign Up opens even if React hydration fails on iOS */}
+      <details
+        open={showSignUp}
+        onToggle={(e) => {
+          const open = (e.currentTarget as HTMLDetailsElement).open;
+          setShowSignUp(open);
+          if (open) setShowRestore(false);
         }}
         style={{
-          padding: '16px',
-          fontSize: '1.1rem',
-          margin: '10px 15px 10px 15px',
-          border: '2px solid #0ea5e9',
-          borderRadius: '12px',
+          margin: '10px auto 10px auto',
           width: '90%',
           maxWidth: '400px',
-          cursor: 'pointer',
-          // iOS Safari often ignores taps on fully transparent buttons
-          background: 'rgba(14, 165, 233, 0.12)',
-          color: '#0ea5e9',
-          fontWeight: 'bold',
-          WebkitTapHighlightColor: 'rgba(14, 165, 233, 0.35)',
-          touchAction: 'manipulation',
+          textAlign: 'left',
         }}
       >
-        {showSignUp ? 'Close Sign Up' : 'Sign Up - $11.00/month'}
-      </button>
-
-      <button
-        type="button"
-        onClick={() => {
-          setShowRestore((open) => !open);
-          setShowSignUp(false);
-        }}
-        style={{
-          padding: '12px',
-          fontSize: '1rem',
-          margin: '0 15px 25px 15px',
-          border: '2px solid #94a3b8',
-          borderRadius: '12px',
-          width: '90%',
-          maxWidth: '400px',
-          cursor: 'pointer',
-          background: 'rgba(148, 163, 184, 0.12)',
-          color: '#94a3b8',
-          fontWeight: 'bold',
-          WebkitTapHighlightColor: 'rgba(148, 163, 184, 0.35)',
-          touchAction: 'manipulation',
-        }}
-      >
-        {showRestore ? 'Close Restore' : 'Restore My Account'}
-      </button>
-
-      {showSignUp && (
-        <form onSubmit={handleSignUpSubmit} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#38bdf8' }}>New User Registration</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-            <input type="text" placeholder="Full Name" value={signUpName} onChange={e => setSignUpName(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
-            <input type="email" placeholder="Email Address" value={signUpEmail} onChange={e => setSignUpEmail(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
-            <input type="tel" placeholder="+61412345678" value={signUpPhone} onChange={e => setSignUpPhone(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
-            <button type="submit" style={{ padding: '12px 20px', width: '100%', fontSize: '1rem', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+        <summary
+          style={{
+            listStyle: 'none',
+            padding: '16px',
+            fontSize: '1.1rem',
+            border: '2px solid #0ea5e9',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            background: 'rgba(14, 165, 233, 0.12)',
+            color: '#0ea5e9',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            WebkitTapHighlightColor: 'rgba(14, 165, 233, 0.35)',
+            touchAction: 'manipulation',
+          }}
+        >
+          {showSignUp ? 'Close Sign Up' : 'Sign Up - $11.00/month'}
+        </summary>
+        <form
+          onSubmit={handleSignUpSubmit}
+          style={{
+            background: '#1e2937',
+            padding: '20px',
+            borderRadius: '12px',
+            margin: '12px 0 0 0',
+            border: '1px solid #334155',
+          }}
+        >
+          <h3 style={{ margin: '0 0 15px 0', color: '#38bdf8', textAlign: 'center' }}>
+            New User Registration
+          </h3>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              alignItems: 'center',
+            }}
+          >
+            <input
+              name="name"
+              type="text"
+              autoComplete="name"
+              placeholder="Full Name"
+              value={signUpName}
+              onChange={(e) => setSignUpName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: 'white',
+              }}
+            />
+            <input
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="Email Address"
+              value={signUpEmail}
+              onChange={(e) => setSignUpEmail(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: 'white',
+              }}
+            />
+            <input
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              placeholder="+61412345678"
+              value={signUpPhone}
+              onChange={(e) => setSignUpPhone(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: 'white',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: '12px 20px',
+                width: '100%',
+                fontSize: '1rem',
+                background: '#22c55e',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                WebkitTapHighlightColor: 'rgba(34, 197, 94, 0.35)',
+                touchAction: 'manipulation',
+              }}
+            >
               Submit Registration
             </button>
           </div>
         </form>
-      )}
+      </details>
 
-      {showRestore && (
-        <form onSubmit={handleRestoreAccount} style={{ background: '#1e2937', padding: '20px', borderRadius: '12px', margin: '0 auto 25px auto', maxWidth: '400px', border: '1px solid #334155' }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#94a3b8' }}>Restore Existing Account</h3>
-          <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: 0 }}>
+      <details
+        open={showRestore}
+        onToggle={(e) => {
+          const open = (e.currentTarget as HTMLDetailsElement).open;
+          setShowRestore(open);
+          if (open) setShowSignUp(false);
+        }}
+        style={{
+          margin: '0 auto 25px auto',
+          width: '90%',
+          maxWidth: '400px',
+          textAlign: 'left',
+        }}
+      >
+        <summary
+          style={{
+            listStyle: 'none',
+            padding: '12px',
+            fontSize: '1rem',
+            border: '2px solid #94a3b8',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            background: 'rgba(148, 163, 184, 0.12)',
+            color: '#94a3b8',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            WebkitTapHighlightColor: 'rgba(148, 163, 184, 0.35)',
+            touchAction: 'manipulation',
+          }}
+        >
+          {showRestore ? 'Close Restore' : 'Restore My Account'}
+        </summary>
+        <form
+          onSubmit={handleRestoreAccount}
+          style={{
+            background: '#1e2937',
+            padding: '20px',
+            borderRadius: '12px',
+            margin: '12px 0 0 0',
+            border: '1px solid #334155',
+          }}
+        >
+          <h3 style={{ margin: '0 0 15px 0', color: '#94a3b8', textAlign: 'center' }}>
+            Restore Existing Account
+          </h3>
+          <p
+            style={{
+              fontSize: '0.9rem',
+              color: '#94a3b8',
+              marginTop: 0,
+              textAlign: 'center',
+            }}
+          >
             Enter the <strong>signup email</strong>, mobile, or exact full name.
             Use the address stored in Admin (it may not look like their name).
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-            <input type="text" placeholder="Email, phone, or full name" value={restoreEmail} onChange={e => setRestoreEmail(e.target.value)} autoComplete="username" style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #475569', background: '#0f172a', color: 'white' }} />
-            <button type="submit" style={{ padding: '12px 20px', width: '100%', fontSize: '1rem', background: '#64748b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              alignItems: 'center',
+            }}
+          >
+            <input
+              name="restore"
+              type="text"
+              placeholder="Email, phone, or full name"
+              value={restoreEmail}
+              onChange={(e) => setRestoreEmail(e.target.value)}
+              autoComplete="username"
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: 'white',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: '12px 20px',
+                width: '100%',
+                fontSize: '1rem',
+                background: '#64748b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                WebkitTapHighlightColor: 'rgba(100, 116, 139, 0.35)',
+                touchAction: 'manipulation',
+              }}
+            >
               Restore Account
             </button>
           </div>
         </form>
-      )}
+      </details>
 
       {currentUser && (
         <div style={{ 
