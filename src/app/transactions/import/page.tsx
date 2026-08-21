@@ -610,7 +610,6 @@ export default function BankImport() {
               {isProcessing ? 'Classifying & saving…' : `Classify ${preview.length} Transactions`}
             </button>
           )}
-          )}
 
           {classified.length > 0 && (
             <>
