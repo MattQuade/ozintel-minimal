@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: 'OzIntel - Emergency Alert System',
   applicationName: 'OzIntel',
   // Cache-bust so Android Chrome / Samsung Internet pick up new home-screen icons
-  manifest: '/manifest.webmanifest?v=2',
+  manifest: '/manifest.webmanifest?v=3',
   appleWebApp: {
     capable: true,
     title: 'OzIntel',

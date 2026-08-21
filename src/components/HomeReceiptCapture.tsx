@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { checkAccountingAccess } from '@/lib/accounting/access';
+import { useRef, useState, type CSSProperties } from 'react';
 import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 
 const homeButtonStyle: CSSProperties = {
+  display: 'block',
   padding: '20px',
   fontSize: '1.3rem',
   border: 'none',
@@ -18,36 +18,35 @@ const homeButtonStyle: CSSProperties = {
   fontWeight: 'bold',
   boxSizing: 'border-box',
   textAlign: 'center',
+  WebkitTapHighlightColor: 'rgba(234,88,12,0.35)',
+  touchAction: 'manipulation',
+};
+
+/** Hidden from view but still tappable via <label> — iOS PWAs ignore display:none + .click(). */
+const srFileInput: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0, 0, 0, 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
 };
 
 export default function HomeReceiptCapture() {
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const [allowed, setAllowed] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [caption, setCaption] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const ok = await checkAccountingAccess();
-      if (cancelled) return;
-      setAllowed(ok);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!allowed) return null;
 
   const parsed = parseReceiptCaption(caption);
 
   const resetPhoto = () => {
     setPhotoFile(null);
     setCaption('');
-    setStatus('');
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
@@ -67,6 +66,8 @@ export default function HomeReceiptCapture() {
       const res = await fetch('/api/ledger/receipts', {
         method: 'POST',
         body: form,
+        credentials: 'include',
+        cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
@@ -83,7 +84,11 @@ export default function HomeReceiptCapture() {
 
   return (
     <>
+      <label htmlFor="home-receipt-photo" style={homeButtonStyle}>
+        Capture Receipt
+      </label>
       <input
+        id="home-receipt-photo"
         ref={photoInputRef}
         type="file"
         accept="image/*"
@@ -92,16 +97,8 @@ export default function HomeReceiptCapture() {
           setPhotoFile(e.target.files?.[0] || null);
           setStatus('');
         }}
-        style={{ display: 'none' }}
-        aria-hidden
+        style={srFileInput}
       />
-      <button
-        type="button"
-        onClick={() => photoInputRef.current?.click()}
-        style={homeButtonStyle}
-      >
-        Capture Receipt
-      </button>
       {photoFile ? (
         <div
           style={{
@@ -144,6 +141,7 @@ export default function HomeReceiptCapture() {
               fontWeight: 700,
               cursor: saving ? 'not-allowed' : 'pointer',
               opacity: saving ? 0.7 : 1,
+              touchAction: 'manipulation',
             }}
           >
             {saving ? 'Saving…' : 'Save'}
