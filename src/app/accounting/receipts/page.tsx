@@ -43,6 +43,7 @@ function ReceiptsLedger() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'inbox' | 'linked'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +69,38 @@ function ReceiptsLedger() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const deleteReceipt = async (r: ReceiptRow) => {
+    const label =
+      r.caption ||
+      (r.captionAlias && r.captionAmount != null
+        ? `${r.captionAlias} ${r.captionAmount}`
+        : r.originalFilename || 'this receipt');
+    if (!window.confirm(`Delete receipt "${label}"? This cannot be undone.`)) {
+      return;
+    }
+    setDeletingId(r.id);
+    setError('');
+    try {
+      const res = await fetch(
+        `/api/ledger/receipts/${encodeURIComponent(r.id)}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Delete failed');
+      }
+      setReceipts((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const visible = receipts.filter((r) => {
     if (filter === 'inbox') return !r.linked;
@@ -117,13 +150,17 @@ function ReceiptsLedger() {
       {loading ? (
         <p className="text-slate-500">Loading receipts…</p>
       ) : error ? (
-        <p className="text-red-600">{error}</p>
-      ) : visible.length === 0 ? (
+        <p className="text-red-600 mb-4">{error}</p>
+      ) : null}
+
+      {!loading && !error && visible.length === 0 ? (
         <p className="text-slate-500">
           No receipts yet. Capture one from the Alerts home page, then refresh
           here.
         </p>
-      ) : (
+      ) : null}
+
+      {!loading && visible.length > 0 ? (
         <ul className="divide-y divide-slate-200 border-t border-b border-slate-200 bg-white">
           {visible.map((r) => {
             const isImage = (r.mimeType || '').startsWith('image/');
@@ -132,31 +169,42 @@ function ReceiptsLedger() {
               (r.captionAlias && r.captionAmount != null
                 ? `${r.captionAlias} ${r.captionAmount}`
                 : r.originalFilename || 'Untitled receipt');
+            const busy = deletingId === r.id;
             return (
               <li
                 key={r.id}
                 className="flex gap-4 py-4 items-start"
               >
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 block w-20 h-20 rounded-md overflow-hidden bg-slate-100 border border-slate-200"
-                  title="Open receipt"
-                >
-                  {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={r.url}
-                      alt={caption}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full items-center justify-center text-xs text-slate-500 px-1 text-center">
-                      PDF
-                    </span>
-                  )}
-                </a>
+                <div className="shrink-0 flex flex-col items-center gap-2">
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-20 h-20 rounded-md overflow-hidden bg-slate-100 border border-slate-200"
+                    title="Open receipt"
+                  >
+                    {isImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.url}
+                        alt={caption}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-xs text-slate-500 px-1 text-center">
+                        PDF
+                      </span>
+                    )}
+                  </a>
+                  <button
+                    type="button"
+                    disabled={busy || deletingId !== null}
+                    onClick={() => void deleteReceipt(r)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {busy ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900 text-lg leading-tight">
                     {caption}
@@ -191,7 +239,7 @@ function ReceiptsLedger() {
             );
           })}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
