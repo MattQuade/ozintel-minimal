@@ -7,6 +7,7 @@ import {
   getReceiptsMetaFilePath,
 } from "@/lib/dataPaths";
 import { readLedger, updateLedgerEntry, type LedgerEntry } from "@/lib/accounting/store";
+import { parseReceiptCaption } from "@/lib/accounting/receiptCaption";
 
 export type ReceiptMeta = {
   id: string;
@@ -16,6 +17,10 @@ export type ReceiptMeta = {
   uploadedAt: string;
   sizeBytes: number;
   ledgerEntryIds: string[];
+  /** Typed caption from in-app capture, e.g. ww 79.13 */
+  caption?: string;
+  captionAlias?: string;
+  captionAmount?: number;
 };
 
 type ReceiptStore = {
@@ -122,6 +127,7 @@ export async function createReceipt(args: {
   mimeType: string;
   originalFilename: string;
   ledgerEntryIds?: string[];
+  caption?: string;
 }): Promise<ReceiptMeta> {
   const originalFilename = String(args.originalFilename || "receipt").trim() || "receipt";
   const mimeType = normalizeMime(args.mimeType, originalFilename);
@@ -134,6 +140,12 @@ export async function createReceipt(args: {
   // Soft cap ~18MB (client compresses phone photos; PDFs stay as-is)
   if (args.buffer.length > 18 * 1024 * 1024) {
     throw new Error("File too large (max 18MB)");
+  }
+
+  const parsedCaption = parseReceiptCaption(String(args.caption || ""));
+  const caption = String(args.caption || "").trim();
+  if (caption && !parsedCaption) {
+    throw new Error('Caption must look like "ww 79.13" (merchant + amount).');
   }
 
   const store = await loadStore();
@@ -155,6 +167,13 @@ export async function createReceipt(args: {
     uploadedAt: new Date().toISOString(),
     sizeBytes: args.buffer.length,
     ledgerEntryIds,
+    ...(parsedCaption
+      ? {
+          caption: parsedCaption.display,
+          captionAlias: parsedCaption.alias,
+          captionAmount: parsedCaption.amount,
+        }
+      : {}),
   };
 
   store.receipts.unshift(meta);
@@ -226,6 +245,25 @@ export async function listReceiptsByLedgerEntry(
   if (!id) return [];
   const store = await loadStore();
   return store.receipts.filter((r) => r.ledgerEntryIds.includes(id));
+}
+
+/** In-app photos waiting for a bank CSV line (captioned, not yet linked). */
+export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
+  const store = await loadStore();
+  return store.receipts.filter((r) => {
+    const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
+    if (linked.length > 0) return false;
+    if (r.captionAlias && Number(r.captionAmount) > 0) return true;
+    return Boolean(parseReceiptCaption(String(r.caption || "")));
+  });
+}
+
+export async function listInboxReceipts(): Promise<ReceiptMeta[]> {
+  const store = await loadStore();
+  return store.receipts.filter((r) => {
+    const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
+    return linked.length === 0;
+  });
 }
 
 export async function attachReceiptToEntry(

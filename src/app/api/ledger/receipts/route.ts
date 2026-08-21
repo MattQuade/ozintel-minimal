@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createReceipt,
+  listInboxReceipts,
   listReceiptsByLedgerEntry,
   receiptPublicUrl,
 } from "@/lib/accounting/receipts";
@@ -9,27 +10,48 @@ import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** List receipts for a ledger entry: GET ?ledgerEntryId=... */
+function publicReceipt(r: {
+  id: string;
+  caption?: string;
+  captionAlias?: string;
+  captionAmount?: number;
+  uploadedAt: string;
+  originalFilename: string;
+  mimeType: string;
+}) {
+  return {
+    ...r,
+    url: receiptPublicUrl(r.id),
+  };
+}
+
+/** List receipts: GET ?ledgerEntryId=... or GET ?inbox=1 (waiting for CSV). */
 export async function GET(req: NextRequest) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
+      const inbox = req.nextUrl.searchParams.get("inbox")?.trim() === "1";
+      if (inbox) {
+        const receipts = await listInboxReceipts();
+        return NextResponse.json({
+          success: true,
+          receipts: receipts.map(publicReceipt),
+        });
+      }
+
       const ledgerEntryId =
         req.nextUrl.searchParams.get("ledgerEntryId")?.trim() || "";
       if (!ledgerEntryId) {
         return NextResponse.json(
-          { success: false, error: "ledgerEntryId is required" },
+          { success: false, error: "ledgerEntryId or inbox=1 is required" },
           { status: 400 }
         );
       }
       const receipts = await listReceiptsByLedgerEntry(ledgerEntryId);
       return NextResponse.json({
         success: true,
-        receipts: receipts.map((r) => ({
-          ...r,
-          url: receiptPublicUrl(r.id),
-        })),
+        receipts: receipts.map(publicReceipt),
       });
     } catch (err) {
       console.error(err);
@@ -50,6 +72,7 @@ export async function POST(req: NextRequest) {
       const form = await req.formData();
       const file = form.get("file") ?? form.get("receipt") ?? form.get("photo");
       const ledgerEntryId = String(form.get("ledgerEntryId") || "").trim();
+      const caption = String(form.get("caption") || "").trim();
 
       if (!(file instanceof File)) {
         return NextResponse.json(
@@ -64,14 +87,12 @@ export async function POST(req: NextRequest) {
         mimeType: file.type || "application/octet-stream",
         originalFilename: file.name || "receipt",
         ledgerEntryIds: ledgerEntryId ? [ledgerEntryId] : [],
+        caption,
       });
 
       return NextResponse.json({
         success: true,
-        receipt: {
-          ...meta,
-          url: receiptPublicUrl(meta.id),
-        },
+        receipt: publicReceipt(meta),
       });
     } catch (err) {
       console.error(err);

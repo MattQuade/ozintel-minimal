@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appendLedgerEntries } from "@/lib/accounting/store";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
+import { attachInboxReceiptsToBankImportEntries } from "@/lib/accounting/matchInboxReceipts";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -27,15 +28,30 @@ export async function POST(req: Request) {
         }
       }
 
+      const savedEntries = await attachInboxReceiptsToBankImportEntries(
+        result.savedEntries
+      );
+      const inboxAttached = savedEntries.reduce((n, entry, i) => {
+        const before = Array.isArray(result.savedEntries[i]?.receiptIds)
+          ? result.savedEntries[i].receiptIds!.length
+          : 0;
+        const after = Array.isArray(entry.receiptIds)
+          ? entry.receiptIds.length
+          : 0;
+        return n + Math.max(0, after - before);
+      }, 0);
+
       console.log(
-        `Saved ${result.saved} transactions. Total now: ${result.total}`
+        `Saved ${result.saved} transactions. Total now: ${result.total}` +
+          (inboxAttached ? ` (${inboxAttached} receipt(s) auto-attached)` : "")
       );
 
       return NextResponse.json({
         success: true,
         saved: result.saved,
         total: result.total,
-        savedEntries: result.savedEntries,
+        savedEntries,
+        inboxAttached,
       });
     } catch (err: unknown) {
       console.error("Save Error:", err);

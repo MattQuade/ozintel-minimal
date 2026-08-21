@@ -316,6 +316,7 @@ export default function BankImport() {
     setSaving(true);
     try {
       let count = allocated;
+      let inboxAttached = 0;
 
       if (toSave.length > 0) {
         const res = await fetch('/api/ledger/add', {
@@ -336,6 +337,7 @@ export default function BankImport() {
         }
         const data = await res.json();
         count += data.saved || toSave.length;
+        inboxAttached = Number(data.inboxAttached) || 0;
         const savedEntries = Array.isArray(data.savedEntries)
           ? data.savedEntries
           : [];
@@ -362,6 +364,7 @@ export default function BankImport() {
       const parts = [
         count ? `${count} posted` : null,
         allocated ? `${allocated} invoice payment(s)` : null,
+        inboxAttached ? `${inboxAttached} receipt(s) attached` : null,
         allocateErrors ? `${allocateErrors} allocate error(s)` : null,
       ].filter(Boolean);
       setStatus(
@@ -587,6 +590,9 @@ export default function BankImport() {
               <div className="text-7xl mb-6">📤</div>
               <p className="text-2xl font-semibold">Upload ANZ / NAB CSV</p>
               <p className="text-gray-500">{fileName}</p>
+              <p className="text-gray-400 text-sm mt-2">
+                Inbox receipts (ww 79.13) attach automatically when this file is classified.
+              </p>
             </label>
           </div>
 
@@ -603,6 +609,7 @@ export default function BankImport() {
             >
               {isProcessing ? 'Classifying & saving…' : `Classify ${preview.length} Transactions`}
             </button>
+          )}
           )}
 
           {classified.length > 0 && (
