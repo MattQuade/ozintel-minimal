@@ -27,6 +27,10 @@ const previewLinks = [
     label: "Transactions",
   },
   {
+    href: "/accounting/pending?module=Accounting&section=Receipts",
+    label: "Receipts",
+  },
+  {
     href: "/accounting/pending?module=Accounting&section=Employees",
     label: "Employees",
   },
@@ -43,6 +47,7 @@ const fullLinks = [
   { href: "/customers", label: "Customers" },
   { href: "/journal", label: "Journal" },
   { href: "/transactions", label: "Transactions" },
+  { href: "/accounting/receipts", label: "Receipts" },
   { href: "/employees", label: "Employees" },
   { href: "/reports", label: "Reports" },
 ];

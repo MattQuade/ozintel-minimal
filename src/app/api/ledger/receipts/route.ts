@@ -1,36 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createReceipt,
+  listAllReceipts,
   listInboxReceipts,
   listReceiptsByLedgerEntry,
   receiptPublicUrl,
+  type ReceiptMeta,
 } from "@/lib/accounting/receipts";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function publicReceipt(r: {
-  id: string;
-  caption?: string;
-  captionAlias?: string;
-  captionAmount?: number;
-  uploadedAt: string;
-  originalFilename: string;
-  mimeType: string;
-}) {
+function publicReceipt(r: ReceiptMeta) {
+  const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
   return {
-    ...r,
+    id: r.id,
+    caption: r.caption,
+    captionAlias: r.captionAlias,
+    captionAmount: r.captionAmount,
+    uploadedAt: r.uploadedAt,
+    originalFilename: r.originalFilename,
+    mimeType: r.mimeType,
+    sizeBytes: r.sizeBytes,
+    ledgerEntryIds: linked,
+    linked: linked.length > 0,
     url: receiptPublicUrl(r.id),
   };
 }
 
-/** List receipts: GET ?ledgerEntryId=... or GET ?inbox=1 (waiting for CSV). */
+/** List receipts: GET ?all=1 | ?inbox=1 | ?ledgerEntryId=... */
 export async function GET(req: NextRequest) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
+      const all = req.nextUrl.searchParams.get("all")?.trim() === "1";
+      if (all) {
+        const receipts = await listAllReceipts();
+        return NextResponse.json({
+          success: true,
+          receipts: receipts.map(publicReceipt),
+        });
+      }
+
       const inbox = req.nextUrl.searchParams.get("inbox")?.trim() === "1";
       if (inbox) {
         const receipts = await listInboxReceipts();
@@ -44,7 +57,10 @@ export async function GET(req: NextRequest) {
         req.nextUrl.searchParams.get("ledgerEntryId")?.trim() || "";
       if (!ledgerEntryId) {
         return NextResponse.json(
-          { success: false, error: "ledgerEntryId or inbox=1 is required" },
+          {
+            success: false,
+            error: "all=1, inbox=1, or ledgerEntryId is required",
+          },
           { status: 400 }
         );
       }

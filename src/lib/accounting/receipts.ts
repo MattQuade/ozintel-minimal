@@ -247,6 +247,16 @@ export async function listReceiptsByLedgerEntry(
   return store.receipts.filter((r) => r.ledgerEntryIds.includes(id));
 }
 
+/** Newest-first list of every stored receipt (inbox + linked). */
+export async function listAllReceipts(): Promise<ReceiptMeta[]> {
+  const store = await loadStore();
+  return [...store.receipts].sort((a, b) => {
+    const ta = Date.parse(a.uploadedAt || "") || 0;
+    const tb = Date.parse(b.uploadedAt || "") || 0;
+    return tb - ta;
+  });
+}
+
 /** In-app photos waiting for a bank CSV line (captioned, not yet linked). */
 export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
   const store = await loadStore();
