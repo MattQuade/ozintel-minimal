@@ -4,10 +4,10 @@ export const RECEIPT_MAX_BYTES = 18 * 1024 * 1024;
 
 /**
  * ATO-style expense proof needs merchant/date/amount/ABN legible.
- * 1280px long edge + JPEG 0.09 — trial after 0.075; aiming for ATO-readable.
+ * 1280px long edge + JPEG 0.1 — settled ATO-readable size/quality trade-off.
  */
 export const RECEIPT_MAX_EDGE = 1280;
-export const RECEIPT_JPEG_QUALITY = 0.09;
+export const RECEIPT_JPEG_QUALITY = 0.1;
 
 const MAX_EDGE = RECEIPT_MAX_EDGE;
 const JPEG_QUALITY = RECEIPT_JPEG_QUALITY;
