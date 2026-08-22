@@ -47,7 +47,7 @@ const srFileInput: CSSProperties = {
 
 type Step = 'idle' | 'crop' | 'reading' | 'confirm';
 
-const OCR_CLIENT_TIMEOUT_MS = 15_000;
+const OCR_CLIENT_TIMEOUT_MS = 25_000;
 
 export default function HomeReceiptCapture() {
   const photoInputRef = useRef<HTMLInputElement>(null);

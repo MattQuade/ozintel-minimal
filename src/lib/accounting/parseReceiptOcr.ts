@@ -28,6 +28,38 @@ const MERCHANT_DETECT: Array<{ alias: string; terms: string[] }> = [
   { alias: "ferndale", terms: ["ferndale"] },
 ];
 
+const HEADER_STOP = new Set([
+  "tax",
+  "invoice",
+  "receipt",
+  "abn",
+  "gst",
+  "total",
+  "subtotal",
+  "amount",
+  "change",
+  "purchase",
+  "eftpos",
+  "eft",
+  "card",
+  "cash",
+  "thank",
+  "you",
+  "for",
+  "shopping",
+  "welcome",
+  "phone",
+  "tel",
+  "www",
+  "pty",
+  "ltd",
+  "the",
+  "and",
+  "fresh",
+  "food",
+  "people",
+]);
+
 export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
   merchantLabel: string;
   confidence: "high" | "medium" | "low";
@@ -41,6 +73,16 @@ function normalizeOcrNoise(text: string): string {
     .replace(/\r/g, "\n");
 }
 
+/** Fold common Tesseract letter/digit swaps for merchant matching only. */
+export function foldOcrLetters(text: string): string {
+  return normalizeOcrNoise(text)
+    .toLowerCase()
+    .replace(/0/g, "o")
+    .replace(/1/g, "l")
+    .replace(/5/g, "s")
+    .replace(/\$/g, "s");
+}
+
 function parseMoneyToken(whole: string, frac: string): number | null {
   const n = Number(`${whole}.${frac}`);
   if (!Number.isFinite(n) || n <= 0 || n > 99999) return null;
@@ -51,7 +93,7 @@ function moneyMatchesInLine(
   line: string
 ): Array<{ amount: number; index: number }> {
   const out: Array<{ amount: number; index: number }> = [];
-  const re = /\$?\s*(\d{1,5})[.,](\d{2})\b/g;
+  const re = /\$?\s*(\d{1,5})\s*[.,]\s*(\d{2})\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(line)) !== null) {
     const amount = parseMoneyToken(m[1], m[2]);
@@ -72,7 +114,6 @@ function scoreAmountLine(line: string, amount: number): number {
   if (/\baud\b/.test(lower)) score += 35;
   if (/\bno\s*cash\s*out\b/.test(lower)) score += 45;
   if (/\bcba\s*chg\b/.test(lower) || /\bchange\b/.test(lower)) {
-    // Ampol "CBA Chg $115.58" is the charge; "Change $0.00" is not
     if (amount >= 1) score += 30;
     else score -= 40;
   }
@@ -80,7 +121,6 @@ function scoreAmountLine(line: string, amount: number): number {
   const hasTotal = /\btotal\b/.test(lower);
   const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
   if (hasTotal && includesGst) {
-    // "Total (INCL GST) $89.80" / "Total includes GST $115.58"
     score += amount >= 10 ? 58 : 5;
   } else if (hasTotal) {
     score += 50;
@@ -90,7 +130,6 @@ function scoreAmountLine(line: string, amount: number): number {
   if (/\bsubtotal\b/.test(lower)) score -= 25;
   if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) score -= 15;
 
-  // Prefer typical docket totals over tiny / huge outliers
   if (amount >= 5 && amount < 2000) score += 5;
   if (amount < 1) score -= 20;
 
@@ -101,20 +140,17 @@ export function detectMerchantFromOcr(text: string): {
   alias: string;
   label: string;
 } | null {
-  const hay = normalizeOcrNoise(text).toLowerCase();
+  const hay = foldOcrLetters(text);
   let best: { alias: string; label: string; at: number; len: number } | null =
     null;
 
   for (const row of MERCHANT_DETECT) {
     for (const term of row.terms) {
-      const at = hay.indexOf(term);
+      const needle = foldOcrLetters(term);
+      const at = hay.indexOf(needle);
       if (at < 0) continue;
-      const len = term.length;
-      if (
-        !best ||
-        at < best.at ||
-        (at === best.at && len > best.len)
-      ) {
+      const len = needle.length;
+      if (!best || at < best.at || (at === best.at && len > best.len)) {
         best = {
           alias: row.alias,
           label: term.trim(),
@@ -125,6 +161,27 @@ export function detectMerchantFromOcr(text: string): {
     }
   }
   return best ? { alias: best.alias, label: best.label } : null;
+}
+
+/** First useful word on the docket when the merchant is not in the alias list. */
+export function guessAliasFromHeader(text: string): string | null {
+  const lines = normalizeOcrNoise(text)
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  for (const line of lines) {
+    const words = line.match(/[A-Za-z][A-Za-z']{2,}/g) || [];
+    for (const word of words) {
+      const alias = normalizeReceiptAlias(word);
+      if (alias.length < 3) continue;
+      if (HEADER_STOP.has(alias)) continue;
+      if (/^\d+$/.test(alias)) continue;
+      return alias;
+    }
+  }
+  return null;
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -139,7 +196,11 @@ export function detectAmountFromOcr(text: string): {
     if (!matches.length) continue;
     for (const { amount } of matches) {
       const score = scoreAmountLine(line, amount);
-      if (!best || score > best.score || (score === best.score && amount > best.amount)) {
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && amount > best.amount)
+      ) {
         best = { amount, score };
       }
     }
@@ -155,23 +216,23 @@ export function parseReceiptOcrText(
   const raw = normalizeOcrNoise(text).trim();
   if (!raw) return null;
 
-  const merchant = detectMerchantFromOcr(raw);
+  const known = detectMerchantFromOcr(raw);
   const amountHit = detectAmountFromOcr(raw);
-  if (!merchant || !amountHit) return null;
+  if (!amountHit) return null;
 
-  const alias = normalizeReceiptAlias(merchant.alias);
-  const amount = amountHit.amount;
-  if (!alias || !(amount > 0)) return null;
+  const guessed = known ? null : guessAliasFromHeader(raw);
+  const alias = normalizeReceiptAlias(known?.alias || guessed || "");
+  if (!alias || !(amountHit.amount > 0)) return null;
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
-  if (amountHit.score >= 50) confidence = "high";
-  else if (amountHit.score < 35) confidence = "low";
+  if (known && amountHit.score >= 50) confidence = "high";
+  else if (!known || amountHit.score < 35) confidence = "low";
 
   return {
     alias,
-    amount,
-    display: `${alias} ${amount.toFixed(2)}`,
-    merchantLabel: merchant.label,
+    amount: amountHit.amount,
+    display: `${alias} ${amountHit.amount.toFixed(2)}`,
+    merchantLabel: known?.label || guessed || alias,
     confidence,
     rawPreview: raw.slice(0, 240),
   };

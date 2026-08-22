@@ -90,6 +90,23 @@ function run(): Check[] {
     eq("garbage no merchant", parseReceiptOcrText("TOTAL $12.00"), null)
   );
 
+  const messyWw = parseReceiptOcrText(`
+W00LWORTHS
+COLLINGULLIE
+TOTAL $79.13
+EFTPOS $79.13
+`);
+  checks.push(eq("messy ww alias", messyWw?.alias, "ww"));
+  checks.push(eq("messy ww amount", messyWw?.amount, 79.13));
+
+  const unknownShop = parseReceiptOcrText(`
+Corner Deli
+Tax Invoice
+TOTAL $18.50
+`);
+  checks.push(eq("unknown header alias", unknownShop?.alias, "corner"));
+  checks.push(eq("unknown header amount", unknownShop?.amount, 18.5));
+
   return checks;
 }
 
