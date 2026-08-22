@@ -47,8 +47,11 @@ const srFileInput: CSSProperties = {
 
 type Step = 'idle' | 'crop' | 'reading' | 'confirm';
 
+const OCR_CLIENT_TIMEOUT_MS = 15_000;
+
 export default function HomeReceiptCapture() {
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const readAbortRef = useRef<AbortController | null>(null);
   const [step, setStep] = useState<Step>('idle');
   /** Original camera/file pick — kept so Re-crop can go back. */
   const [originalFile, setOriginalFile] = useState<File | null>(null);
@@ -84,6 +87,7 @@ export default function HomeReceiptCapture() {
   }, [croppedFile]);
 
   const resetAll = () => {
+    readAbortRef.current?.abort();
     setStep('idle');
     setOriginalFile(null);
     setCroppedFile(null);
@@ -93,10 +97,21 @@ export default function HomeReceiptCapture() {
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
+  const skipReading = () => {
+    readAbortRef.current?.abort();
+    setCaption('');
+    setReadHint('');
+    setStatus('Type caption like ww 79.13');
+    setStep('confirm');
+  };
+
   const readCroppedFile = async (file: File) => {
     setStep('reading');
     setStatus('Reading receipt…');
     setReadHint('');
+    const ac = new AbortController();
+    readAbortRef.current = ac;
+    const timer = setTimeout(() => ac.abort(), OCR_CLIENT_TIMEOUT_MS);
     try {
       const form = new FormData();
       form.append('file', file);
@@ -105,6 +120,7 @@ export default function HomeReceiptCapture() {
         body: form,
         credentials: 'include',
         cache: 'no-store',
+        signal: ac.signal,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
@@ -126,14 +142,22 @@ export default function HomeReceiptCapture() {
       }
       setStep('confirm');
     } catch (err) {
+      const aborted =
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError');
       setCaption('');
       setReadHint('');
       setStatus(
-        err instanceof Error
-          ? `${err.message} — type caption like ww 79.13`
-          : 'Could not read — type caption like ww 79.13'
+        aborted
+          ? 'Read timed out — type caption like ww 79.13'
+          : err instanceof Error
+            ? `${err.message} — type caption like ww 79.13`
+            : 'Could not read — type caption like ww 79.13'
       );
       setStep('confirm');
+    } finally {
+      clearTimeout(timer);
+      if (readAbortRef.current === ac) readAbortRef.current = null;
     }
   };
 
@@ -271,17 +295,39 @@ export default function HomeReceiptCapture() {
       ) : null}
 
       {step === 'reading' ? (
-        <p
+        <div
           style={{
-            color: '#cbd5e1',
-            fontSize: '1rem',
-            margin: 0,
             width: '90%',
             maxWidth: '400px',
+            textAlign: 'center',
           }}
         >
-          Reading receipt…
-        </p>
+          <p
+            style={{
+              color: '#cbd5e1',
+              fontSize: '1rem',
+              margin: '0 0 12px',
+            }}
+          >
+            Reading receipt…
+          </p>
+          <button
+            type="button"
+            onClick={skipReading}
+            style={{
+              padding: '12px 16px',
+              background: '#334155',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              fontWeight: 700,
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+            }}
+          >
+            Type it myself
+          </button>
+        </div>
       ) : null}
 
       {step === 'confirm' && (croppedFile || originalFile) ? (

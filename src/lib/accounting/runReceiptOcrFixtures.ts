@@ -52,6 +52,14 @@ NO CASH OUT: $56.86
 PURCHASE AUD 56.86
 `;
 
+const REDDY_SAMPLE = `
+REDDY EXPRESS
+COLLINGULLIE
+UNLEADED 91
+TOTAL $87.40
+EFTPOS $87.40
+`;
+
 function run(): Check[] {
   const checks: Check[] = [];
 
@@ -70,6 +78,10 @@ function run(): Check[] {
   const pearl = parseReceiptOcrText(PEARL_SAMPLE);
   checks.push(eq("pearl alias", pearl?.alias, "pe"));
   checks.push(eq("pearl amount", pearl?.amount, 56.86));
+
+  const reddy = parseReceiptOcrText(REDDY_SAMPLE);
+  checks.push(eq("reddy alias", reddy?.alias, "reddy"));
+  checks.push(eq("reddy amount", reddy?.amount, 87.4));
 
   checks.push(
     eq("empty", parseReceiptOcrText(""), null)
