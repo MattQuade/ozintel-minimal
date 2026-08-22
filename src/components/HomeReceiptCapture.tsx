@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
+import {
+  prepareReceiptFile,
+  RECEIPT_OCR_JPEG_QUALITY,
+  RECEIPT_OCR_MAX_EDGE,
+} from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 import {
   exportCroppedJpegFromSrc,
@@ -137,10 +141,13 @@ export default function HomeReceiptCapture() {
     if (!originalFile || !originalUrl) return;
     setStatus('Cropping…');
     try {
+      // High-fidelity crop for OCR; storage compression happens on Confirm.
       const cropped = await exportCroppedJpegFromSrc({
         src: originalUrl,
         crop,
         fileName: originalFile.name || 'receipt',
+        maxEdge: RECEIPT_OCR_MAX_EDGE,
+        quality: RECEIPT_OCR_JPEG_QUALITY,
       });
       setCroppedFile(cropped);
       await readCroppedFile(cropped);
