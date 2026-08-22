@@ -22,6 +22,8 @@ const ALIAS_TERMS: Record<string, string[]> = {
   caltex: ["caltex", "ampol"],
   ampol: ["ampol", "caltex"],
   shell: ["shell"],
+  pe: ["pearl", "pearl energy"],
+  pearl: ["pearl", "pearl energy"],
   officeworks: ["officeworks"],
   bunnings: ["bunnings"],
   ferndale: ["ferndale"],

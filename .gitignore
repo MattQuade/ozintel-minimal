@@ -17,3 +17,4 @@ ios/DerivedData
 *.keystore
 *.jks
 tsconfig.tsbuildinfo
+eng.traineddata

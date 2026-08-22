@@ -1,0 +1,92 @@
+/**
+ * Fixtures for receipt OCR → caption suggestion parsing.
+ * Run: npx tsx src/lib/accounting/runReceiptOcrFixtures.ts
+ */
+
+import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
+
+type Check = { name: string; ok: boolean; detail: string };
+
+function eq(name: string, actual: unknown, expected: unknown): Check {
+  const ok = actual === expected;
+  return {
+    name,
+    ok,
+    detail: ok ? String(actual) : `expected ${expected}, got ${actual}`,
+  };
+}
+
+const WW_SAMPLE = `
+Woolworths
+The fresh food people
+SUBTOTAL 217.17
+PURCHASE $231.17
+TOTAL $231.17
+EFT $231.17
+Change $0.00
+TOTAL includes GST $3.23
+`;
+
+const ALDI_SAMPLE = `
+ALD STORES
+WAGGA
+Total (INCL GST) $ 89.80
+Card Sales $ 89.80
+THANK YOU FOR SHOPPING AT ALDI
+AMOUNT $89.80
+`;
+
+const AMPOL_SAMPLE = `
+Ampol Retail Pty Ltd
+T/As Ampol Foodary Yass
+Total includes GST $ 115.58
+CBA Chg $ 115.58
+PURCHASE AUD $115.58
+`;
+
+const PEARL_SAMPLE = `
+Welcome to Pearl Energy Sturt Hwy
+P:1 PREMIUM DIESEL $56.86
+Sale Total $56.86
+NO CASH OUT: $56.86
+PURCHASE AUD 56.86
+`;
+
+function run(): Check[] {
+  const checks: Check[] = [];
+
+  const ww = parseReceiptOcrText(WW_SAMPLE);
+  checks.push(eq("ww alias", ww?.alias, "ww"));
+  checks.push(eq("ww amount", ww?.amount, 231.17));
+
+  const aldi = parseReceiptOcrText(ALDI_SAMPLE);
+  checks.push(eq("aldi alias", aldi?.alias, "aldi"));
+  checks.push(eq("aldi amount", aldi?.amount, 89.8));
+
+  const ampol = parseReceiptOcrText(AMPOL_SAMPLE);
+  checks.push(eq("ampol alias", ampol?.alias, "ampol"));
+  checks.push(eq("ampol amount", ampol?.amount, 115.58));
+
+  const pearl = parseReceiptOcrText(PEARL_SAMPLE);
+  checks.push(eq("pearl alias", pearl?.alias, "pe"));
+  checks.push(eq("pearl amount", pearl?.amount, 56.86));
+
+  checks.push(
+    eq("empty", parseReceiptOcrText(""), null)
+  );
+  checks.push(
+    eq("garbage no merchant", parseReceiptOcrText("TOTAL $12.00"), null)
+  );
+
+  return checks;
+}
+
+const checks = run();
+let failed = 0;
+for (const c of checks) {
+  const mark = c.ok ? "OK" : "FAIL";
+  if (!c.ok) failed += 1;
+  console.log(`${mark}  ${c.name}: ${c.detail}`);
+}
+console.log(failed ? `\n${failed} failed` : `\nAll ${checks.length} passed`);
+process.exit(failed ? 1 : 0);
