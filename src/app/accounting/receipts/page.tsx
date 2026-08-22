@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
+import ReceiptCropEditor from '@/components/ReceiptCropEditor';
+import {
+  exportCroppedJpeg,
+  FULL_CROP,
+  type CropRectNorm,
+} from '@/lib/client/cropImage';
+import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
 
 type ReceiptRow = {
   id: string;
@@ -44,6 +51,10 @@ function ReceiptsLedger() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'inbox' | 'linked'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<ReceiptRow | null>(null);
+  const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
+  const [cropSaving, setCropSaving] = useState(false);
+  const [cropError, setCropError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,6 +113,71 @@ function ReceiptsLedger() {
     }
   };
 
+  const openRecrop = (r: ReceiptRow) => {
+    if (!(r.mimeType || '').startsWith('image/')) {
+      setError('Only image receipts can be re-cropped (not PDFs).');
+      return;
+    }
+    setCrop(FULL_CROP);
+    setCropError('');
+    setCropTarget(r);
+  };
+
+  const saveRecrop = async () => {
+    if (!cropTarget) return;
+    setCropSaving(true);
+    setCropError('');
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () =>
+          reject(new Error('Could not load receipt image for crop'));
+        // Bust cache so we always crop the current file
+        img.src = `${cropTarget.url}${cropTarget.url.includes('?') ? '&' : '?'}crop=${Date.now()}`;
+      });
+      const cropped = await exportCroppedJpeg({
+        source: img,
+        crop,
+        fileName: cropTarget.originalFilename || 'receipt',
+      });
+      const prepared = await prepareReceiptFile(cropped);
+      const form = new FormData();
+      form.append('file', prepared);
+      const res = await fetch(
+        `/api/ledger/receipts/${encodeURIComponent(cropTarget.id)}`,
+        {
+          method: 'PUT',
+          body: form,
+          credentials: 'include',
+          cache: 'no-store',
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to save crop');
+      }
+      const updated = data.receipt as ReceiptRow;
+      setReceipts((prev) =>
+        prev.map((r) =>
+          r.id === cropTarget.id
+            ? {
+                ...r,
+                ...updated,
+                url: updated.url || `${r.url.split('?')[0]}?v=${Date.now()}`,
+              }
+            : r
+        )
+      );
+      setCropTarget(null);
+    } catch (err) {
+      setCropError(err instanceof Error ? err.message : 'Failed to save crop');
+    } finally {
+      setCropSaving(false);
+    }
+  };
+
   const visible = receipts.filter((r) => {
     if (filter === 'inbox') return !r.linked;
     if (filter === 'linked') return r.linked;
@@ -113,7 +189,8 @@ function ReceiptsLedger() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Receipts</h1>
         <p className="text-slate-600 mt-1">
-          Photos captured from the home screen, with their captions.
+          Photos captured from the home screen, with their captions. Use{' '}
+          <strong>Recrop</strong> on desktop to trim wasted space.
         </p>
       </div>
 
@@ -171,10 +248,7 @@ function ReceiptsLedger() {
                 : r.originalFilename || 'Untitled receipt');
             const busy = deletingId === r.id;
             return (
-              <li
-                key={r.id}
-                className="flex gap-4 py-4 items-start"
-              >
+              <li key={r.id} className="flex gap-4 py-4 items-start">
                 <div className="shrink-0 flex flex-col items-center gap-2">
                   <a
                     href={r.url}
@@ -196,6 +270,16 @@ function ReceiptsLedger() {
                       </span>
                     )}
                   </a>
+                  {isImage ? (
+                    <button
+                      type="button"
+                      disabled={deletingId !== null || cropSaving}
+                      onClick={() => openRecrop(r)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-md bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      Recrop
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy || deletingId !== null}
@@ -239,6 +323,64 @@ function ReceiptsLedger() {
             );
           })}
         </ul>
+      ) : null}
+
+      {cropTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Recrop receipt"
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[92vh] overflow-auto p-5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  Recrop receipt
+                </h2>
+                <p className="text-sm text-slate-600">
+                  {cropTarget.caption || cropTarget.originalFilename}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !cropSaving && setCropTarget(null)}
+                className="text-slate-500 hover:text-slate-800 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+            <ReceiptCropEditor
+              key={cropTarget.id + cropTarget.url}
+              src={`${cropTarget.url}${cropTarget.url.includes('?') ? '&' : '?'}edit=1`}
+              initialCrop={FULL_CROP}
+              theme="light"
+              onCropChange={setCrop}
+            />
+            {cropError ? (
+              <p className="text-red-600 text-sm mt-3">{cropError}</p>
+            ) : null}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                disabled={cropSaving}
+                onClick={() => setCropTarget(null)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={cropSaving}
+                onClick={() => void saveRecrop()}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-60"
+              >
+                {cropSaving ? 'Saving…' : 'Save crop'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

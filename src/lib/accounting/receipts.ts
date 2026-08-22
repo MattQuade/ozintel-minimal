@@ -238,6 +238,57 @@ export async function getReceiptFile(id: string): Promise<{
   return { meta, filePath };
 }
 
+/**
+ * Replace the binary file for an existing receipt (e.g. after re-crop).
+ * Keeps the same id, caption, and ledger links.
+ */
+export async function replaceReceiptFile(args: {
+  id: string;
+  buffer: Buffer;
+  mimeType: string;
+  originalFilename?: string;
+}): Promise<ReceiptMeta> {
+  const store = await loadStore();
+  const idx = store.receipts.findIndex((r) => r.id === args.id);
+  if (idx < 0) throw new Error("Receipt not found");
+
+  const originalFilename =
+    String(args.originalFilename || store.receipts[idx].originalFilename || "receipt")
+      .trim() || "receipt";
+  const mimeType = normalizeMime(args.mimeType, originalFilename);
+  if (!isAllowedReceiptMime(mimeType)) {
+    throw new Error("Unsupported file type. Use JPEG, PNG, WebP, HEIC, or PDF.");
+  }
+  if (!args.buffer?.length) throw new Error("Empty file");
+  if (args.buffer.length > 18 * 1024 * 1024) {
+    throw new Error("File too large (max 18MB)");
+  }
+
+  const prev = store.receipts[idx];
+  const oldPath = path.join(getReceiptFilesDir(), prev.storedFileName);
+  const ext = extensionFor(mimeType, originalFilename);
+  const storedFileName = `${prev.id}${ext}`;
+  const newPath = path.join(getReceiptFilesDir(), storedFileName);
+
+  await fs.mkdir(getReceiptFilesDir(), { recursive: true });
+  await fs.writeFile(newPath, args.buffer);
+  if (oldPath !== newPath) {
+    await fs.unlink(oldPath).catch(() => undefined);
+  }
+
+  const meta: ReceiptMeta = {
+    ...prev,
+    originalFilename,
+    mimeType,
+    storedFileName,
+    sizeBytes: args.buffer.length,
+    // Keep uploadedAt as original capture time; bump not needed for crop.
+  };
+  store.receipts[idx] = meta;
+  await saveStore(store);
+  return meta;
+}
+
 export async function listReceiptsByLedgerEntry(
   ledgerEntryId: string
 ): Promise<ReceiptMeta[]> {
