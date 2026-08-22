@@ -200,6 +200,7 @@ export default function ReceiptAttach({
       {!compact && (
         <p className="mt-1 text-xs text-gray-400">
           Phone camera or file · JPEG, PNG, WebP, HEIC, PDF · photos compressed
+          to ~1280px / quality 0.6 for ATO-readable proof
           before upload · max {MAX_MB}MB
         </p>
       )}

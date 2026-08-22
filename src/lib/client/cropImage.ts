@@ -1,5 +1,10 @@
 /** Client helpers: load an image and export a cropped JPEG File. */
 
+import {
+  RECEIPT_JPEG_QUALITY,
+  RECEIPT_MAX_EDGE,
+} from '@/lib/client/compressReceiptImage';
+
 export type CropRectNorm = {
   /** Left edge as fraction of image width (0–1). */
   x: number;
@@ -46,7 +51,7 @@ export async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
 
 /**
  * Draw the normalised crop region to a canvas and return a JPEG File.
- * Optionally caps the longest edge (default 1920) at quality 0.75.
+ * Uses shared ATO receipt settings (1280px long edge, JPEG 0.6) by default.
  */
 export async function exportCroppedJpeg(args: {
   source: CanvasImageSource & { width?: number; naturalWidth?: number; height?: number; naturalHeight?: number };
@@ -71,7 +76,7 @@ export async function exportCroppedJpeg(args: {
   const sw = Math.max(1, Math.round(crop.w * naturalW));
   const sh = Math.max(1, Math.round(crop.h * naturalH));
 
-  const maxEdge = args.maxEdge ?? 1920;
+  const maxEdge = args.maxEdge ?? RECEIPT_MAX_EDGE;
   const scale = Math.min(1, maxEdge / Math.max(sw, sh));
   const dw = Math.max(1, Math.round(sw * scale));
   const dh = Math.max(1, Math.round(sh * scale));
@@ -83,7 +88,7 @@ export async function exportCroppedJpeg(args: {
   if (!ctx) throw new Error('Canvas unavailable');
   ctx.drawImage(args.source, sx, sy, sw, sh, 0, 0, dw, dh);
 
-  const quality = args.quality ?? 0.75;
+  const quality = args.quality ?? RECEIPT_JPEG_QUALITY;
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error('Crop export failed'))),

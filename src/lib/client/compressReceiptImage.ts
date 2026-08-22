@@ -1,8 +1,17 @@
 /** Client-side receipt image resize/compress before upload (PWA / phone camera). */
 
 export const RECEIPT_MAX_BYTES = 18 * 1024 * 1024;
-const MAX_EDGE = 1920;
-const JPEG_QUALITY = 0.75;
+
+/**
+ * ATO-style expense proof needs merchant/date/amount/ABN legible.
+ * 1280px long edge + JPEG 0.6 keeps text readable while cutting file size
+ * vs the previous 1920 @ 0.75 settings.
+ */
+export const RECEIPT_MAX_EDGE = 1280;
+export const RECEIPT_JPEG_QUALITY = 0.6;
+
+const MAX_EDGE = RECEIPT_MAX_EDGE;
+const JPEG_QUALITY = RECEIPT_JPEG_QUALITY;
 
 export type CompressStatus = 'compressing' | 'ready';
 
