@@ -121,7 +121,9 @@ function scoreAmountLine(line: string, amount: number): number {
   const hasTotal = /\btotal\b/.test(lower);
   const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
   if (hasTotal && includesGst) {
-    score += amount >= 10 ? 58 : 5;
+    // $4.50 TOTAL (INCL GST) must count; $3.23 "TOTAL includes GST" on a
+    // big Woolworths docket must not beat PURCHASE $231.17.
+    score += amount >= 10 ? 58 : 50;
   } else if (hasTotal) {
     score += 50;
   }
@@ -130,7 +132,7 @@ function scoreAmountLine(line: string, amount: number): number {
   if (/\bsubtotal\b/.test(lower)) score -= 25;
   if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) score -= 15;
 
-  if (amount >= 5 && amount < 2000) score += 5;
+  if (amount >= 1 && amount < 2000) score += 5;
   if (amount < 1) score -= 20;
 
   return score;
@@ -204,6 +206,24 @@ export function detectAmountFromOcr(text: string): {
         best = { amount, score };
       }
     }
+  }
+
+  if (!best || best.score < 20) {
+    let largest: { amount: number; score: number } | null = null;
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) continue;
+      if (/\bg[s5]t\b/.test(lower) && !/\btotal\b/.test(lower) && !/\bpurchase\b/.test(lower)) {
+        continue;
+      }
+      for (const { amount } of moneyMatchesInLine(line)) {
+        if (amount < 1) continue;
+        if (!largest || amount > largest.amount) {
+          largest = { amount, score: Math.max(best?.score || 0, 22) };
+        }
+      }
+    }
+    if (largest) best = largest;
   }
 
   if (!best || best.score < 20) return null;

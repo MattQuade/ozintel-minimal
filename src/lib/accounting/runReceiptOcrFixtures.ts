@@ -99,6 +99,20 @@ EFTPOS $79.13
   checks.push(eq("messy ww alias", messyWw?.alias, "ww"));
   checks.push(eq("messy ww amount", messyWw?.amount, 79.13));
 
+  const smallWw = parseReceiptOcrText(`
+Woolworths
+TOTAL (INCL GST) $4.50
+EFTPOS $4.50
+`);
+  checks.push(eq("small ww 4.50 alias", smallWw?.alias, "ww"));
+  checks.push(eq("small ww 4.50 amount", smallWw?.amount, 4.5));
+
+  const wwNoTotalWord = parseReceiptOcrText(`
+Woolworths Collingullie
+$65.22
+`);
+  checks.push(eq("ww largest amount fallback", wwNoTotalWord?.amount, 65.22));
+
   const unknownShop = parseReceiptOcrText(`
 Corner Deli
 Tax Invoice
