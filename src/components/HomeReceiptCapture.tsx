@@ -41,7 +41,7 @@ const srFileInput: CSSProperties = {
   border: 0,
 };
 
-type Step = 'idle' | 'crop' | 'caption';
+type Step = 'idle' | 'crop' | 'reading' | 'confirm';
 
 export default function HomeReceiptCapture() {
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +53,7 @@ export default function HomeReceiptCapture() {
   const [croppedUrl, setCroppedUrl] = useState<string | null>(null);
   const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
   const [caption, setCaption] = useState('');
+  const [readHint, setReadHint] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -84,7 +85,52 @@ export default function HomeReceiptCapture() {
     setCroppedFile(null);
     setCrop(FULL_CROP);
     setCaption('');
+    setReadHint('');
     if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const readCroppedFile = async (file: File) => {
+    setStep('reading');
+    setStatus('Reading receipt…');
+    setReadHint('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/ledger/receipts/read', {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Read failed');
+      }
+      if (data.suggestion?.display) {
+        setCaption(String(data.suggestion.display));
+        const label = String(data.suggestion.merchantLabel || '').trim();
+        setReadHint(
+          label
+            ? `Read ${label} · $${Number(data.suggestion.amount).toFixed(2)} — confirm or edit`
+            : `Read ${data.suggestion.display} — confirm or edit`
+        );
+        setStatus('');
+      } else {
+        setCaption('');
+        setReadHint('');
+        setStatus('Could not read — type caption like ww 79.13');
+      }
+      setStep('confirm');
+    } catch (err) {
+      setCaption('');
+      setReadHint('');
+      setStatus(
+        err instanceof Error
+          ? `${err.message} — type caption like ww 79.13`
+          : 'Could not read — type caption like ww 79.13'
+      );
+      setStep('confirm');
+    }
   };
 
   const applyCropAndContinue = async () => {
@@ -97,10 +143,10 @@ export default function HomeReceiptCapture() {
         fileName: originalFile.name || 'receipt',
       });
       setCroppedFile(cropped);
-      setStep('caption');
-      setStatus('');
+      await readCroppedFile(cropped);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Crop failed');
+      setStep('crop');
     }
   };
 
@@ -156,6 +202,7 @@ export default function HomeReceiptCapture() {
           setCroppedFile(null);
           setCrop(FULL_CROP);
           setCaption('');
+          setReadHint('');
           setStatus('');
           setStep(file ? 'crop' : 'idle');
         }}
@@ -216,7 +263,21 @@ export default function HomeReceiptCapture() {
         </div>
       ) : null}
 
-      {step === 'caption' && (croppedFile || originalFile) ? (
+      {step === 'reading' ? (
+        <p
+          style={{
+            color: '#cbd5e1',
+            fontSize: '1rem',
+            margin: 0,
+            width: '90%',
+            maxWidth: '400px',
+          }}
+        >
+          Reading receipt…
+        </p>
+      ) : null}
+
+      {step === 'confirm' && (croppedFile || originalFile) ? (
         <div
           style={{
             width: '90%',
@@ -239,6 +300,17 @@ export default function HomeReceiptCapture() {
                 border: '1px solid #334155',
               }}
             />
+          ) : null}
+          {readHint ? (
+            <p
+              style={{
+                color: '#94a3b8',
+                fontSize: '0.85rem',
+                margin: '0 0 8px',
+              }}
+            >
+              {readHint}
+            </p>
           ) : null}
           <input
             type="text"
@@ -266,6 +338,7 @@ export default function HomeReceiptCapture() {
               onClick={() => {
                 setStep('crop');
                 setStatus('');
+                setReadHint('');
               }}
               style={{
                 flex: 1,
@@ -283,7 +356,7 @@ export default function HomeReceiptCapture() {
             </button>
             <button
               type="button"
-              disabled={saving}
+              disabled={saving || !parsed}
               onClick={() => void save()}
               style={{
                 flex: 1.4,
@@ -293,12 +366,12 @@ export default function HomeReceiptCapture() {
                 border: 'none',
                 borderRadius: 8,
                 fontWeight: 700,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                opacity: saving ? 0.7 : 1,
+                cursor: saving || !parsed ? 'not-allowed' : 'pointer',
+                opacity: saving || !parsed ? 0.7 : 1,
                 touchAction: 'manipulation',
               }}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : 'Confirm'}
             </button>
           </div>
         </div>

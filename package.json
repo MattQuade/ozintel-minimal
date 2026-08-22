@@ -9,6 +9,7 @@
     "lint": "next lint",
     "test:bas": "npx tsx src/lib/accounting/runBasFixtures.ts",
     "test:receipts": "npx tsx src/lib/accounting/runReceiptCaptionFixtures.ts",
+    "test:receipt-ocr": "npx tsx src/lib/accounting/runReceiptOcrFixtures.ts",
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android"
@@ -22,7 +23,8 @@
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@capacitor/android": "^8.4.2",
