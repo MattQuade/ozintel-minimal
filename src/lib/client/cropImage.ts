@@ -81,7 +81,7 @@ export async function loadOrientedSource(src: string): Promise<{
 
 /**
  * Draw the normalised crop region to a canvas and return a JPEG File.
- * Uses shared ATO receipt settings (1280px long edge, JPEG 0.075) by default.
+ * Uses shared ATO receipt settings (1280px long edge, JPEG 0.09) by default.
  */
 export async function exportCroppedJpeg(args: {
   source: CanvasImageSource & {
