@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import AccountingGate from '@/components/AccountingGate';
 import ReceiptCropEditor from '@/components/ReceiptCropEditor';
 import {
-  exportCroppedJpeg,
+  exportCroppedJpegFromSrc,
   FULL_CROP,
   type CropRectNorm,
 } from '@/lib/client/cropImage';
@@ -128,17 +128,9 @@ function ReceiptsLedger() {
     setCropSaving(true);
     setCropError('');
     try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () =>
-          reject(new Error('Could not load receipt image for crop'));
-        // Bust cache so we always crop the current file
-        img.src = `${cropTarget.url}${cropTarget.url.includes('?') ? '&' : '?'}crop=${Date.now()}`;
-      });
-      const cropped = await exportCroppedJpeg({
-        source: img,
+      const src = `${cropTarget.url}${cropTarget.url.includes('?') ? '&' : '?'}crop=${Date.now()}`;
+      const cropped = await exportCroppedJpegFromSrc({
+        src,
         crop,
         fileName: cropTarget.originalFilename || 'receipt',
       });

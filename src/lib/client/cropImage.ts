@@ -39,22 +39,57 @@ export function loadImageFromBlobUrl(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function loadImageFromFile(file: File): Promise<HTMLImageElement> {
-  const url = URL.createObjectURL(file);
-  try {
-    return await loadImageFromBlobUrl(url);
-  } finally {
-    // Keep URL alive until caller is done? Image already loaded into memory.
-    URL.revokeObjectURL(url);
+/**
+ * Load pixels with EXIF orientation applied when the browser supports it,
+ * so crop maths match what the user sees in an <img>.
+ */
+export async function loadOrientedSource(src: string): Promise<{
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+}> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const res = await fetch(src, { credentials: 'include', cache: 'no-store' });
+      if (!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(
+        blob,
+        { imageOrientation: 'from-image' } as ImageBitmapOptions
+      );
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => {
+          if (typeof bitmap.close === 'function') bitmap.close();
+        },
+      };
+    } catch {
+      // fall through to <img>
+    }
   }
+  const img = await loadImageFromBlobUrl(src);
+  return {
+    source: img,
+    width: img.naturalWidth || img.width,
+    height: img.naturalHeight || img.height,
+    close: () => undefined,
+  };
 }
 
 /**
  * Draw the normalised crop region to a canvas and return a JPEG File.
- * Uses shared ATO receipt settings (1280px long edge, JPEG 0.6) by default.
+ * Uses shared ATO receipt settings (1280px long edge, JPEG 0.4) by default.
  */
 export async function exportCroppedJpeg(args: {
-  source: CanvasImageSource & { width?: number; naturalWidth?: number; height?: number; naturalHeight?: number };
+  source: CanvasImageSource & {
+    width?: number;
+    naturalWidth?: number;
+    height?: number;
+    naturalHeight?: number;
+  };
   crop: CropRectNorm;
   fileName?: string;
   maxEdge?: number;
@@ -103,4 +138,31 @@ export async function exportCroppedJpeg(args: {
     type: 'image/jpeg',
     lastModified: Date.now(),
   });
+}
+
+/** Crop from a URL/blob URL using orientation-aware decoding. */
+export async function exportCroppedJpegFromSrc(args: {
+  src: string;
+  crop: CropRectNorm;
+  fileName?: string;
+  maxEdge?: number;
+  quality?: number;
+}): Promise<File> {
+  const loaded = await loadOrientedSource(args.src);
+  try {
+    return await exportCroppedJpeg({
+      source: loaded.source as CanvasImageSource & {
+        width?: number;
+        naturalWidth?: number;
+        height?: number;
+        naturalHeight?: number;
+      },
+      crop: args.crop,
+      fileName: args.fileName,
+      maxEdge: args.maxEdge,
+      quality: args.quality,
+    });
+  } finally {
+    loaded.close();
+  }
 }

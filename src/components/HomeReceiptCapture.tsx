@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 import {
-  exportCroppedJpeg,
+  exportCroppedJpegFromSrc,
   FULL_CROP,
   type CropRectNorm,
 } from '@/lib/client/cropImage';
@@ -91,14 +91,8 @@ export default function HomeReceiptCapture() {
     if (!originalFile || !originalUrl) return;
     setStatus('Cropping…');
     try {
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Could not load photo'));
-        img.src = originalUrl;
-      });
-      const cropped = await exportCroppedJpeg({
-        source: img,
+      const cropped = await exportCroppedJpegFromSrc({
+        src: originalUrl,
         crop,
         fileName: originalFile.name || 'receipt',
       });
@@ -179,7 +173,7 @@ export default function HomeReceiptCapture() {
           <ReceiptCropEditor
             key={originalUrl}
             src={originalUrl}
-            initialCrop={crop}
+            initialCrop={FULL_CROP}
             theme="dark"
             onCropChange={setCrop}
           />

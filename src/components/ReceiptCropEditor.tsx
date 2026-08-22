@@ -45,6 +45,9 @@ export default function ReceiptCropEditor({
   const [crop, setCrop] = useState<CropRectNorm>(() =>
     clampCrop(initialCrop)
   );
+  const cropRef = useRef<CropRectNorm>(clampCrop(initialCrop));
+  const onCropChangeRef = useRef(onCropChange);
+  onCropChangeRef.current = onCropChange;
   const [natural, setNatural] = useState({ w: 0, h: 0 });
   const [display, setDisplay] = useState({
     left: 0,
@@ -52,12 +55,15 @@ export default function ReceiptCropEditor({
     width: 0,
     height: 0,
   });
+  const displayRef = useRef(display);
+  displayRef.current = display;
   const dragRef = useRef<{
     edge: Edge;
     startX: number;
     startY: number;
     startCrop: CropRectNorm;
   } | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const dark = theme === 'dark';
 
@@ -68,7 +74,8 @@ export default function ReceiptCropEditor({
     const wrapRect = wrap.getBoundingClientRect();
     const nw = img.naturalWidth;
     const nh = img.naturalHeight;
-    const scale = Math.min(wrapRect.width / nw, wrapRect.height / nh, 1);
+    // Fit image inside the box (allow upscale-free letterboxing).
+    const scale = Math.min(wrapRect.width / nw, wrapRect.height / nh);
     const width = nw * scale;
     const height = nh * scale;
     const left = (wrapRect.width - width) / 2;
@@ -77,9 +84,13 @@ export default function ReceiptCropEditor({
     setDisplay({ left, top, width, height });
   }, []);
 
+  // Only reset crop when the image source changes — never while dragging
+  // (feeding live crop back as initialCrop caused the shaky borders).
   useEffect(() => {
-    setCrop(clampCrop(initialCrop));
-  }, [src, initialCrop]);
+    const next = clampCrop(FULL_CROP);
+    cropRef.current = next;
+    setCrop(next);
+  }, [src]);
 
   useEffect(() => {
     measure();
@@ -88,12 +99,14 @@ export default function ReceiptCropEditor({
     return () => window.removeEventListener('resize', onResize);
   }, [measure, src]);
 
-  useEffect(() => {
-    onCropChange?.(crop);
-  }, [crop, onCropChange]);
-
-  const updateCrop = (next: CropRectNorm) => {
-    setCrop(clampCrop(next));
+  const publishCrop = (next: CropRectNorm) => {
+    const clamped = clampCrop(next);
+    cropRef.current = clamped;
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setCrop(clamped);
+      rafRef.current = null;
+    });
   };
 
   const onPointerDown = (edge: Edge) => (e: ReactPointerEvent) => {
@@ -104,15 +117,16 @@ export default function ReceiptCropEditor({
       edge,
       startX: e.clientX,
       startY: e.clientY,
-      startCrop: crop,
+      startCrop: cropRef.current,
     };
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
     const drag = dragRef.current;
-    if (!drag || !display.width || !display.height) return;
-    const dx = (e.clientX - drag.startX) / display.width;
-    const dy = (e.clientY - drag.startY) / display.height;
+    const disp = displayRef.current;
+    if (!drag || !disp.width || !disp.height) return;
+    const dx = (e.clientX - drag.startX) / disp.width;
+    const dy = (e.clientY - drag.startY) / disp.height;
     const s = drag.startCrop;
     let next = { ...s };
 
@@ -145,7 +159,7 @@ export default function ReceiptCropEditor({
         next.y = Math.min(1 - s.h, Math.max(0, next.y));
         next.w = s.w;
         next.h = s.h;
-        setCrop(next);
+        publishCrop(next);
         return;
       case 'w':
         resizeW(dx, true);
@@ -176,11 +190,14 @@ export default function ReceiptCropEditor({
         resizeH(dy, false);
         break;
     }
-    updateCrop(next);
+    publishCrop(next);
   };
 
   const onPointerUp = () => {
-    dragRef.current = null;
+    if (dragRef.current) {
+      dragRef.current = null;
+      onCropChangeRef.current?.(cropRef.current);
+    }
   };
 
   const boxLeft = display.left + crop.x * display.width;
