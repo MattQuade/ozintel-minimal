@@ -86,9 +86,10 @@ function run(): Check[] {
   checks.push(
     eq("empty", parseReceiptOcrText(""), null)
   );
-  checks.push(
-    eq("garbage no merchant", parseReceiptOcrText("TOTAL $12.00"), null)
-  );
+  const totalOnly = parseReceiptOcrText("TOTAL $12.00");
+  checks.push(eq("total-only alias empty", totalOnly?.alias, ""));
+  checks.push(eq("total-only amount", totalOnly?.amount, 12));
+  checks.push(eq("total-only display empty", totalOnly?.display, ""));
 
   const messyWw = parseReceiptOcrText(`
 W00LWORTHS
@@ -104,8 +105,43 @@ Corner Deli
 Tax Invoice
 TOTAL $18.50
 `);
-  checks.push(eq("unknown header alias", unknownShop?.alias, "corner"));
+  checks.push(eq("unknown header alias empty", unknownShop?.alias, ""));
   checks.push(eq("unknown header amount", unknownShop?.amount, 18.5));
+  checks.push(eq("unknown header display empty", unknownShop?.display, ""));
+
+  const foadWw = parseReceiptOcrText(`
+FOAD
+THE FRESH FOAD PEOPLE
+TOTAL $4.50
+EFTPOS $4.50
+`);
+  checks.push(eq("foad ww alias", foadWw?.alias, "ww"));
+  checks.push(eq("foad ww amount", foadWw?.amount, 4.5));
+
+  const logoJunkWw = parseReceiptOcrText(`
+FOAD
+TOTAL $4.50
+EFTPOS $4.50
+`);
+  checks.push(eq("logo junk not foad", logoJunkWw?.alias, ""));
+  checks.push(eq("logo junk amount", logoJunkWw?.amount, 4.5));
+
+  const danMurph = parseReceiptOcrText(`
+BAS
+DAN MURPHVS
+LIQUOR
+TOTAL $70.99
+EFTPOS $70.99
+`);
+  checks.push(eq("dan murphys not bas", danMurph?.alias, "danmurphys"));
+  checks.push(eq("dan murphys amount", danMurph?.amount, 70.99));
+
+  const danOneWord = parseReceiptOcrText(`
+DANMURPHYS
+TOTAL $70.99
+EFTPOS $70.99
+`);
+  checks.push(eq("danmurphys one word", danOneWord?.alias, "danmurphys"));
 
   const dollarAsFour = parseReceiptOcrText(`
 Woolworths

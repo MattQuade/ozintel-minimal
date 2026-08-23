@@ -65,6 +65,9 @@ const OCR_CLIENT_MS = 10_000;
 export default function HomeReceiptCapture() {
   const inputRef = useRef<HTMLInputElement>(null);
   const captionTouchedRef = useRef(false);
+  const ignorePopUntilRef = useRef(0);
+  const releasingBackRef = useRef(false);
+  const [inputKey, setInputKey] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
@@ -91,6 +94,7 @@ export default function HomeReceiptCapture() {
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     if (typeof history !== 'undefined' && history.state?.ozintelReceipt !== 1) {
+      ignorePopUntilRef.current = Date.now() + 2000;
       history.pushState({ ozintelReceipt: 1 }, '');
     }
     return () => URL.revokeObjectURL(url);
@@ -98,7 +102,15 @@ export default function HomeReceiptCapture() {
 
   useEffect(() => {
     const onPop = () => {
-      if (file) resetConfirm();
+      if (releasingBackRef.current) return;
+      // Camera return on Android often pops history; do not wipe the new photo.
+      if (Date.now() < ignorePopUntilRef.current) {
+        if (history.state?.ozintelReceipt !== 1) {
+          history.pushState({ ozintelReceipt: 1 }, '');
+        }
+        return;
+      }
+      if (file) resetConfirm(false);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -140,6 +152,12 @@ export default function HomeReceiptCapture() {
           );
           return;
         }
+        const amount = Number(data.suggestion?.amount);
+        if (Number.isFinite(amount) && amount > 0) {
+          const amt = amount.toFixed(2);
+          setHint(`Total looks like $${amt} — type ww ${amt}`);
+          return;
+        }
         setHint('Type caption like ww 79.13');
       } catch {
         if (!captionTouchedRef.current) setHint('Type caption like ww 79.13');
@@ -152,19 +170,30 @@ export default function HomeReceiptCapture() {
     };
   }, [file]);
 
-  const resetConfirm = () => {
+  const resetConfirm = (popHistory = false) => {
     setFile(null);
     setCaption('');
     setHint('');
     setStatus('');
     captionTouchedRef.current = false;
     clearPendingReceipt();
-    if (inputRef.current) inputRef.current.value = '';
+    setInputKey((k) => k + 1);
+    if (
+      popHistory &&
+      typeof history !== 'undefined' &&
+      history.state?.ozintelReceipt === 1
+    ) {
+      releasingBackRef.current = true;
+      history.back();
+      setTimeout(() => {
+        releasingBackRef.current = false;
+      }, 400);
+    }
   };
 
   const onPicked = (next: File | null) => {
-    if (inputRef.current) inputRef.current.value = '';
     if (!next) return;
+    ignorePopUntilRef.current = Date.now() + 2000;
     setPendingReceipt(next);
     setFile(next);
   };
@@ -192,7 +221,7 @@ export default function HomeReceiptCapture() {
         throw new Error(data.error || 'Save failed');
       }
       const saved = parsed.display;
-      resetConfirm();
+      resetConfirm(true);
       setStatus(`Saved ${saved}`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Save failed');
@@ -205,6 +234,7 @@ export default function HomeReceiptCapture() {
     <>
       <input
         id="home-receipt-photo"
+        key={inputKey}
         ref={inputRef}
         type="file"
         accept="image/*"

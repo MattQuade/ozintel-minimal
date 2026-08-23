@@ -8,24 +8,59 @@ import {
   type ParsedReceiptCaption,
 } from "@/lib/accounting/receiptCaption";
 
-/** Detectable merchant phrases → preferred short caption alias. */
-const MERCHANT_DETECT: Array<{ alias: string; terms: string[] }> = [
-  { alias: "ww", terms: ["woolworths", "woolies", "woolkor"] },
-  { alias: "aldi", terms: ["aldi", "ald stores", "alt stores"] },
-  { alias: "coles", terms: ["coles"] },
-  { alias: "iga", terms: ["iga"] },
-  { alias: "reddy", terms: ["reddy express", "reddy", "reddyexpress"] },
-  { alias: "ampol", terms: ["ampol", "anpol", "caltex"] },
-  { alias: "bp", terms: [" bp ", "bp "] },
-  { alias: "shell", terms: ["shell"] },
-  { alias: "pe", terms: ["pearl energy", "pearl"] },
-  { alias: "united", terms: ["united petroleum", "united"] },
-  { alias: "7eleven", terms: ["7-eleven", "7 eleven", "7eleven"] },
-  { alias: "bunnings", terms: ["bunnings"] },
-  { alias: "officeworks", terms: ["officeworks"] },
-  { alias: "bws", terms: [" bws ", "bws"] },
-  { alias: "danmurphys", terms: ["dan murphy", "dan murphys"] },
-  { alias: "ferndale", terms: ["ferndale"] },
+/**
+ * Known merchants. `keys` are compact (letters only) and matched as substrings
+ * or with a small edit distance so Tesseract noise still hits Woolworths /
+ * Dan Murphys instead of a junk header word like "foad" or "bas".
+ */
+const MERCHANT_DETECT: Array<{
+  alias: string;
+  label: string;
+  keys: string[];
+}> = [
+  {
+    alias: "ww",
+    label: "woolworths",
+    keys: [
+      "woolworths",
+      "woolworth",
+      "woolies",
+      "woolwor",
+      "woolkor",
+      "freshfoodpeople",
+    ],
+  },
+  { alias: "aldi", label: "aldi", keys: ["aldi", "aldstores", "altstores"] },
+  { alias: "coles", label: "coles", keys: ["coles"] },
+  { alias: "iga", label: "iga", keys: ["iga"] },
+  {
+    alias: "reddy",
+    label: "reddy express",
+    keys: ["reddyexpress", "reddy"],
+  },
+  { alias: "ampol", label: "ampol", keys: ["ampol", "anpol", "caltex"] },
+  { alias: "bp", label: "bp", keys: ["bp"] },
+  { alias: "shell", label: "shell", keys: ["shell"] },
+  { alias: "pe", label: "pearl energy", keys: ["pearlenergy", "pearl"] },
+  {
+    alias: "united",
+    label: "united",
+    keys: ["unitedpetroleum", "united"],
+  },
+  {
+    alias: "7eleven",
+    label: "7-eleven",
+    keys: ["7eleven", "seveneleven"],
+  },
+  { alias: "bunnings", label: "bunnings", keys: ["bunnings"] },
+  { alias: "officeworks", label: "officeworks", keys: ["officeworks"] },
+  {
+    alias: "danmurphys",
+    label: "dan murphys",
+    keys: ["danmurphys", "danmurphy", "danmurph"],
+  },
+  { alias: "bws", label: "bws", keys: ["bws"] },
+  { alias: "ferndale", label: "ferndale", keys: ["ferndale"] },
 ];
 
 const HEADER_STOP = new Set([
@@ -81,6 +116,49 @@ export function foldOcrLetters(text: string): string {
     .replace(/1/g, "l")
     .replace(/5/g, "s")
     .replace(/\$/g, "s");
+}
+
+function compactLetters(text: string): string {
+  return foldOcrLetters(text).replace(/[^a-z]/g, "");
+}
+
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const prev = new Array<number>(n + 1);
+  const cur = new Array<number>(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j <= n; j++) prev[j] = cur[j];
+  }
+  return prev[n];
+}
+
+function compactContains(hay: string, needle: string): boolean {
+  if (!needle) return false;
+  if (hay.includes(needle)) return true;
+  // Short keys (aldi, bws, iga, bp) must be exact — fuzzy "bas" ≠ BWS.
+  if (needle.length < 6) return false;
+  const maxDist = needle.length >= 10 ? 2 : 1;
+  const n = needle.length;
+  if (hay.length < n - maxDist) return false;
+  const lo = Math.max(n - maxDist, 6);
+  const hi = n + maxDist;
+  for (let len = lo; len <= hi; len++) {
+    if (hay.length < len) continue;
+    for (let i = 0; i <= hay.length - len; i++) {
+      if (editDistance(hay.slice(i, i + len), needle) <= maxDist) return true;
+    }
+  }
+  return false;
 }
 
 function parseMoneyToken(whole: string, frac: string): number | null {
@@ -140,23 +218,17 @@ export function detectMerchantFromOcr(text: string): {
   alias: string;
   label: string;
 } | null {
-  const hay = foldOcrLetters(text);
-  let best: { alias: string; label: string; at: number; len: number } | null =
-    null;
+  const compact = compactLetters(text);
+  if (!compact) return null;
 
+  let best: { alias: string; label: string; len: number } | null = null;
   for (const row of MERCHANT_DETECT) {
-    for (const term of row.terms) {
-      const needle = foldOcrLetters(term);
-      const at = hay.indexOf(needle);
-      if (at < 0) continue;
+    for (const key of row.keys) {
+      const needle = compactLetters(key);
+      if (!compactContains(compact, needle)) continue;
       const len = needle.length;
-      if (!best || at < best.at || (at === best.at && len > best.len)) {
-        best = {
-          alias: row.alias,
-          label: term.trim(),
-          at,
-          len,
-        };
+      if (!best || len > best.len) {
+        best = { alias: row.alias, label: row.label, len };
       }
     }
   }
@@ -264,9 +336,9 @@ export function parseReceiptOcrText(
   const amountHit = detectAmountFromOcr(raw);
   if (!amountHit) return null;
 
-  const guessed = known ? null : guessAliasFromHeader(raw);
-  const alias = normalizeReceiptAlias(known?.alias || guessed || "");
-  if (!alias || !(amountHit.amount > 0)) return null;
+  // Never auto-fill a guessed header word ("foad", "bas") — only known shops.
+  const alias = known ? normalizeReceiptAlias(known.alias) : "";
+  if (!(amountHit.amount > 0)) return null;
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
   if (known && amountHit.score >= 50) confidence = "high";
@@ -275,8 +347,8 @@ export function parseReceiptOcrText(
   return {
     alias,
     amount: amountHit.amount,
-    display: `${alias} ${amountHit.amount.toFixed(2)}`,
-    merchantLabel: known?.label || guessed || alias,
+    display: alias ? `${alias} ${amountHit.amount.toFixed(2)}` : "",
+    merchantLabel: known?.label || "",
     confidence,
     rawPreview: raw.slice(0, 240),
   };
