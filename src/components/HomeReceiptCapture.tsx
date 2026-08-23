@@ -10,9 +10,7 @@ import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 import {
   exportCroppedJpegFromSrc,
   FULL_CROP,
-  type CropRectNorm,
 } from '@/lib/client/cropImage';
-import ReceiptCropEditor from '@/components/ReceiptCropEditor';
 
 const homeButtonStyle: CSSProperties = {
   display: 'block',
@@ -45,20 +43,16 @@ const srFileInput: CSSProperties = {
   border: 0,
 };
 
-type Step = 'idle' | 'crop' | 'reading' | 'confirm';
+type Step = 'idle' | 'reading' | 'confirm';
 
-const OCR_CLIENT_TIMEOUT_MS = 25_000;
+const OCR_CLIENT_TIMEOUT_MS = 45_000;
 
 export default function HomeReceiptCapture() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const readAbortRef = useRef<AbortController | null>(null);
   const [step, setStep] = useState<Step>('idle');
-  /** Original camera/file pick — kept so Re-crop can go back. */
   const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [croppedFile, setCroppedFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
-  const [croppedUrl, setCroppedUrl] = useState<string | null>(null);
-  const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
   const [caption, setCaption] = useState('');
   const [readHint, setReadHint] = useState('');
   const [status, setStatus] = useState('');
@@ -76,22 +70,10 @@ export default function HomeReceiptCapture() {
     return () => URL.revokeObjectURL(url);
   }, [originalFile]);
 
-  useEffect(() => {
-    if (!croppedFile) {
-      setCroppedUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(croppedFile);
-    setCroppedUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [croppedFile]);
-
   const resetAll = () => {
     readAbortRef.current?.abort();
     setStep('idle');
     setOriginalFile(null);
-    setCroppedFile(null);
-    setCrop(FULL_CROP);
     setCaption('');
     setReadHint('');
     if (photoInputRef.current) photoInputRef.current.value = '';
@@ -105,16 +87,29 @@ export default function HomeReceiptCapture() {
     setStep('confirm');
   };
 
-  const readCroppedFile = async (file: File) => {
+  const readPhoto = async (file: File) => {
     setStep('reading');
     setStatus('Reading receipt…');
     setReadHint('');
     const ac = new AbortController();
     readAbortRef.current = ac;
     const timer = setTimeout(() => ac.abort(), OCR_CLIENT_TIMEOUT_MS);
+    const src = URL.createObjectURL(file);
     try {
+      let ocrFile = file;
+      try {
+        ocrFile = await exportCroppedJpegFromSrc({
+          src,
+          crop: FULL_CROP,
+          fileName: file.name || 'receipt',
+          maxEdge: RECEIPT_OCR_MAX_EDGE,
+          quality: RECEIPT_OCR_JPEG_QUALITY,
+        });
+      } catch {
+        // HEIC etc. — send the camera file if the browser cannot re-encode.
+      }
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', ocrFile);
       const res = await fetch('/api/ledger/receipts/read', {
         method: 'POST',
         body: form,
@@ -156,34 +151,14 @@ export default function HomeReceiptCapture() {
       );
       setStep('confirm');
     } finally {
+      URL.revokeObjectURL(src);
       clearTimeout(timer);
       if (readAbortRef.current === ac) readAbortRef.current = null;
     }
   };
 
-  const applyCropAndContinue = async () => {
-    if (!originalFile || !originalUrl) return;
-    setStatus('Cropping…');
-    try {
-      // High-fidelity crop for OCR; storage compression happens on Confirm.
-      const cropped = await exportCroppedJpegFromSrc({
-        src: originalUrl,
-        crop,
-        fileName: originalFile.name || 'receipt',
-        maxEdge: RECEIPT_OCR_MAX_EDGE,
-        quality: RECEIPT_OCR_JPEG_QUALITY,
-      });
-      setCroppedFile(cropped);
-      await readCroppedFile(cropped);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Crop failed');
-      setStep('crop');
-    }
-  };
-
   const save = async () => {
-    const file = croppedFile || originalFile;
-    if (!file) return;
+    if (!originalFile) return;
     if (!parsed) {
       setStatus('Caption like ww 79.13');
       return;
@@ -191,7 +166,7 @@ export default function HomeReceiptCapture() {
     setSaving(true);
     setStatus('Saving…');
     try {
-      const prepared = await prepareReceiptFile(file);
+      const prepared = await prepareReceiptFile(originalFile);
       const form = new FormData();
       form.append('file', prepared);
       form.append('caption', parsed.display);
@@ -230,69 +205,14 @@ export default function HomeReceiptCapture() {
         onChange={(e) => {
           const file = e.target.files?.[0] || null;
           setOriginalFile(file);
-          setCroppedFile(null);
-          setCrop(FULL_CROP);
           setCaption('');
           setReadHint('');
           setStatus('');
-          setStep(file ? 'crop' : 'idle');
+          if (file) void readPhoto(file);
+          else setStep('idle');
         }}
         style={srFileInput}
       />
-
-      {step === 'crop' && originalUrl ? (
-        <div
-          style={{
-            width: '92%',
-            maxWidth: 420,
-            boxSizing: 'border-box',
-          }}
-        >
-          <ReceiptCropEditor
-            key={originalUrl}
-            src={originalUrl}
-            initialCrop={FULL_CROP}
-            theme="dark"
-            onCropChange={setCrop}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button
-              type="button"
-              onClick={resetAll}
-              style={{
-                flex: 1,
-                padding: '12px 10px',
-                background: '#334155',
-                color: 'white',
-                border: 'none',
-                borderRadius: 8,
-                fontWeight: 700,
-                cursor: 'pointer',
-                touchAction: 'manipulation',
-              }}
-            >
-              Retake
-            </button>
-            <button
-              type="button"
-              onClick={() => void applyCropAndContinue()}
-              style={{
-                flex: 1.4,
-                padding: '12px 10px',
-                background: '#0ea5e9',
-                color: 'white',
-                border: 'none',
-                borderRadius: 8,
-                fontWeight: 700,
-                cursor: 'pointer',
-                touchAction: 'manipulation',
-              }}
-            >
-              Use crop
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {step === 'reading' ? (
         <div
@@ -330,7 +250,7 @@ export default function HomeReceiptCapture() {
         </div>
       ) : null}
 
-      {step === 'confirm' && (croppedFile || originalFile) ? (
+      {step === 'confirm' && originalFile ? (
         <div
           style={{
             width: '90%',
@@ -338,11 +258,11 @@ export default function HomeReceiptCapture() {
             boxSizing: 'border-box',
           }}
         >
-          {croppedUrl || originalUrl ? (
+          {originalUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={croppedUrl || originalUrl || ''}
-              alt="Cropped receipt"
+              src={originalUrl}
+              alt="Receipt"
               style={{
                 width: '100%',
                 maxHeight: 220,
@@ -388,11 +308,7 @@ export default function HomeReceiptCapture() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
-              onClick={() => {
-                setStep('crop');
-                setStatus('');
-                setReadHint('');
-              }}
+              onClick={resetAll}
               style={{
                 flex: 1,
                 padding: '12px 10px',
@@ -405,7 +321,7 @@ export default function HomeReceiptCapture() {
                 touchAction: 'manipulation',
               }}
             >
-              Re-crop
+              Retake
             </button>
             <button
               type="button"

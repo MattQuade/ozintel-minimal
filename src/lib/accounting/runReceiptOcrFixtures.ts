@@ -107,6 +107,14 @@ TOTAL $18.50
   checks.push(eq("unknown header alias", unknownShop?.alias, "corner"));
   checks.push(eq("unknown header amount", unknownShop?.amount, 18.5));
 
+  const dollarAsFour = parseReceiptOcrText(`
+Woolworths
+TOTAL 405.22
+EFTPOS 65.22
+`);
+  checks.push(eq("dollar-as-four alias", dollarAsFour?.alias, "ww"));
+  checks.push(eq("dollar-as-four amount", dollarAsFour?.amount, 65.22));
+
   return checks;
 }
 

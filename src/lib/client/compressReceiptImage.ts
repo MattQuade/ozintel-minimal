@@ -10,7 +10,7 @@ export const RECEIPT_MAX_EDGE = 1280;
 export const RECEIPT_JPEG_QUALITY = 0.1;
 
 /**
- * Higher-fidelity crop used only for OCR before Confirm.
+ * Higher-fidelity resize used only for OCR before Confirm.
  * Stored upload still goes through RECEIPT_* settings via prepareReceiptFile.
  */
 export const RECEIPT_OCR_MAX_EDGE = 1280;

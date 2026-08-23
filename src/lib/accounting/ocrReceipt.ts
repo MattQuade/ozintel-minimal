@@ -53,10 +53,11 @@ async function getOcrWorker(): Promise<Worker> {
         logger: () => {},
       });
       await worker.setParameters({
-        // Receipts are a tall single column, not a uniform paragraph.
-        tessedit_pageseg_mode: PSM.SINGLE_COLUMN,
+        // Full-frame phone photo (no crop step): one docket plus table.
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
         tessedit_char_whitelist:
-          "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz$.,:-/() ",
+          // No $ — Tesseract reads $65.22 as 405.22 ($→4).
+          "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,:-/() ",
       });
       return worker;
     })().catch((err) => {

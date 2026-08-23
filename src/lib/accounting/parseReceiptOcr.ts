@@ -189,24 +189,68 @@ export function detectAmountFromOcr(text: string): {
   score: number;
 } | null {
   const lines = normalizeOcrNoise(text).split(/\n+/);
-  let best: { amount: number; score: number } | null = null;
+  const candidates: Array<{ amount: number; score: number }> = [];
 
   for (const line of lines) {
     const matches = moneyMatchesInLine(line);
     if (!matches.length) continue;
     for (const { amount } of matches) {
       const score = scoreAmountLine(line, amount);
-      if (
-        !best ||
-        score > best.score ||
-        (score === best.score && amount > best.amount)
-      ) {
-        best = { amount, score };
+      if (score >= 20) candidates.push({ amount, score });
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  const byCents = new Map<
+    number,
+    { amount: number; score: number; count: number }
+  >();
+  for (const row of candidates) {
+    const key = Math.round(row.amount * 100);
+    const cur = byCents.get(key);
+    if (!cur) {
+      byCents.set(key, { amount: row.amount, score: row.score, count: 1 });
+    } else {
+      cur.count += 1;
+      cur.score = Math.max(cur.score, row.score);
+    }
+  }
+
+  let consensus: { amount: number; score: number; count: number } | null = null;
+  for (const row of byCents.values()) {
+    if (row.count < 2) continue;
+    if (
+      !consensus ||
+      row.count > consensus.count ||
+      (row.count === consensus.count && row.score > consensus.score)
+    ) {
+      consensus = row;
+    }
+  }
+  if (consensus) return { amount: consensus.amount, score: consensus.score };
+
+  let best = candidates[0];
+  for (const row of candidates) {
+    if (
+      row.score > best.score ||
+      (row.score === best.score && row.amount > best.amount)
+    ) {
+      best = row;
+    }
+  }
+
+  // $65.22 often OCRs as 405.22 ($→4) while EFTPOS still reads 65.22.
+  if (best.amount >= 400 && best.amount < 500) {
+    const alts = candidates.filter((c) => c.amount >= 1 && c.amount < 200);
+    if (alts.length) {
+      best = alts[0];
+      for (const row of alts) {
+        if (row.score > best.score) best = row;
       }
     }
   }
 
-  if (!best || best.score < 20) return null;
   return best;
 }
 
