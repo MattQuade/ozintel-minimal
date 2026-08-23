@@ -7,9 +7,9 @@ const nextConfig: NextConfig = {
   // multipart then fails with "Failed to parse body as FormData".
   experimental: {
     proxyClientMaxBodySize: "20mb",
-  },
-  serverActions: {
-    bodySizeLimit: "20mb",
+    serverActions: {
+      bodySizeLimit: "20mb",
+    },
   },
 };
 
