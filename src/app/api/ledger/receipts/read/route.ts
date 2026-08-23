@@ -35,7 +35,20 @@ export async function POST(req: NextRequest) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
-      const form = await req.formData();
+      let form: FormData;
+      try {
+        form = await req.formData();
+      } catch (parseErr) {
+        console.error(parseErr);
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Could not read the photo upload (file too large or interrupted). Retake and try again.",
+          },
+          { status: 400 }
+        );
+      }
       const file = form.get("file") ?? form.get("receipt") ?? form.get("photo");
       if (!(file instanceof File)) {
         return NextResponse.json(
