@@ -107,12 +107,6 @@ EFTPOS $4.50
   checks.push(eq("small ww 4.50 alias", smallWw?.alias, "ww"));
   checks.push(eq("small ww 4.50 amount", smallWw?.amount, 4.5));
 
-  const wwNoTotalWord = parseReceiptOcrText(`
-Woolworths Collingullie
-$65.22
-`);
-  checks.push(eq("ww largest amount fallback", wwNoTotalWord?.amount, 65.22));
-
   const garbledWw = parseReceiptOcrText(`
 WOOLWORTT
 TOTAL (INCL GST) $4.50
@@ -133,13 +127,39 @@ EFTPOS $4.50
     )
   );
 
-  const unknownShop = parseReceiptOcrText(`
+  checks.push(
+    eq(
+      "item name is not merchant",
+      parseReceiptOcrText(`
+CAPSICUM
+1.00 4.50
+TOTAL $46.54
+EFTPOS $46.54
+`),
+      null
+    )
+  );
+
+  const wwCapsicum = parseReceiptOcrText(`
+Woolworths
+CAPSICUM $4.50
+TOTAL $46.54
+EFTPOS $46.54
+`);
+  checks.push(eq("ww not capsicum", wwCapsicum?.alias, "ww"));
+  checks.push(eq("ww total not item", wwCapsicum?.amount, 46.54));
+
+  checks.push(
+    eq(
+      "unknown shop stays blank",
+      parseReceiptOcrText(`
 Corner Deli
 Tax Invoice
 TOTAL $18.50
-`);
-  checks.push(eq("unknown header alias", unknownShop?.alias, "corner"));
-  checks.push(eq("unknown header amount", unknownShop?.amount, 18.5));
+`),
+      null
+    )
+  );
 
   return checks;
 }

@@ -4,7 +4,6 @@
  */
 
 import {
-  isKnownReceiptAlias,
   normalizeReceiptAlias,
   type ParsedReceiptCaption,
 } from "@/lib/accounting/receiptCaption";
@@ -272,39 +271,8 @@ export function detectAmountFromOcr(text: string): {
     }
   }
 
-  if (!best || best.score < 20) {
-    let largest: { amount: number; score: number } | null = null;
-    for (const line of lines) {
-      const lower = line.toLowerCase();
-      if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) continue;
-      if (/\bg[s5]t\b/.test(lower) && !/\btotal\b/.test(lower) && !/\bpurchase\b/.test(lower)) {
-        continue;
-      }
-      for (const { amount } of moneyMatchesInLine(line)) {
-        if (amount < 1) continue;
-        if (!largest || amount > largest.amount) {
-          largest = { amount, score: Math.max(best?.score || 0, 22) };
-        }
-      }
-    }
-    if (largest) best = largest;
-  }
-
   if (!best || best.score < 20) return null;
   return best;
-}
-
-/** Higher is better. Used to pick among OCR retries. */
-export function receiptOcrParseQuality(
-  parsed: ReceiptOcrSuggestion | null
-): number {
-  if (!parsed) return 0;
-  let n = 10;
-  if (parsed.confidence === "high") n += 50;
-  else if (parsed.confidence === "medium") n += 25;
-  else n += 5;
-  if (isKnownReceiptAlias(parsed.alias)) n += 40;
-  return n;
 }
 
 export function parseReceiptOcrText(
@@ -315,21 +283,20 @@ export function parseReceiptOcrText(
 
   const known = detectMerchantFromOcr(raw);
   const amountHit = detectAmountFromOcr(raw);
-  if (!amountHit) return null;
+  if (!known || !amountHit) return null;
 
-  const guessed = known ? null : guessAliasFromHeader(raw);
-  const alias = normalizeReceiptAlias(known?.alias || guessed || "");
+  const alias = normalizeReceiptAlias(known.alias);
   if (!alias || !(amountHit.amount > 0)) return null;
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
-  if (known && amountHit.score >= 50) confidence = "high";
-  else if (!known || amountHit.score < 35) confidence = "low";
+  if (amountHit.score >= 50) confidence = "high";
+  else if (amountHit.score < 35) confidence = "low";
 
   return {
     alias,
     amount: amountHit.amount,
     display: `${alias} ${amountHit.amount.toFixed(2)}`,
-    merchantLabel: known?.label || guessed || alias,
+    merchantLabel: known.label,
     confidence,
     rawPreview: raw.slice(0, 240),
   };

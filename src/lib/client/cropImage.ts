@@ -49,8 +49,8 @@ export async function loadOrientedSource(src: string): Promise<{
   height: number;
   close: () => void;
 }> {
-  // Must match <img> in the crop editors (EXIF-applied naturalWidth/Height).
-  // createImageBitmap on Android can skip orientation, so 2x2 boxes miss the dockets.
+  // Must match <img> in the crop editor (EXIF-applied naturalWidth/Height).
+  // createImageBitmap on Android can skip orientation, so the crop misses the docket.
   const img = await loadImageFromBlobUrl(src);
   return {
     source: img,
