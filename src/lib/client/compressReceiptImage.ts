@@ -160,3 +160,22 @@ export async function prepareReceiptFile(
     return file;
   }
 }
+
+/**
+ * Shrink the camera photo for OCR upload (keeps more quality than storage).
+ * Avoids multi‑MB FormData posts that Next truncates / fails to parse.
+ */
+export async function prepareReceiptFileForOcr(file: File): Promise<File> {
+  if (isPdf(file)) return file;
+  if (!isLikelyImage(file)) return file;
+  try {
+    return await compressImageFile(
+      file,
+      RECEIPT_OCR_MAX_EDGE,
+      RECEIPT_OCR_JPEG_QUALITY
+    );
+  } catch {
+    if (file.size <= 900 * 1024) return file;
+    throw new Error('Could not prepare image for reading');
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
-import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
+import { prepareReceiptFile, prepareReceiptFileForOcr } from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 import { getPendingReceipt, setPendingReceipt, clearPendingReceipt } from '@/lib/client/pendingReceipt';
 
@@ -85,8 +85,11 @@ export default function CaptureReceiptClient() {
 
     const run = async () => {
       try {
+        const forOcr = await prepareReceiptFileForOcr(file);
+        if (ac.signal.aborted) return;
         const form = new FormData();
-        form.append('file', file);
+        // ASCII name — some runtimes choke on non-ASCII multipart filenames.
+        form.append('file', forOcr, 'receipt.jpg');
         const res = await fetch('/api/ledger/receipts/read', {
           method: 'POST',
           body: form,

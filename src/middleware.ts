@@ -31,5 +31,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Skip /api so large multipart uploads are not buffered/truncated by the
+  // middleware proxy (that was causing "Failed to parse body as FormData").
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };
