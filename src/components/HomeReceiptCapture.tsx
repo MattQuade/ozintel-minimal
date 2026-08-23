@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { setPendingReceipt } from '@/lib/client/pendingReceipt';
 
@@ -36,24 +36,26 @@ const srFileInput: CSSProperties = {
 };
 
 /**
- * Capture Receipt opens the camera immediately (label + file input).
- * After OK, the photo is handed to /receipts/capture so Back returns home.
+ * Capture Receipt opens the camera, saves the photo to IndexedDB, then
+ * opens /receipts/capture (so Back returns Home instead of quitting the PWA).
  */
 export default function HomeReceiptCapture() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch('/api/ledger/receipts/read', {
-      credentials: 'include',
-      cache: 'no-store',
-    }).catch(() => undefined);
-  }, []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   return (
     <>
-      <label htmlFor="home-receipt-photo" style={homeButtonStyle}>
-        Capture Receipt
+      <label
+        htmlFor="home-receipt-photo"
+        style={{
+          ...homeButtonStyle,
+          opacity: busy ? 0.7 : 1,
+          pointerEvents: busy ? 'none' : 'auto',
+        }}
+      >
+        {busy ? 'Opening…' : 'Capture Receipt'}
       </label>
       <input
         id="home-receipt-photo"
@@ -65,11 +67,37 @@ export default function HomeReceiptCapture() {
           const file = e.target.files?.[0] || null;
           if (inputRef.current) inputRef.current.value = '';
           if (!file) return;
-          setPendingReceipt(file);
-          router.push('/receipts/capture');
+          setBusy(true);
+          setError('');
+          void (async () => {
+            try {
+              await setPendingReceipt(file);
+              router.push('/receipts/capture');
+            } catch (err) {
+              setBusy(false);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : 'Could not keep the photo — try again'
+              );
+            }
+          })();
         }}
         style={srFileInput}
       />
+      {error ? (
+        <p
+          style={{
+            color: '#fca5a5',
+            fontSize: '0.9rem',
+            margin: '10px 0 0',
+            width: '90%',
+            maxWidth: 400,
+          }}
+        >
+          {error}
+        </p>
+      ) : null}
     </>
   );
 }

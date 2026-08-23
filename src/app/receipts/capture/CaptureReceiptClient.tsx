@@ -2,9 +2,16 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
-import { prepareReceiptFile, prepareReceiptFileForOcr } from '@/lib/client/compressReceiptImage';
+import {
+  prepareReceiptFile,
+  prepareReceiptFileForOcr,
+} from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
-import { getPendingReceipt, setPendingReceipt, clearPendingReceipt } from '@/lib/client/pendingReceipt';
+import {
+  getPendingReceipt,
+  setPendingReceipt,
+  clearPendingReceipt,
+} from '@/lib/client/pendingReceipt';
 
 const srFileInput: CSSProperties = {
   position: 'absolute',
@@ -27,6 +34,23 @@ const greyBtn: CSSProperties = {
   borderRadius: 8,
   fontWeight: 700,
   cursor: 'pointer',
+  touchAction: 'manipulation',
+};
+
+const orangeBtn: CSSProperties = {
+  display: 'block',
+  padding: '20px',
+  fontSize: '1.3rem',
+  border: 'none',
+  borderRadius: 12,
+  width: '100%',
+  cursor: 'pointer',
+  background: '#ea580c',
+  color: 'white',
+  fontWeight: 'bold',
+  boxSizing: 'border-box',
+  textAlign: 'center',
+  WebkitTapHighlightColor: 'rgba(234,88,12,0.35)',
   touchAction: 'manipulation',
 };
 
@@ -54,14 +78,22 @@ export default function CaptureReceiptClient() {
   const parsed = parseReceiptCaption(caption);
 
   useEffect(() => {
-    const pending = getPendingReceipt();
-    if (pending) {
-      setFile(pending);
-      setBooting(false);
-      return;
-    }
-    router.replace('/');
-  }, [router]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const pending = await getPendingReceipt();
+        if (cancelled) return;
+        if (pending) setFile(pending);
+      } catch {
+        // Fall through to empty capture UI — never bounce home.
+      } finally {
+        if (!cancelled) setBooting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!file) {
@@ -88,7 +120,6 @@ export default function CaptureReceiptClient() {
         const forOcr = await prepareReceiptFileForOcr(file);
         if (ac.signal.aborted) return;
         const form = new FormData();
-        // ASCII name — some runtimes choke on non-ASCII multipart filenames.
         form.append('file', forOcr, 'receipt.jpg');
         const res = await fetch('/api/ledger/receipts/read', {
           method: 'POST',
@@ -113,12 +144,12 @@ export default function CaptureReceiptClient() {
           setHint(
             data.error
               ? `${data.error} — type ww 79.13`
-              : 'Type caption like ww 79.13'
+              : 'Could not read — type ww 79.13'
           );
         }
       } catch {
         if (!ac.signal.aborted && !captionTouchedRef.current) {
-          setHint('Type caption like ww 79.13');
+          setHint('Could not read — type ww 79.13');
         }
       } finally {
         if (readAbortRef.current === ac) readAbortRef.current = null;
@@ -127,6 +158,15 @@ export default function CaptureReceiptClient() {
     void run();
     return () => ac.abort();
   }, [file]);
+
+  const adoptFile = async (next: File) => {
+    try {
+      await setPendingReceipt(next);
+    } catch {
+      // Still show the photo even if persist fails.
+    }
+    setFile(next);
+  };
 
   const save = async () => {
     if (!file) return;
@@ -139,7 +179,7 @@ export default function CaptureReceiptClient() {
     try {
       const prepared = await prepareReceiptFile(file);
       const form = new FormData();
-      form.append('file', prepared);
+      form.append('file', prepared, 'receipt.jpg');
       form.append('caption', parsed.display);
       const res = await fetch('/api/ledger/receipts', {
         method: 'POST',
@@ -151,7 +191,7 @@ export default function CaptureReceiptClient() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Save failed');
       }
-      clearPendingReceipt();
+      await clearPendingReceipt().catch(() => undefined);
       router.replace('/');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Save failed');
@@ -160,7 +200,7 @@ export default function CaptureReceiptClient() {
     }
   };
 
-  if (booting || !file) {
+  if (booting) {
     return (
       <div
         style={{
@@ -170,7 +210,9 @@ export default function CaptureReceiptClient() {
           minHeight: '100vh',
           padding: 20,
         }}
-      />
+      >
+        Loading…
+      </div>
     );
   }
 
@@ -203,7 +245,7 @@ export default function CaptureReceiptClient() {
       </a>
 
       <input
-        id="capture-receipt-retake"
+        id="capture-receipt-photo"
         ref={photoInputRef}
         type="file"
         accept="image/*"
@@ -211,94 +253,102 @@ export default function CaptureReceiptClient() {
         onChange={(e) => {
           const next = e.target.files?.[0] || null;
           if (photoInputRef.current) photoInputRef.current.value = '';
-          if (next) {
-            setPendingReceipt(next);
-            setFile(next);
-          }
+          if (next) void adoptFile(next);
         }}
         style={srFileInput}
       />
 
-      <div
-        style={{
-          width: '90%',
-          maxWidth: 400,
-          margin: '0 auto',
-          boxSizing: 'border-box',
-          textAlign: 'left',
-        }}
-      >
-        {previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={previewUrl}
-            alt="Receipt"
+      {!file ? (
+        <div style={{ width: '90%', maxWidth: 400, margin: '0 auto' }}>
+          <p style={{ color: '#94a3b8', marginBottom: 16 }}>
+            Take a photo of the receipt to continue.
+          </p>
+          <label htmlFor="capture-receipt-photo" style={orangeBtn}>
+            Capture Receipt
+          </label>
+        </div>
+      ) : (
+        <div
+          style={{
+            width: '90%',
+            maxWidth: 400,
+            margin: '0 auto',
+            boxSizing: 'border-box',
+            textAlign: 'left',
+          }}
+        >
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt="Receipt"
+              style={{
+                width: '100%',
+                maxHeight: 280,
+                objectFit: 'contain',
+                borderRadius: 8,
+                marginBottom: 8,
+                background: '#020617',
+                border: '1px solid #334155',
+              }}
+            />
+          ) : null}
+          {hint ? (
+            <p
+              style={{
+                color: '#94a3b8',
+                fontSize: '0.85rem',
+                margin: '0 0 8px',
+              }}
+            >
+              {hint}
+            </p>
+          ) : null}
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="none"
+            autoCorrect="off"
+            placeholder="ww 79.13"
+            value={caption}
+            onChange={(e) => {
+              captionTouchedRef.current = true;
+              setCaption(e.target.value);
+            }}
             style={{
               width: '100%',
-              maxHeight: 280,
-              objectFit: 'contain',
+              boxSizing: 'border-box',
+              padding: 14,
               borderRadius: 8,
+              border: '1px solid #475569',
+              background: '#1e2937',
+              color: 'white',
+              fontSize: '1.05rem',
               marginBottom: 8,
-              background: '#020617',
-              border: '1px solid #334155',
             }}
           />
-        ) : null}
-        {hint ? (
-          <p
-            style={{
-              color: '#94a3b8',
-              fontSize: '0.85rem',
-              margin: '0 0 8px',
-            }}
-          >
-            {hint}
-          </p>
-        ) : null}
-        <input
-          type="text"
-          inputMode="text"
-          autoCapitalize="none"
-          autoCorrect="off"
-          placeholder="ww 79.13"
-          value={caption}
-          onChange={(e) => {
-            captionTouchedRef.current = true;
-            setCaption(e.target.value);
-          }}
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: 14,
-            borderRadius: 8,
-            border: '1px solid #475569',
-            background: '#1e2937',
-            color: 'white',
-            fontSize: '1.05rem',
-            marginBottom: 8,
-          }}
-        />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <label htmlFor="capture-receipt-retake" style={retakeLabel}>
-            Retake
-          </label>
-          <button
-            type="button"
-            disabled={saving || !parsed}
-            onClick={() => void save()}
-            style={{
-              ...greyBtn,
-              flex: 1.4,
-              padding: '12px 16px',
-              background: '#22c55e',
-              cursor: saving || !parsed ? 'not-allowed' : 'pointer',
-              opacity: saving || !parsed ? 0.7 : 1,
-            }}
-          >
-            {saving ? 'Saving…' : 'Confirm'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label htmlFor="capture-receipt-photo" style={retakeLabel}>
+              Retake
+            </label>
+            <button
+              type="button"
+              disabled={saving || !parsed}
+              onClick={() => void save()}
+              style={{
+                ...greyBtn,
+                flex: 1.4,
+                padding: '12px 16px',
+                background: '#22c55e',
+                cursor: saving || !parsed ? 'not-allowed' : 'pointer',
+                opacity: saving || !parsed ? 0.7 : 1,
+              }}
+            >
+              {saving ? 'Saving…' : 'Confirm'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {status ? (
         <p
