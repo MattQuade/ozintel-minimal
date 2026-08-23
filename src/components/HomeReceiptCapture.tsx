@@ -6,7 +6,10 @@ import {
   RECEIPT_OCR_JPEG_QUALITY,
   RECEIPT_OCR_MAX_EDGE,
 } from '@/lib/client/compressReceiptImage';
-import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
+import {
+  collapseDuplicateQuadCaptions,
+  parseReceiptCaption,
+} from '@/lib/accounting/receiptCaption';
 import {
   exportCroppedJpegFromSrc,
   FULL_CROP,
@@ -49,9 +52,9 @@ const srFileInput: CSSProperties = {
 type Step = 'idle' | 'crop' | 'reading' | 'confirm';
 type Layout = 'single' | 'quad';
 
-const OCR_CLIENT_TIMEOUT_MS = 25_000;
+const OCR_CLIENT_TIMEOUT_MS = 32_000;
 
-type OcrResult = { caption: string; hint: string };
+type OcrResult = { caption: string; hint: string; amount: number | null };
 
 async function readOneReceipt(
   file: File,
@@ -72,14 +75,24 @@ async function readOneReceipt(
   }
   if (data.suggestion?.display) {
     const label = String(data.suggestion.merchantLabel || '').trim();
+    const amount = Number(data.suggestion.amount);
     return {
       caption: String(data.suggestion.display),
       hint: label
         ? `Read ${label} · $${Number(data.suggestion.amount).toFixed(2)}`
         : `Read ${data.suggestion.display}`,
+      amount: Number.isFinite(amount) ? amount : null,
     };
   }
-  return { caption: '', hint: 'Could not read — type caption' };
+  if (Number(data.amount) > 0) {
+    const amt = Number(data.amount).toFixed(2);
+    return {
+      caption: '',
+      hint: `Read $${amt} — type merchant like ww ${amt}`,
+      amount: Number(data.amount),
+    };
+  }
+  return { caption: '', hint: 'Could not read — type caption', amount: null };
 }
 
 export default function HomeReceiptCapture() {
@@ -261,6 +274,7 @@ export default function HomeReceiptCapture() {
 
       const captions = ['', '', '', ''];
       const hints = ['', '', '', ''];
+      const amounts: Array<number | null> = [null, null, null, null];
       for (let i = 0; i < 4; i += 1) {
         if (ac.signal.aborted) break;
         setReadProgress(`Reading ${QUAD_LABELS[i]} of 4…`);
@@ -274,13 +288,20 @@ export default function HomeReceiptCapture() {
           const result = await readOneReceipt(file, itemAc.signal);
           captions[i] = result.caption;
           hints[i] = result.hint;
+          amounts[i] = result.amount;
         } catch {
           captions[i] = '';
           hints[i] = 'Could not read — type or leave blank to skip';
+          amounts[i] = null;
         } finally {
           clearTimeout(timer);
           ac.signal.removeEventListener('abort', stop);
         }
+      }
+      const collapsed = collapseDuplicateQuadCaptions(captions, amounts);
+      for (let i = 0; i < 4; i += 1) {
+        captions[i] = collapsed.captions[i];
+        if (collapsed.hints[i]) hints[i] = collapsed.hints[i] as string;
       }
       setQuadCaptions(captions);
       setQuadHints(hints);
@@ -681,7 +702,7 @@ export default function HomeReceiptCapture() {
                   style={{
                     width: 72,
                     height: 72,
-                    objectFit: 'cover',
+                    objectFit: 'contain',
                     borderRadius: 8,
                     background: '#0f172a',
                     border: '1px solid #334155',

@@ -6,6 +6,7 @@
 import {
   captionAmountMatches,
   captionMerchantMatches,
+  collapseDuplicateQuadCaptions,
   parseReceiptCaption,
   pickUniqueCaptionMatches,
 } from "@/lib/accounting/receiptCaption";
@@ -120,6 +121,28 @@ function run(): Check[] {
     ]
   );
   checks.push(eq("four unique crops attach", fourWay.length, 4));
+
+  const dup = collapseDuplicateQuadCaptions([
+    "woolwortt 4.50",
+    "ring 4.50",
+    "ww 65.22",
+    "",
+  ]);
+  checks.push(eq("keep first duplicate total", dup.captions[0], "woolwortt 4.50"));
+  checks.push(eq("blank second duplicate total", dup.captions[1], ""));
+  checks.push(eq("leave other total", dup.captions[2], "ww 65.22"));
+  checks.push(eq("duplicate hint set", Boolean(dup.hints[1]), true));
+
+  const dupKnown = collapseDuplicateQuadCaptions(["ring 4.50", "ww 4.50", "", ""]);
+  checks.push(eq("prefer known merchant", dupKnown.captions[0], ""));
+  checks.push(eq("keep ww over ring", dupKnown.captions[1], "ww 4.50"));
+
+  const amountOnlyDup = collapseDuplicateQuadCaptions(
+    ["ww 4.50", "", "", ""],
+    [4.5, 4.5, null, null]
+  );
+  checks.push(eq("amount-only duplicate blanked", amountOnlyDup.captions[1], ""));
+  checks.push(eq("amount-only duplicate hint", Boolean(amountOnlyDup.hints[1]), true));
 
   return checks;
 }

@@ -113,6 +113,26 @@ $65.22
 `);
   checks.push(eq("ww largest amount fallback", wwNoTotalWord?.amount, 65.22));
 
+  const garbledWw = parseReceiptOcrText(`
+WOOLWORTT
+TOTAL (INCL GST) $4.50
+EFTPOS $4.50
+`);
+  checks.push(eq("garbled ww alias", garbledWw?.alias, "ww"));
+  checks.push(eq("garbled ww amount", garbledWw?.amount, 4.5));
+
+  checks.push(
+    eq(
+      "fragment without merchant",
+      parseReceiptOcrText(`
+RING YOUR BAG
+TOTAL $4.50
+EFTPOS $4.50
+`),
+      null
+    )
+  );
+
   const unknownShop = parseReceiptOcrText(`
 Corner Deli
 Tax Invoice

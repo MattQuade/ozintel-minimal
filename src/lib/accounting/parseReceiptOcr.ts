@@ -4,13 +4,14 @@
  */
 
 import {
+  isKnownReceiptAlias,
   normalizeReceiptAlias,
   type ParsedReceiptCaption,
 } from "@/lib/accounting/receiptCaption";
 
 /** Detectable merchant phrases → preferred short caption alias. */
 const MERCHANT_DETECT: Array<{ alias: string; terms: string[] }> = [
-  { alias: "ww", terms: ["woolworths", "woolies", "woolkor"] },
+  { alias: "ww", terms: ["woolworths", "woolies", "woolkor", "woolw"] },
   { alias: "aldi", terms: ["aldi", "ald stores", "alt stores"] },
   { alias: "coles", terms: ["coles"] },
   { alias: "iga", terms: ["iga"] },
@@ -58,6 +59,22 @@ const HEADER_STOP = new Set([
   "fresh",
   "food",
   "people",
+  "ring",
+  "bring",
+  "your",
+  "bag",
+  "bags",
+  "saved",
+  "visit",
+  "hours",
+  "opening",
+  "please",
+  "keep",
+  "copy",
+  "store",
+  "item",
+  "items",
+  "incl",
 ]);
 
 export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
@@ -138,6 +155,46 @@ function scoreAmountLine(line: string, amount: number): number {
   return score;
 }
 
+function lettersOnly(text: string): string {
+  return foldOcrLetters(text).replace(/[^a-z]/g, "");
+}
+
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = i - 1;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cur = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+function fuzzyAliasFromWord(word: string): string | null {
+  const w = lettersOnly(word);
+  if (w.length < 4) return null;
+  if (w.startsWith("woolw") || w.startsWith("woolie") || w.includes("woolworth")) {
+    return "ww";
+  }
+  for (const row of MERCHANT_DETECT) {
+    for (const term of row.terms) {
+      const t = lettersOnly(term);
+      if (t.length < 4) continue;
+      const maxDist = t.length >= 8 ? 2 : 1;
+      if (Math.abs(w.length - t.length) > maxDist) continue;
+      if (editDistance(w, t) <= maxDist) return row.alias;
+    }
+  }
+  return null;
+}
+
 export function detectMerchantFromOcr(text: string): {
   alias: string;
   label: string;
@@ -162,7 +219,14 @@ export function detectMerchantFromOcr(text: string): {
       }
     }
   }
-  return best ? { alias: best.alias, label: best.label } : null;
+  if (best) return { alias: best.alias, label: best.label };
+
+  const words = String(text || "").match(/[A-Za-z0-9][A-Za-z0-9']{2,}/g) || [];
+  for (const word of words) {
+    const alias = fuzzyAliasFromWord(word);
+    if (alias) return { alias, label: word };
+  }
+  return null;
 }
 
 /** First useful word on the docket when the merchant is not in the alias list. */
@@ -177,7 +241,7 @@ export function guessAliasFromHeader(text: string): string | null {
     const words = line.match(/[A-Za-z][A-Za-z']{2,}/g) || [];
     for (const word of words) {
       const alias = normalizeReceiptAlias(word);
-      if (alias.length < 3) continue;
+      if (alias.length < 5) continue;
       if (HEADER_STOP.has(alias)) continue;
       if (/^\d+$/.test(alias)) continue;
       return alias;
@@ -228,6 +292,19 @@ export function detectAmountFromOcr(text: string): {
 
   if (!best || best.score < 20) return null;
   return best;
+}
+
+/** Higher is better. Used to pick among OCR retries. */
+export function receiptOcrParseQuality(
+  parsed: ReceiptOcrSuggestion | null
+): number {
+  if (!parsed) return 0;
+  let n = 10;
+  if (parsed.confidence === "high") n += 50;
+  else if (parsed.confidence === "medium") n += 25;
+  else n += 5;
+  if (isKnownReceiptAlias(parsed.alias)) n += 40;
+  return n;
 }
 
 export function parseReceiptOcrText(

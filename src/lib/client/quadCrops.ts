@@ -4,15 +4,16 @@ export const QUAD_COUNT = 4;
 export const QUAD_LABELS = ["1", "2", "3", "4"] as const;
 
 /**
- * 2×2 layout with a small gutter so dockets don't share an edge.
- * Order: top-left, top-right, bottom-left, bottom-right.
+ * 2×2 layout with a wide centre gap so a small docket cannot sit in
+ * two boxes at once. Order: top-left, top-right, bottom-left, bottom-right.
  */
-export function defaultQuadCrops(gutter = 0.04): CropRectNorm[] {
-  const g = Math.min(0.12, Math.max(0.01, gutter));
-  const cellW = (1 - g * 3) / 2;
-  const cellH = (1 - g * 3) / 2;
-  const cols = [g, g + cellW + g];
-  const rows = [g, g + cellH + g];
+export function defaultQuadCrops(): CropRectNorm[] {
+  const edge = 0.05;
+  const gap = 0.16;
+  const cellW = (1 - edge * 2 - gap) / 2;
+  const cellH = (1 - edge * 2 - gap) / 2;
+  const cols = [edge, edge + cellW + gap];
+  const rows = [edge, edge + cellH + gap];
   return [
     clampCrop({ x: cols[0], y: rows[0], w: cellW, h: cellH }),
     clampCrop({ x: cols[1], y: rows[0], w: cellW, h: cellH }),

@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { clampCrop, type CropRectNorm } from '@/lib/client/cropImage';
-import { QUAD_LABELS, defaultQuadCrops } from '@/lib/client/quadCrops';
+import { QUAD_LABELS, defaultQuadCrops, quadsOverlap } from '@/lib/client/quadCrops';
 
 type Edge = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se' | 'move';
 
@@ -189,11 +189,20 @@ export default function ReceiptQuadEditor({
     />
   );
 
+  const overlapping = crops.some((a, i) =>
+    crops.some((b, j) => i < j && quadsOverlap(a, b))
+  );
+
   return (
     <div>
       <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#94a3b8' }}>
-        Lay four dockets 2×2. Tap a box to select, then drag to nudge.
+        Keep each box on one docket. If a total appears twice, shrink the overlapping box.
       </p>
+      {overlapping ? (
+        <p style={{ margin: '0 0 8px', fontSize: '0.85rem', color: '#fbbf24' }}>
+          Two boxes overlap — a total can be read twice.
+        </p>
+      ) : null}
       <div
         ref={wrapRef}
         style={{

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import { readReceiptImage } from "@/lib/accounting/ocrReceipt";
+import { detectAmountFromOcr } from "@/lib/accounting/parseReceiptOcr";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,12 +43,18 @@ export async function POST(req: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const { suggestion, text } = await readReceiptImage(buffer);
+      const amountOnly = suggestion
+        ? null
+        : detectAmountFromOcr(text)?.amount ?? null;
 
       if (!suggestion) {
         return NextResponse.json({
           success: true,
           suggestion: null,
-          message: "Could not read merchant and total — type a caption",
+          amount: amountOnly,
+          message: amountOnly
+            ? `Read $${Number(amountOnly).toFixed(2)} — type merchant`
+            : "Could not read merchant and total — type a caption",
           textPreview: text.slice(0, 200),
         });
       }
