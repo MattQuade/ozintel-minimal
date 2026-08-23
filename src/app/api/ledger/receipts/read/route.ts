@@ -67,7 +67,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: true,
           suggestion: null,
-          message: "Could not read merchant and total — type a caption",
+          amountCandidates: [],
+          message: "Could not read merchant and total — pick from the list",
           textPreview: text.slice(0, 200),
         });
       }
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
           merchantLabel: suggestion.merchantLabel,
           confidence: suggestion.confidence,
         },
+        amountCandidates: suggestion.amountCandidates || [],
       });
     } catch (err) {
       console.error(err);

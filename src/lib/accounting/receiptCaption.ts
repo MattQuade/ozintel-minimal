@@ -3,35 +3,15 @@
  * Alias is typed in the app; matcher uses it against the bank description.
  */
 
+import { approvedAliasBankTerms } from "@/lib/accounting/approvedMerchants";
+
 export type ParsedReceiptCaption = {
   alias: string;
   amount: number;
   display: string;
 };
 
-const ALIAS_TERMS: Record<string, string[]> = {
-  ww: ["woolworths", "woolies"],
-  woolworths: ["woolworths", "woolies"],
-  woolies: ["woolworths", "woolies"],
-  iga: ["iga"],
-  coles: ["coles"],
-  aldi: ["aldi"],
-  bws: ["bws"],
-  danmurphys: ["dan murphy", "dan murphys"],
-  bp: ["bp"],
-  caltex: ["caltex", "ampol"],
-  ampol: ["ampol", "caltex"],
-  shell: ["shell"],
-  pe: ["pearl", "pearl energy"],
-  pearl: ["pearl", "pearl energy"],
-  reddy: ["reddy", "reddy express"],
-  united: ["united"],
-  "7eleven": ["7-eleven", "7 eleven"],
-  officeworks: ["officeworks"],
-  bunnings: ["bunnings"],
-  ferndale: ["ferndale"],
-  linen: ["linen"],
-};
+const ALIAS_TERMS: Record<string, string[]> = approvedAliasBankTerms();
 
 function cents(n: number): number {
   return Math.round((Number(n) || 0) * 100);

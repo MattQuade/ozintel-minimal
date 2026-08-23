@@ -151,6 +151,14 @@ EFTPOS 65.22
   checks.push(eq("dollar-as-four alias", dollarAsFour?.alias, "ww"));
   checks.push(eq("dollar-as-four amount", dollarAsFour?.amount, 65.22));
 
+  const onlyFour = parseReceiptOcrText(`
+TOTAL 465.22
+EFTPOS 465.22
+`);
+  const fourAlts = (onlyFour?.amountCandidates || []).map((c) => c.amount);
+  checks.push(eq("dollar-guess includes 65.22", fourAlts.includes(65.22), true));
+  checks.push(eq("dollar-guess includes 465.22", fourAlts.includes(465.22), true));
+
   return checks;
 }
 

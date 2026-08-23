@@ -5,7 +5,11 @@ import {
   prepareReceiptFile,
   prepareReceiptFileForOcr,
 } from '@/lib/client/compressReceiptImage';
-import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
+import { APPROVED_RECEIPT_MERCHANTS } from '@/lib/accounting/approvedMerchants';
+import {
+  normalizeReceiptAlias,
+  parseReceiptCaption,
+} from '@/lib/accounting/receiptCaption';
 import {
   setPendingReceipt,
   loadPendingReceipt,
@@ -57,24 +61,55 @@ const greyBtn: CSSProperties = {
 
 const OCR_CLIENT_MS = 10_000;
 
+function chipStyle(selected: boolean): CSSProperties {
+  return {
+    padding: '8px 12px',
+    borderRadius: 999,
+    border: selected ? '2px solid #fb923c' : '1px solid #475569',
+    background: selected ? '#9a3412' : '#1e2937',
+    color: 'white',
+    fontWeight: 700,
+    fontSize: '0.88rem',
+    cursor: 'pointer',
+    touchAction: 'manipulation',
+  };
+}
+
+function parseTypedAmount(raw: string): number | null {
+  const n = Number(String(raw || '').replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
 /**
- * Camera opens from this button. Confirm stays on home so the photo is not
- * lost when the Android camera activity returns, and Back closes confirm
- * instead of the PWA.
+ * Camera opens from this button. Confirm stays on home: pick a preapproved
+ * shop and a total (OCR only highlights). Back closes confirm, not the PWA.
  */
 export default function HomeReceiptCapture() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const captionTouchedRef = useRef(false);
+  const merchantTouchedRef = useRef(false);
+  const amountTouchedRef = useRef(false);
   const ignorePopUntilRef = useRef(0);
   const releasingBackRef = useRef(false);
   const [inputKey, setInputKey] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
+  const [alias, setAlias] = useState('');
+  const [otherAlias, setOtherAlias] = useState('');
+  const [amount, setAmount] = useState<number | null>(null);
+  const [amountText, setAmountText] = useState('');
+  const [amountChoices, setAmountChoices] = useState<number[]>([]);
   const [hint, setHint] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
-  const parsed = parseReceiptCaption(caption);
+
+  const effectiveAlias = alias || normalizeReceiptAlias(otherAlias);
+  const typedAmount = parseTypedAmount(amountText);
+  const effectiveAmount = typedAmount ?? amount;
+  const parsed =
+    effectiveAlias && effectiveAmount && effectiveAmount > 0
+      ? parseReceiptCaption(`${effectiveAlias} ${effectiveAmount.toFixed(2)}`)
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +138,6 @@ export default function HomeReceiptCapture() {
   useEffect(() => {
     const onPop = () => {
       if (releasingBackRef.current) return;
-      // Camera return on Android often pops history; do not wipe the new photo.
       if (Date.now() < ignorePopUntilRef.current) {
         if (history.state?.ozintelReceipt !== 1) {
           history.pushState({ ozintelReceipt: 1 }, '');
@@ -118,9 +152,14 @@ export default function HomeReceiptCapture() {
 
   useEffect(() => {
     if (!file) return;
-    captionTouchedRef.current = false;
-    setCaption('');
-    setHint('Reading…');
+    merchantTouchedRef.current = false;
+    amountTouchedRef.current = false;
+    setAlias('');
+    setOtherAlias('');
+    setAmount(null);
+    setAmountText('');
+    setAmountChoices([]);
+    setHint('Pick the shop — reading total…');
     setStatus('');
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), OCR_CLIENT_MS);
@@ -128,7 +167,7 @@ export default function HomeReceiptCapture() {
       try {
         const forOcr = await prepareReceiptFileForOcr(file);
         if (ac.signal.aborted) {
-          if (!captionTouchedRef.current) setHint('Type caption like ww 79.13');
+          setHint('Pick the shop and type the total');
           return;
         }
         const form = new FormData();
@@ -141,26 +180,35 @@ export default function HomeReceiptCapture() {
           signal: ac.signal,
         });
         const data = await res.json().catch(() => ({}));
-        if (ac.signal.aborted || captionTouchedRef.current) return;
-        if (data.suggestion?.display) {
-          setCaption(String(data.suggestion.display));
-          const label = String(data.suggestion.merchantLabel || '').trim();
-          setHint(
-            label
-              ? `Read ${label} · $${Number(data.suggestion.amount).toFixed(2)} — edit if needed`
-              : `Read ${data.suggestion.display} — edit if needed`
-          );
-          return;
+        if (ac.signal.aborted) return;
+
+        const choices: number[] = [];
+        for (const row of data.amountCandidates || []) {
+          const n = Number(row.amount ?? row);
+          if (Number.isFinite(n) && n > 0 && !choices.includes(n)) choices.push(n);
         }
-        const amount = Number(data.suggestion?.amount);
-        if (Number.isFinite(amount) && amount > 0) {
-          const amt = amount.toFixed(2);
-          setHint(`Total looks like $${amt} — type ww ${amt}`);
-          return;
+        const suggestedAmount = Number(data.suggestion?.amount);
+        if (Number.isFinite(suggestedAmount) && suggestedAmount > 0 && !choices.includes(suggestedAmount)) {
+          choices.unshift(suggestedAmount);
         }
-        setHint('Type caption like ww 79.13');
+        setAmountChoices(choices);
+
+        if (!merchantTouchedRef.current && data.suggestion?.alias) {
+          setAlias(String(data.suggestion.alias));
+          setOtherAlias('');
+        }
+        if (!amountTouchedRef.current && Number.isFinite(suggestedAmount) && suggestedAmount > 0) {
+          setAmount(suggestedAmount);
+          setAmountText('');
+        }
+
+        if (choices.length) {
+          setHint('Tap the shop and the total — edit if the highlight is wrong');
+        } else {
+          setHint('Pick the shop and type the total');
+        }
       } catch {
-        if (!captionTouchedRef.current) setHint('Type caption like ww 79.13');
+        setHint('Pick the shop and type the total');
       }
     };
     void run();
@@ -172,10 +220,15 @@ export default function HomeReceiptCapture() {
 
   const resetConfirm = (popHistory = false) => {
     setFile(null);
-    setCaption('');
+    setAlias('');
+    setOtherAlias('');
+    setAmount(null);
+    setAmountText('');
+    setAmountChoices([]);
     setHint('');
     setStatus('');
-    captionTouchedRef.current = false;
+    merchantTouchedRef.current = false;
+    amountTouchedRef.current = false;
     clearPendingReceipt();
     setInputKey((k) => k + 1);
     if (
@@ -200,7 +253,7 @@ export default function HomeReceiptCapture() {
 
   const save = async () => {
     if (!file || !parsed) {
-      setStatus('Caption like ww 79.13');
+      setStatus('Pick a shop and a total');
       return;
     }
     setSaving(true);
@@ -263,7 +316,7 @@ export default function HomeReceiptCapture() {
               alt="Receipt"
               style={{
                 width: '100%',
-                maxHeight: 240,
+                maxHeight: 160,
                 objectFit: 'contain',
                 borderRadius: 8,
                 marginBottom: 8,
@@ -277,21 +330,85 @@ export default function HomeReceiptCapture() {
               {hint}
             </p>
           ) : null}
+
+          <p style={{ color: '#cbd5e1', fontSize: '0.8rem', margin: '0 0 6px', fontWeight: 700 }}>
+            Shop
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {APPROVED_RECEIPT_MERCHANTS.map((m) => (
+              <button
+                key={m.alias}
+                type="button"
+                onClick={() => {
+                  merchantTouchedRef.current = true;
+                  setAlias(m.alias);
+                  setOtherAlias('');
+                }}
+                style={chipStyle(alias === m.alias)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             inputMode="text"
             autoCapitalize="none"
             autoCorrect="off"
-            placeholder="ww 79.13"
-            value={caption}
+            placeholder="Other shop alias"
+            value={otherAlias}
             onChange={(e) => {
-              captionTouchedRef.current = true;
-              setCaption(e.target.value);
+              merchantTouchedRef.current = true;
+              setOtherAlias(e.target.value);
+              setAlias('');
             }}
             style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: 14,
+              padding: 10,
+              borderRadius: 8,
+              border: '1px solid #475569',
+              background: '#1e2937',
+              color: 'white',
+              fontSize: '0.95rem',
+              marginBottom: 10,
+            }}
+          />
+
+          <p style={{ color: '#cbd5e1', fontSize: '0.8rem', margin: '0 0 6px', fontWeight: 700 }}>
+            Total
+          </p>
+          {amountChoices.length ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {amountChoices.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    amountTouchedRef.current = true;
+                    setAmount(n);
+                    setAmountText('');
+                  }}
+                  style={chipStyle(typedAmount == null && amount === n)}
+                >
+                  ${n.toFixed(2)}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="or type total"
+            value={amountText}
+            onChange={(e) => {
+              amountTouchedRef.current = true;
+              setAmountText(e.target.value);
+            }}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: 10,
               borderRadius: 8,
               border: '1px solid #475569',
               background: '#1e2937',
@@ -300,6 +417,7 @@ export default function HomeReceiptCapture() {
               marginBottom: 8,
             }}
           />
+
           <div style={{ display: 'flex', gap: 8 }}>
             <label htmlFor="home-receipt-photo" style={{ ...greyBtn, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               Retake
@@ -316,7 +434,7 @@ export default function HomeReceiptCapture() {
                 opacity: saving || !parsed ? 0.7 : 1,
               }}
             >
-              {saving ? 'Saving…' : 'Confirm'}
+              {saving ? 'Saving…' : parsed ? `Confirm ${parsed.display}` : 'Confirm'}
             </button>
           </div>
         </div>

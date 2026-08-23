@@ -1,67 +1,13 @@
 /**
- * Turn raw OCR text from a receipt photo into caption fields (alias + amount).
- * Confirm step in the UI always remains — this only suggests.
+ * Turn raw OCR text into a suggestion against the approved merchant list
+ * plus ranked total candidates. The confirm UI always remains the lock.
  */
 
+import { APPROVED_RECEIPT_MERCHANTS } from "@/lib/accounting/approvedMerchants";
 import {
   normalizeReceiptAlias,
   type ParsedReceiptCaption,
 } from "@/lib/accounting/receiptCaption";
-
-/**
- * Known merchants. `keys` are compact (letters only) and matched as substrings
- * or with a small edit distance so Tesseract noise still hits Woolworths /
- * Dan Murphys instead of a junk header word like "foad" or "bas".
- */
-const MERCHANT_DETECT: Array<{
-  alias: string;
-  label: string;
-  keys: string[];
-}> = [
-  {
-    alias: "ww",
-    label: "woolworths",
-    keys: [
-      "woolworths",
-      "woolworth",
-      "woolies",
-      "woolwor",
-      "woolkor",
-      "freshfoodpeople",
-    ],
-  },
-  { alias: "aldi", label: "aldi", keys: ["aldi", "aldstores", "altstores"] },
-  { alias: "coles", label: "coles", keys: ["coles"] },
-  { alias: "iga", label: "iga", keys: ["iga"] },
-  {
-    alias: "reddy",
-    label: "reddy express",
-    keys: ["reddyexpress", "reddy"],
-  },
-  { alias: "ampol", label: "ampol", keys: ["ampol", "anpol", "caltex"] },
-  { alias: "bp", label: "bp", keys: ["bp"] },
-  { alias: "shell", label: "shell", keys: ["shell"] },
-  { alias: "pe", label: "pearl energy", keys: ["pearlenergy", "pearl"] },
-  {
-    alias: "united",
-    label: "united",
-    keys: ["unitedpetroleum", "united"],
-  },
-  {
-    alias: "7eleven",
-    label: "7-eleven",
-    keys: ["7eleven", "seveneleven"],
-  },
-  { alias: "bunnings", label: "bunnings", keys: ["bunnings"] },
-  { alias: "officeworks", label: "officeworks", keys: ["officeworks"] },
-  {
-    alias: "danmurphys",
-    label: "dan murphys",
-    keys: ["danmurphys", "danmurphy", "danmurph"],
-  },
-  { alias: "bws", label: "bws", keys: ["bws"] },
-  { alias: "ferndale", label: "ferndale", keys: ["ferndale"] },
-];
 
 const HEADER_STOP = new Set([
   "tax",
@@ -95,10 +41,18 @@ const HEADER_STOP = new Set([
   "people",
 ]);
 
+export type ReceiptAmountCandidate = {
+  amount: number;
+  score: number;
+  /** True when this value was derived by treating a leading 4 as a '$'. */
+  dollarGuess?: boolean;
+};
+
 export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
   merchantLabel: string;
   confidence: "high" | "medium" | "low";
   rawPreview: string;
+  amountCandidates: ReceiptAmountCandidate[];
 };
 
 function normalizeOcrNoise(text: string): string {
@@ -214,6 +168,54 @@ function scoreAmountLine(line: string, amount: number): number {
   return score;
 }
 
+/** '$65.22' often becomes '465.22' because Tesseract reads '$' as '4'. */
+export function stripLeadingDollarFour(amount: number): number | null {
+  if (!(amount >= 10)) return null;
+  const cents = Math.round(amount * 100);
+  const digits = String(cents);
+  if (!digits.startsWith("4") || digits.length < 4) return null;
+  const rest = Number(digits.slice(1)) / 100;
+  if (!Number.isFinite(rest) || rest < 1) return null;
+  return Math.round(rest * 100) / 100;
+}
+
+function isDollarAsFourPair(big: number, small: number): boolean {
+  const stripped = stripLeadingDollarFour(big);
+  if (stripped == null) return false;
+  return Math.round(stripped * 100) === Math.round(small * 100);
+}
+
+function collectScoredAmounts(
+  text: string
+): Array<{ amount: number; score: number; count: number }> {
+  const lines = normalizeOcrNoise(text).split(/\n+/);
+  const raw: Array<{ amount: number; score: number }> = [];
+
+  for (const line of lines) {
+    const matches = moneyMatchesInLine(line);
+    if (!matches.length) continue;
+    for (const { amount } of matches) {
+      raw.push({ amount, score: scoreAmountLine(line, amount) });
+    }
+  }
+
+  const byCents = new Map<
+    number,
+    { amount: number; score: number; count: number }
+  >();
+  for (const row of raw) {
+    const key = Math.round(row.amount * 100);
+    const cur = byCents.get(key);
+    if (!cur) {
+      byCents.set(key, { amount: row.amount, score: row.score, count: 1 });
+    } else {
+      cur.count += 1;
+      cur.score = Math.max(cur.score, row.score);
+    }
+  }
+  return [...byCents.values()];
+}
+
 export function detectMerchantFromOcr(text: string): {
   alias: string;
   label: string;
@@ -222,8 +224,8 @@ export function detectMerchantFromOcr(text: string): {
   if (!compact) return null;
 
   let best: { alias: string; label: string; len: number } | null = null;
-  for (const row of MERCHANT_DETECT) {
-    for (const key of row.keys) {
+  for (const row of APPROVED_RECEIPT_MERCHANTS) {
+    for (const key of row.ocrKeys) {
       const needle = compactLetters(key);
       if (!compactContains(compact, needle)) continue;
       const len = needle.length;
@@ -256,41 +258,39 @@ export function guessAliasFromHeader(text: string): string | null {
   return null;
 }
 
+export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
+  const grouped = collectScoredAmounts(text);
+  const out: ReceiptAmountCandidate[] = grouped.map((row) => ({
+    amount: row.amount,
+    score: row.score + (row.count > 1 ? 15 : 0),
+  }));
+
+  for (const row of grouped) {
+    const stripped = stripLeadingDollarFour(row.amount);
+    if (stripped == null) continue;
+    if (out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))) {
+      continue;
+    }
+    out.push({
+      amount: stripped,
+      score: Math.max(0, row.score - 10),
+      dollarGuess: true,
+    });
+  }
+
+  out.sort((a, b) => b.score - a.score || b.amount - a.amount);
+  return out.slice(0, 8);
+}
+
 export function detectAmountFromOcr(text: string): {
   amount: number;
   score: number;
 } | null {
-  const lines = normalizeOcrNoise(text).split(/\n+/);
-  const candidates: Array<{ amount: number; score: number }> = [];
-
-  for (const line of lines) {
-    const matches = moneyMatchesInLine(line);
-    if (!matches.length) continue;
-    for (const { amount } of matches) {
-      const score = scoreAmountLine(line, amount);
-      if (score >= 20) candidates.push({ amount, score });
-    }
-  }
-
+  const candidates = collectScoredAmounts(text).filter((c) => c.score >= 20);
   if (!candidates.length) return null;
 
-  const byCents = new Map<
-    number,
-    { amount: number; score: number; count: number }
-  >();
-  for (const row of candidates) {
-    const key = Math.round(row.amount * 100);
-    const cur = byCents.get(key);
-    if (!cur) {
-      byCents.set(key, { amount: row.amount, score: row.score, count: 1 });
-    } else {
-      cur.count += 1;
-      cur.score = Math.max(cur.score, row.score);
-    }
-  }
-
   let consensus: { amount: number; score: number; count: number } | null = null;
-  for (const row of byCents.values()) {
+  for (const row of candidates) {
     if (row.count < 2) continue;
     if (
       !consensus ||
@@ -300,30 +300,37 @@ export function detectAmountFromOcr(text: string): {
       consensus = row;
     }
   }
-  if (consensus) return { amount: consensus.amount, score: consensus.score };
 
-  let best = candidates[0];
-  for (const row of candidates) {
-    if (
-      row.score > best.score ||
-      (row.score === best.score && row.amount > best.amount)
-    ) {
-      best = row;
+  let best = consensus || candidates[0];
+  if (!consensus) {
+    for (const row of candidates) {
+      if (
+        row.score > best.score ||
+        (row.score === best.score && row.amount > best.amount)
+      ) {
+        best = row;
+      }
     }
   }
+
+  const pair = candidates.find(
+    (c) => c.amount !== best.amount && isDollarAsFourPair(best.amount, c.amount)
+  );
+  if (pair) return { amount: pair.amount, score: Math.max(best.score, pair.score) };
 
   // $65.22 often OCRs as 405.22 ($→4) while EFTPOS still reads 65.22.
   if (best.amount >= 400 && best.amount < 500) {
     const alts = candidates.filter((c) => c.amount >= 1 && c.amount < 200);
     if (alts.length) {
-      best = alts[0];
+      let alt = alts[0];
       for (const row of alts) {
-        if (row.score > best.score) best = row;
+        if (row.score > alt.score) alt = row;
       }
+      return { amount: alt.amount, score: alt.score };
     }
   }
 
-  return best;
+  return { amount: best.amount, score: best.score };
 }
 
 export function parseReceiptOcrText(
@@ -334,22 +341,23 @@ export function parseReceiptOcrText(
 
   const known = detectMerchantFromOcr(raw);
   const amountHit = detectAmountFromOcr(raw);
-  if (!amountHit) return null;
+  const amountCandidates = listAmountCandidates(raw);
+  if (!amountHit && !amountCandidates.length && !known) return null;
 
-  // Never auto-fill a guessed header word ("foad", "bas") — only known shops.
   const alias = known ? normalizeReceiptAlias(known.alias) : "";
-  if (!(amountHit.amount > 0)) return null;
+  const amount = amountHit?.amount || amountCandidates[0]?.amount || 0;
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
-  if (known && amountHit.score >= 50) confidence = "high";
-  else if (!known || amountHit.score < 35) confidence = "low";
+  if (known && amountHit && amountHit.score >= 50) confidence = "high";
+  else if (!known || !amountHit || amountHit.score < 35) confidence = "low";
 
   return {
     alias,
-    amount: amountHit.amount,
-    display: alias ? `${alias} ${amountHit.amount.toFixed(2)}` : "",
+    amount,
+    display: alias && amount > 0 ? `${alias} ${amount.toFixed(2)}` : "",
     merchantLabel: known?.label || "",
     confidence,
     rawPreview: raw.slice(0, 240),
+    amountCandidates,
   };
 }
