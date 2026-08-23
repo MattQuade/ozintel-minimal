@@ -12,8 +12,8 @@ import {
   type ReceiptOcrSuggestion,
 } from "@/lib/accounting/parseReceiptOcr";
 
-const OCR_STARTUP_MS = 20_000;
-const OCR_READ_MS = 15_000;
+const OCR_STARTUP_MS = 45_000;
+const OCR_READ_MS = 45_000;
 
 let workerPromise: Promise<Worker> | null = null;
 
@@ -52,9 +52,8 @@ async function getOcrWorker(): Promise<Worker> {
         logger: () => {},
       });
       await worker.setParameters({
-        tessedit_pageseg_mode: PSM.AUTO,
-        tessedit_char_whitelist:
-          "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,:-/() ",
+        // Single block suits tall thermal dockets better than AUTO on phones.
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
       });
       return worker;
     })().catch((err) => {
@@ -74,29 +73,12 @@ export async function preprocessReceiptForOcr(image: Buffer): Promise<Buffer> {
     .rotate()
     .greyscale()
     .normalise()
-    .linear(1.25, -16)
     .sharpen()
     .resize({
       width: 1600,
       height: 2800,
       fit: "inside",
-      withoutEnlargement: false,
-    })
-    .png()
-    .toBuffer();
-}
-
-async function binarizeReceipt(image: Buffer): Promise<Buffer> {
-  return sharp(image)
-    .rotate()
-    .greyscale()
-    .normalise()
-    .threshold(168)
-    .resize({
-      width: 1600,
-      height: 2800,
-      fit: "inside",
-      withoutEnlargement: false,
+      withoutEnlargement: true,
     })
     .png()
     .toBuffer();
@@ -110,23 +92,12 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
       "OCR startup"
     );
     const prepared = await preprocessReceiptForOcr(image);
-    const first = await withTimeout(
+    const result = await withTimeout(
       worker.recognize(prepared),
       OCR_READ_MS,
       "OCR read"
     );
-    let text = String(first.data?.text || "").trim();
-    if (parseReceiptOcrText(text)) return text;
-
-    const binary = await binarizeReceipt(image);
-    const second = await withTimeout(
-      worker.recognize(binary),
-      OCR_READ_MS,
-      "OCR retry"
-    );
-    const retry = String(second.data?.text || "").trim();
-    if (!text || (retry && retry.length > text.length)) text = retry;
-    return text;
+    return String(result.data?.text || "").trim();
   } catch (err) {
     workerPromise = null;
     throw err;
