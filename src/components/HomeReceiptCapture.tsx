@@ -335,7 +335,9 @@ export default function HomeReceiptCapture() {
             Shop
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-            {APPROVED_RECEIPT_MERCHANTS.map((m) => (
+            {[...APPROVED_RECEIPT_MERCHANTS]
+              .sort((a, b) => a.label.localeCompare(b.label, 'en'))
+              .map((m) => (
               <button
                 key={m.alias}
                 type="button"
