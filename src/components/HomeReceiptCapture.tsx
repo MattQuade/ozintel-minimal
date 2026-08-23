@@ -1,16 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import {
-  prepareReceiptFile,
-  RECEIPT_OCR_JPEG_QUALITY,
-  RECEIPT_OCR_MAX_EDGE,
-} from '@/lib/client/compressReceiptImage';
-import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
-import {
-  exportCroppedJpegFromSrc,
-  FULL_CROP,
-} from '@/lib/client/cropImage';
+import { useEffect, useRef, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
+import { setPendingReceipt } from '@/lib/client/pendingReceipt';
 
 const homeButtonStyle: CSSProperties = {
   display: 'block',
@@ -31,14 +23,53 @@ const homeButtonStyle: CSSProperties = {
   touchAction: 'manipulation',
 };
 
+const srFileInput: CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0, 0, 0, 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+};
+
 /**
- * Home control is a real page link so Android Back returns to home
- * instead of closing the standalone PWA.
+ * Capture Receipt opens the camera immediately (label + file input).
+ * After OK, the photo is handed to /receipts/capture so Back returns home.
  */
 export default function HomeReceiptCapture() {
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/ledger/receipts/read', {
+      credentials: 'include',
+      cache: 'no-store',
+    }).catch(() => undefined);
+  }, []);
+
   return (
-    <a href="/receipts/capture" style={homeButtonStyle}>
-      Capture Receipt
-    </a>
+    <>
+      <label htmlFor="home-receipt-photo" style={homeButtonStyle}>
+        Capture Receipt
+      </label>
+      <input
+        id="home-receipt-photo"
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => {
+          const file = e.target.files?.[0] || null;
+          if (inputRef.current) inputRef.current.value = '';
+          if (!file) return;
+          setPendingReceipt(file);
+          router.push('/receipts/capture');
+        }}
+        style={srFileInput}
+      />
+    </>
   );
 }
