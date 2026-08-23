@@ -99,12 +99,6 @@ export const APPROVED_RECEIPT_MERCHANTS: ApprovedMerchant[] = [
     ocrKeys: ["unitedpetroleum", "united"],
   },
   {
-    alias: "7eleven",
-    label: "7-Eleven",
-    bankTerms: ["7-eleven", "7 eleven"],
-    ocrKeys: ["7eleven", "seveneleven"],
-  },
-  {
     alias: "bunnings",
     label: "Bunnings",
     bankTerms: ["bunnings"],
