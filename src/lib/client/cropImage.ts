@@ -49,8 +49,27 @@ export async function loadOrientedSource(src: string): Promise<{
   height: number;
   close: () => void;
 }> {
-  // Must match <img> in the crop editor (EXIF-applied naturalWidth/Height).
-  // createImageBitmap on Android can skip orientation, so the crop misses the docket.
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const res = await fetch(src, { credentials: 'include', cache: 'no-store' });
+      if (!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(
+        blob,
+        { imageOrientation: 'from-image' } as ImageBitmapOptions
+      );
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => {
+          if (typeof bitmap.close === 'function') bitmap.close();
+        },
+      };
+    } catch {
+      // fall through to <img>
+    }
+  }
   const img = await loadImageFromBlobUrl(src);
   return {
     source: img,

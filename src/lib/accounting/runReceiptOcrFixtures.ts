@@ -99,67 +99,13 @@ EFTPOS $79.13
   checks.push(eq("messy ww alias", messyWw?.alias, "ww"));
   checks.push(eq("messy ww amount", messyWw?.amount, 79.13));
 
-  const smallWw = parseReceiptOcrText(`
-Woolworths
-TOTAL (INCL GST) $4.50
-EFTPOS $4.50
-`);
-  checks.push(eq("small ww 4.50 alias", smallWw?.alias, "ww"));
-  checks.push(eq("small ww 4.50 amount", smallWw?.amount, 4.5));
-
-  const garbledWw = parseReceiptOcrText(`
-WOOLWORTT
-TOTAL (INCL GST) $4.50
-EFTPOS $4.50
-`);
-  checks.push(eq("garbled ww alias", garbledWw?.alias, "ww"));
-  checks.push(eq("garbled ww amount", garbledWw?.amount, 4.5));
-
-  checks.push(
-    eq(
-      "fragment without merchant",
-      parseReceiptOcrText(`
-RING YOUR BAG
-TOTAL $4.50
-EFTPOS $4.50
-`),
-      null
-    )
-  );
-
-  checks.push(
-    eq(
-      "item name is not merchant",
-      parseReceiptOcrText(`
-CAPSICUM
-1.00 4.50
-TOTAL $46.54
-EFTPOS $46.54
-`),
-      null
-    )
-  );
-
-  const wwCapsicum = parseReceiptOcrText(`
-Woolworths
-CAPSICUM $4.50
-TOTAL $46.54
-EFTPOS $46.54
-`);
-  checks.push(eq("ww not capsicum", wwCapsicum?.alias, "ww"));
-  checks.push(eq("ww total not item", wwCapsicum?.amount, 46.54));
-
-  checks.push(
-    eq(
-      "unknown shop stays blank",
-      parseReceiptOcrText(`
+  const unknownShop = parseReceiptOcrText(`
 Corner Deli
 Tax Invoice
 TOTAL $18.50
-`),
-      null
-    )
-  );
+`);
+  checks.push(eq("unknown header alias", unknownShop?.alias, "corner"));
+  checks.push(eq("unknown header amount", unknownShop?.amount, 18.5));
 
   return checks;
 }

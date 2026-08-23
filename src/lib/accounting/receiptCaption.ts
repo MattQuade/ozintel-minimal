@@ -43,57 +43,6 @@ export function normalizeReceiptAlias(raw: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-export function isKnownReceiptAlias(alias: string): boolean {
-  const key = normalizeReceiptAlias(alias);
-  return Boolean(key && ALIAS_TERMS[key]);
-}
-
-/**
- * When two 2×2 boxes read the same total, keep the known merchant
- * and blank the rest so a second docket is not saved as a duplicate.
- */
-export function collapseDuplicateQuadCaptions(
-  captions: string[],
-  extraAmounts: Array<number | null> = []
-): {
-  captions: string[];
-  hints: Array<string | null>;
-} {
-  const next = captions.slice();
-  const hints: Array<string | null> = captions.map(() => null);
-  const parsed = next.map(parseReceiptCaption);
-  const amounts = next.map(
-    (_, i) => parsed[i]?.amount ?? extraAmounts[i] ?? null
-  );
-  const groups = new Map<number, number[]>();
-  amounts.forEach((amount, i) => {
-    if (amount == null || !(amount > 0)) return;
-    const key = cents(amount);
-    const list = groups.get(key) || [];
-    list.push(i);
-    groups.set(key, list);
-  });
-
-  for (const [, indexes] of groups) {
-    if (indexes.length < 2) continue;
-    indexes.sort((a, b) => {
-      const pa = parsed[a];
-      const pb = parsed[b];
-      const ka = pa && isKnownReceiptAlias(pa.alias) ? 100 : pa ? 10 : 0;
-      const kb = pb && isKnownReceiptAlias(pb.alias) ? 100 : pb ? 10 : 0;
-      if (kb !== ka) return kb - ka;
-      return (pb?.alias.length || 0) - (pa?.alias.length || 0);
-    });
-    const keep = indexes[0];
-    const amount = (amounts[keep] || 0).toFixed(2);
-    for (const i of indexes.slice(1)) {
-      next[i] = "";
-      hints[i] = `Same $${amount} as box ${keep + 1} — nudge this box onto a different docket`;
-    }
-  }
-  return { captions: next, hints };
-}
-
 export function parseReceiptCaption(
   input: string
 ): ParsedReceiptCaption | null {

@@ -135,11 +135,6 @@ export default function HomeReceiptCapture() {
             : `Read ${data.suggestion.display} — confirm or edit`
         );
         setStatus('');
-      } else if (Number(data.amount) > 0) {
-        const amt = Number(data.amount).toFixed(2);
-        setCaption('');
-        setReadHint(`Read $${amt} — type merchant like ww ${amt}`);
-        setStatus('');
       } else {
         setCaption('');
         setReadHint('');
@@ -170,6 +165,7 @@ export default function HomeReceiptCapture() {
     if (!originalFile || !originalUrl) return;
     setStatus('Cropping…');
     try {
+      // High-fidelity crop for OCR; storage compression happens on Confirm.
       const cropped = await exportCroppedJpegFromSrc({
         src: originalUrl,
         crop,

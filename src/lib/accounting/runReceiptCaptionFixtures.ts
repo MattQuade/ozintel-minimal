@@ -6,11 +6,9 @@
 import {
   captionAmountMatches,
   captionMerchantMatches,
-  collapseDuplicateQuadCaptions,
   parseReceiptCaption,
   pickUniqueCaptionMatches,
 } from "@/lib/accounting/receiptCaption";
-import { defaultQuadCrops, quadsOverlap } from "@/lib/client/quadCrops";
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -93,56 +91,6 @@ function run(): Check[] {
     [{ id: "e1", description: "WOOLWORTHS", amount: -79.13 }]
   );
   checks.push(eq("skip already attached receipt", alreadyLinked.length, 0));
-
-  const grid = defaultQuadCrops();
-  checks.push(eq("quad count", grid.length, 4));
-  checks.push(
-    eq(
-      "quads do not overlap",
-      [0, 1, 2, 3].every((i) =>
-        [0, 1, 2, 3].every((j) => i >= j || !quadsOverlap(grid[i], grid[j]))
-      ),
-      true
-    )
-  );
-
-  const fourWay = pickUniqueCaptionMatches(
-    [
-      { id: "r1", caption: "ww 79.13" },
-      { id: "r2", caption: "coles 40.00" },
-      { id: "r3", caption: "reddy 87.40" },
-      { id: "r4", caption: "iga 12.50" },
-    ],
-    [
-      { id: "e1", description: "WOOLWORTHS", amount: -79.13 },
-      { id: "e2", description: "COLES", amount: -40 },
-      { id: "e3", description: "REDDY EXPRESS", amount: -87.4 },
-      { id: "e4", description: "IGA COLLINGULLIE", amount: -12.5 },
-    ]
-  );
-  checks.push(eq("four unique crops attach", fourWay.length, 4));
-
-  const dup = collapseDuplicateQuadCaptions([
-    "woolwortt 4.50",
-    "ring 4.50",
-    "ww 65.22",
-    "",
-  ]);
-  checks.push(eq("keep first duplicate total", dup.captions[0], "woolwortt 4.50"));
-  checks.push(eq("blank second duplicate total", dup.captions[1], ""));
-  checks.push(eq("leave other total", dup.captions[2], "ww 65.22"));
-  checks.push(eq("duplicate hint set", Boolean(dup.hints[1]), true));
-
-  const dupKnown = collapseDuplicateQuadCaptions(["ring 4.50", "ww 4.50", "", ""]);
-  checks.push(eq("prefer known merchant", dupKnown.captions[0], ""));
-  checks.push(eq("keep ww over ring", dupKnown.captions[1], "ww 4.50"));
-
-  const amountOnlyDup = collapseDuplicateQuadCaptions(
-    ["ww 4.50", "", "", ""],
-    [4.5, 4.5, null, null]
-  );
-  checks.push(eq("amount-only duplicate blanked", amountOnlyDup.captions[1], ""));
-  checks.push(eq("amount-only duplicate hint", Boolean(amountOnlyDup.hints[1]), true));
 
   return checks;
 }

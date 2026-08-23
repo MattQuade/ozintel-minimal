@@ -10,7 +10,7 @@ import {
 
 /** Detectable merchant phrases → preferred short caption alias. */
 const MERCHANT_DETECT: Array<{ alias: string; terms: string[] }> = [
-  { alias: "ww", terms: ["woolworths", "woolies", "woolkor", "woolw"] },
+  { alias: "ww", terms: ["woolworths", "woolies", "woolkor"] },
   { alias: "aldi", terms: ["aldi", "ald stores", "alt stores"] },
   { alias: "coles", terms: ["coles"] },
   { alias: "iga", terms: ["iga"] },
@@ -58,22 +58,6 @@ const HEADER_STOP = new Set([
   "fresh",
   "food",
   "people",
-  "ring",
-  "bring",
-  "your",
-  "bag",
-  "bags",
-  "saved",
-  "visit",
-  "hours",
-  "opening",
-  "please",
-  "keep",
-  "copy",
-  "store",
-  "item",
-  "items",
-  "incl",
 ]);
 
 export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
@@ -137,9 +121,7 @@ function scoreAmountLine(line: string, amount: number): number {
   const hasTotal = /\btotal\b/.test(lower);
   const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
   if (hasTotal && includesGst) {
-    // $4.50 TOTAL (INCL GST) must count; $3.23 "TOTAL includes GST" on a
-    // big Woolworths docket must not beat PURCHASE $231.17.
-    score += amount >= 10 ? 58 : 50;
+    score += amount >= 10 ? 58 : 5;
   } else if (hasTotal) {
     score += 50;
   }
@@ -148,50 +130,10 @@ function scoreAmountLine(line: string, amount: number): number {
   if (/\bsubtotal\b/.test(lower)) score -= 25;
   if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) score -= 15;
 
-  if (amount >= 1 && amount < 2000) score += 5;
+  if (amount >= 5 && amount < 2000) score += 5;
   if (amount < 1) score -= 20;
 
   return score;
-}
-
-function lettersOnly(text: string): string {
-  return foldOcrLetters(text).replace(/[^a-z]/g, "");
-}
-
-function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i += 1) {
-    let prev = i - 1;
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const cur = row[j];
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
-      prev = cur;
-    }
-  }
-  return row[b.length];
-}
-
-function fuzzyAliasFromWord(word: string): string | null {
-  const w = lettersOnly(word);
-  if (w.length < 4) return null;
-  if (w.startsWith("woolw") || w.startsWith("woolie") || w.includes("woolworth")) {
-    return "ww";
-  }
-  for (const row of MERCHANT_DETECT) {
-    for (const term of row.terms) {
-      const t = lettersOnly(term);
-      if (t.length < 4) continue;
-      const maxDist = t.length >= 8 ? 2 : 1;
-      if (Math.abs(w.length - t.length) > maxDist) continue;
-      if (editDistance(w, t) <= maxDist) return row.alias;
-    }
-  }
-  return null;
 }
 
 export function detectMerchantFromOcr(text: string): {
@@ -218,14 +160,7 @@ export function detectMerchantFromOcr(text: string): {
       }
     }
   }
-  if (best) return { alias: best.alias, label: best.label };
-
-  const words = String(text || "").match(/[A-Za-z0-9][A-Za-z0-9']{2,}/g) || [];
-  for (const word of words) {
-    const alias = fuzzyAliasFromWord(word);
-    if (alias) return { alias, label: word };
-  }
-  return null;
+  return best ? { alias: best.alias, label: best.label } : null;
 }
 
 /** First useful word on the docket when the merchant is not in the alias list. */
@@ -240,7 +175,7 @@ export function guessAliasFromHeader(text: string): string | null {
     const words = line.match(/[A-Za-z][A-Za-z']{2,}/g) || [];
     for (const word of words) {
       const alias = normalizeReceiptAlias(word);
-      if (alias.length < 5) continue;
+      if (alias.length < 3) continue;
       if (HEADER_STOP.has(alias)) continue;
       if (/^\d+$/.test(alias)) continue;
       return alias;
@@ -283,20 +218,21 @@ export function parseReceiptOcrText(
 
   const known = detectMerchantFromOcr(raw);
   const amountHit = detectAmountFromOcr(raw);
-  if (!known || !amountHit) return null;
+  if (!amountHit) return null;
 
-  const alias = normalizeReceiptAlias(known.alias);
+  const guessed = known ? null : guessAliasFromHeader(raw);
+  const alias = normalizeReceiptAlias(known?.alias || guessed || "");
   if (!alias || !(amountHit.amount > 0)) return null;
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
-  if (amountHit.score >= 50) confidence = "high";
-  else if (amountHit.score < 35) confidence = "low";
+  if (known && amountHit.score >= 50) confidence = "high";
+  else if (!known || amountHit.score < 35) confidence = "low";
 
   return {
     alias,
     amount: amountHit.amount,
     display: `${alias} ${amountHit.amount.toFixed(2)}`,
-    merchantLabel: known.label,
+    merchantLabel: known?.label || guessed || alias,
     confidence,
     rawPreview: raw.slice(0, 240),
   };
