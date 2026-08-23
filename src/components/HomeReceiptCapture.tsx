@@ -91,6 +91,9 @@ export default function HomeReceiptCapture() {
   const amountTouchedRef = useRef(false);
   const ignorePopUntilRef = useRef(0);
   const releasingBackRef = useRef(false);
+  const savePrepRef = useRef<{ source: File; promise: Promise<File> } | null>(
+    null
+  );
   const [inputKey, setInputKey] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -133,6 +136,16 @@ export default function HomeReceiptCapture() {
       history.pushState({ ozintelReceipt: 1 }, '');
     }
     return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  useEffect(() => {
+    if (!file) {
+      savePrepRef.current = null;
+      return;
+    }
+    if (savePrepRef.current?.source !== file) {
+      savePrepRef.current = { source: file, promise: prepareReceiptFile(file) };
+    }
   }, [file]);
 
   useEffect(() => {
@@ -229,6 +242,7 @@ export default function HomeReceiptCapture() {
     setStatus('');
     merchantTouchedRef.current = false;
     amountTouchedRef.current = false;
+    savePrepRef.current = null;
     clearPendingReceipt();
     setInputKey((k) => k + 1);
     if (
@@ -247,6 +261,7 @@ export default function HomeReceiptCapture() {
   const onPicked = (next: File | null) => {
     if (!next) return;
     ignorePopUntilRef.current = Date.now() + 2000;
+    savePrepRef.current = { source: next, promise: prepareReceiptFile(next) };
     setPendingReceipt(next);
     setFile(next);
   };
@@ -259,7 +274,17 @@ export default function HomeReceiptCapture() {
     setSaving(true);
     setStatus('Saving…');
     try {
-      const prepared = await prepareReceiptFile(file);
+      let prepared: File;
+      const prep = savePrepRef.current;
+      if (prep && prep.source === file) {
+        try {
+          prepared = await prep.promise;
+        } catch {
+          prepared = await prepareReceiptFile(file);
+        }
+      } else {
+        prepared = await prepareReceiptFile(file);
+      }
       const form = new FormData();
       form.append('file', prepared);
       form.append('caption', parsed.display);
