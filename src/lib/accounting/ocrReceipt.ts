@@ -41,16 +41,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-async function killWorker(): Promise<void> {
+function killWorker(): void {
   const worker = workerRef;
   workerRef = null;
   workerPromise = null;
   if (!worker) return;
-  try {
-    await worker.terminate();
-  } catch {
-    // already dead
-  }
+  // Do not await terminate — it can hang if WASM is wedged, and that
+  // would block every later receipt on this Render instance.
+  void Promise.race([
+    worker.terminate(),
+    new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+  ]).catch(() => undefined);
 }
 
 async function getOcrWorker(): Promise<Worker> {
@@ -86,7 +87,6 @@ export async function preprocessReceiptForOcr(image: Buffer): Promise<Buffer> {
     .rotate()
     .greyscale()
     .normalise()
-    .linear(1.25, -16)
     .sharpen()
     .resize({
       width: 1400,
@@ -113,7 +113,7 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
     );
     return String(result.data?.text || "").trim();
   } catch (err) {
-    await killWorker();
+    killWorker();
     throw err;
   }
 }

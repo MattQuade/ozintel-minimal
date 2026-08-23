@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
+import {
+  prepareReceiptFile,
+  prepareReceiptFileForOcr,
+} from '@/lib/client/compressReceiptImage';
 import { parseReceiptCaption } from '@/lib/accounting/receiptCaption';
 import {
   setPendingReceipt,
@@ -111,8 +114,13 @@ export default function HomeReceiptCapture() {
     const timer = setTimeout(() => ac.abort(), OCR_CLIENT_MS);
     const run = async () => {
       try {
+        const forOcr = await prepareReceiptFileForOcr(file);
+        if (ac.signal.aborted) {
+          if (!captionTouchedRef.current) setHint('Type caption like ww 79.13');
+          return;
+        }
         const form = new FormData();
-        form.append('file', file);
+        form.append('file', forOcr, 'receipt.jpg');
         const res = await fetch('/api/ledger/receipts/read', {
           method: 'POST',
           body: form,

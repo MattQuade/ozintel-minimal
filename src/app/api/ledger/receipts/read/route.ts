@@ -17,7 +17,20 @@ export async function POST(req: NextRequest) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
-      const form = await req.formData();
+      let form: FormData;
+      try {
+        form = await req.formData();
+      } catch (parseErr) {
+        console.error(parseErr);
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Could not read the photo upload (file too large or interrupted). Retake and try again.",
+          },
+          { status: 400 }
+        );
+      }
       const file = form.get("file") ?? form.get("receipt") ?? form.get("photo");
       if (!(file instanceof File)) {
         return NextResponse.json(
@@ -40,7 +53,15 @@ export async function POST(req: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { suggestion, text } = await readReceiptImage(buffer);
+      const { suggestion, text } = await Promise.race([
+        readReceiptImage(buffer),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error("OCR read timed out after 12s")),
+            12_000
+          );
+        }),
+      ]);
 
       if (!suggestion) {
         return NextResponse.json({
