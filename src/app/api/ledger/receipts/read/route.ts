@@ -1,34 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
-import { readReceiptImage, warmOcrWorker } from "@/lib/accounting/ocrReceipt";
+import { readReceiptImage } from "@/lib/accounting/ocrReceipt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 20;
 
 const MAX_BYTES = 18 * 1024 * 1024;
 
-/** Warm Tesseract so the first photo is not a cold start. */
-export async function GET(req: NextRequest) {
-  const access = await requireAccountingAccess(req);
-  if (!access.ok) return access.response;
-  return access.run(async () => {
-    try {
-      await warmOcrWorker();
-      return NextResponse.json({ success: true, ready: true });
-    } catch (err) {
-      console.error(err);
-      return NextResponse.json({
-        success: false,
-        ready: false,
-      });
-    }
-  });
-}
-
 /**
  * POST multipart: file (receipt image)
- * Returns suggested caption fields for the Confirm step.
+ * Returns suggested caption fields. Always typeable on the client.
  */
 export async function POST(req: NextRequest) {
   const access = await requireAccountingAccess(req);

@@ -1,10 +1,21 @@
-import { headers } from "next/headers";
-import CaptureReceiptClient from "./CaptureReceiptClient";
+'use client';
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default async function CaptureReceiptPage() {
-  await headers();
-  return <CaptureReceiptClient />;
+/** Old capture URL — flow now stays on the home Capture Receipt button. */
+export default function CaptureReceiptRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/');
+  }, [router]);
+  return (
+    <div
+      style={{
+        fontFamily: 'system-ui',
+        background: '#0f172a',
+        minHeight: '100vh',
+      }}
+    />
+  );
 }

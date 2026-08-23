@@ -1,5 +1,6 @@
 /**
  * Server-side OCR for receipt photos (tesseract.js).
+ * Time out and kill the worker so a stuck read cannot block later photos.
  */
 
 import path from "path";
@@ -12,10 +13,11 @@ import {
   type ReceiptOcrSuggestion,
 } from "@/lib/accounting/parseReceiptOcr";
 
-const OCR_STARTUP_MS = 20_000;
-const OCR_READ_MS = 15_000;
+const OCR_STARTUP_MS = 12_000;
+const OCR_READ_MS = 8_000;
 
 let workerPromise: Promise<Worker> | null = null;
+let workerRef: Worker | null = null;
 
 function tessdataDir(): string {
   return path.join(process.cwd(), "vendor", "tessdata");
@@ -39,6 +41,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+async function killWorker(): Promise<void> {
+  const worker = workerRef;
+  workerRef = null;
+  workerPromise = null;
+  if (!worker) return;
+  try {
+    await worker.terminate();
+  } catch {
+    // already dead
+  }
+}
+
 async function getOcrWorker(): Promise<Worker> {
   if (!workerPromise) {
     workerPromise = (async () => {
@@ -52,21 +66,19 @@ async function getOcrWorker(): Promise<Worker> {
         logger: () => {},
       });
       await worker.setParameters({
-        tessedit_pageseg_mode: PSM.AUTO,
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
         tessedit_char_whitelist:
           "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,:-/() ",
       });
+      workerRef = worker;
       return worker;
     })().catch((err) => {
       workerPromise = null;
+      workerRef = null;
       throw err;
     });
   }
   return workerPromise;
-}
-
-export async function warmOcrWorker(): Promise<void> {
-  await withTimeout(getOcrWorker(), OCR_STARTUP_MS, "OCR startup");
 }
 
 export async function preprocessReceiptForOcr(image: Buffer): Promise<Buffer> {
@@ -77,24 +89,8 @@ export async function preprocessReceiptForOcr(image: Buffer): Promise<Buffer> {
     .linear(1.25, -16)
     .sharpen()
     .resize({
-      width: 1600,
-      height: 2800,
-      fit: "inside",
-      withoutEnlargement: false,
-    })
-    .png()
-    .toBuffer();
-}
-
-async function binarizeReceipt(image: Buffer): Promise<Buffer> {
-  return sharp(image)
-    .rotate()
-    .greyscale()
-    .normalise()
-    .threshold(168)
-    .resize({
-      width: 1600,
-      height: 2800,
+      width: 1400,
+      height: 2400,
       fit: "inside",
       withoutEnlargement: false,
     })
@@ -110,25 +106,14 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
       "OCR startup"
     );
     const prepared = await preprocessReceiptForOcr(image);
-    const first = await withTimeout(
+    const result = await withTimeout(
       worker.recognize(prepared),
       OCR_READ_MS,
       "OCR read"
     );
-    let text = String(first.data?.text || "").trim();
-    if (parseReceiptOcrText(text)) return text;
-
-    const binary = await binarizeReceipt(image);
-    const second = await withTimeout(
-      worker.recognize(binary),
-      OCR_READ_MS,
-      "OCR retry"
-    );
-    const retry = String(second.data?.text || "").trim();
-    if (!text || (retry && retry.length > text.length)) text = retry;
-    return text;
+    return String(result.data?.text || "").trim();
   } catch (err) {
-    workerPromise = null;
+    await killWorker();
     throw err;
   }
 }
