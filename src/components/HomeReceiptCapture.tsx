@@ -200,10 +200,6 @@ export default function HomeReceiptCapture() {
           const n = Number(row.amount ?? row);
           if (Number.isFinite(n) && n > 0 && !choices.includes(n)) choices.push(n);
         }
-        const suggestedAmount = Number(data.suggestion?.amount);
-        if (Number.isFinite(suggestedAmount) && suggestedAmount > 0 && !choices.includes(suggestedAmount)) {
-          choices.unshift(suggestedAmount);
-        }
         setAmountChoices(choices);
 
         if (!merchantTouchedRef.current && data.suggestion?.alias) {

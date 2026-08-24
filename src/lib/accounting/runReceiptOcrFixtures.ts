@@ -152,6 +152,11 @@ EFTPOS 65.22
 `);
   checks.push(eq("dollar-as-four alias", dollarAsFour?.alias, "ww"));
   checks.push(eq("dollar-as-four amount", dollarAsFour?.amount, 65.22));
+  const dollarChips = (dollarAsFour?.amountCandidates || [])
+    .map((c) => c.amount)
+    .sort((a, b) => a - b)
+    .join(",");
+  checks.push(eq("dollar-as-four chips", dollarChips, "65.22,405.22"));
 
   const onlyFour = parseReceiptOcrText(`
 TOTAL 465.22
@@ -171,6 +176,8 @@ EFTPOS 8.49
 `);
   checks.push(eq("line items total", lineItems?.amount, 8.49));
   checks.push(eq("line items lock", lineItems?.lockAmount, true));
+  const itemChips = (lineItems?.amountCandidates || []).map((c) => c.amount);
+  checks.push(eq("line items chips only total", itemChips.join(","), "8.49"));
 
   const droppedDot = parseReceiptOcrText(`
 TOTAL 8799

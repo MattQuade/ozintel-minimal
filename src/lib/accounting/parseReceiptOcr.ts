@@ -221,30 +221,53 @@ function isDollarAsFourPair(big: number, small: number): boolean {
 
 function collectScoredAmounts(
   text: string
-): Array<{ amount: number; score: number; count: number }> {
+): Array<{
+  amount: number;
+  score: number;
+  count: number;
+  totalish: boolean;
+}> {
   const lines = normalizeOcrNoise(text).split(/\n+/);
-  const raw: Array<{ amount: number; score: number }> = [];
+  const raw: Array<{ amount: number; score: number; totalish: boolean }> = [];
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lower = line.toLowerCase();
     const matches = moneyMatchesInLine(line);
+    const prev = i > 0 ? lines[i - 1] : "";
+    const inheritTotal =
+      matches.length > 0 &&
+      isTotalishLine(prev.toLowerCase()) &&
+      moneyMatchesInLine(prev).length === 0;
+    const totalish = isTotalishLine(lower) || inheritTotal;
     if (!matches.length) continue;
     for (const { amount } of matches) {
-      raw.push({ amount, score: scoreAmountLine(line, amount) });
+      raw.push({
+        amount,
+        score: scoreAmountLine(totalish && !isTotalishLine(lower) ? `${prev} ${line}` : line, amount),
+        totalish,
+      });
     }
   }
 
   const byCents = new Map<
     number,
-    { amount: number; score: number; count: number }
+    { amount: number; score: number; count: number; totalish: boolean }
   >();
   for (const row of raw) {
     const key = Math.round(row.amount * 100);
     const cur = byCents.get(key);
     if (!cur) {
-      byCents.set(key, { amount: row.amount, score: row.score, count: 1 });
+      byCents.set(key, {
+        amount: row.amount,
+        score: row.score,
+        count: 1,
+        totalish: row.totalish,
+      });
     } else {
       cur.count += 1;
       cur.score = Math.max(cur.score, row.score);
+      cur.totalish = cur.totalish || row.totalish;
     }
   }
   return [...byCents.values()];
@@ -293,30 +316,39 @@ export function guessAliasFromHeader(text: string): string | null {
 }
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
-  const grouped = collectScoredAmounts(text);
-  const out: ReceiptAmountCandidate[] = grouped
-    .filter((row) => row.score >= 15 || row.count >= 2)
-    .map((row) => ({
-      amount: row.amount,
-      score: row.score + (row.count > 1 ? 20 : 0),
-    }));
+  const grouped = collectScoredAmounts(text).filter(
+    (row) => row.totalish && row.score >= 40
+  );
+  const out: ReceiptAmountCandidate[] = grouped.map((row) => ({
+    amount: row.amount,
+    score: row.score + (row.count > 1 ? 20 : 0),
+  }));
 
-  for (const row of grouped) {
-    if (row.score < 15 && row.count < 2) continue;
-    const stripped = stripLeadingDollarFour(row.amount);
-    if (stripped == null) continue;
-    if (out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))) {
-      continue;
+  const extras: ReceiptAmountCandidate[] = [];
+  if (grouped.length === 1) {
+    const stripped = stripLeadingDollarFour(grouped[0].amount);
+    if (
+      stripped != null &&
+      !out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))
+    ) {
+      extras.push({
+        amount: stripped,
+        score: Math.max(0, grouped[0].score - 10),
+        dollarGuess: true,
+      });
     }
-    out.push({
-      amount: stripped,
-      score: Math.max(0, row.score - 10),
-      dollarGuess: true,
-    });
   }
 
   out.sort((a, b) => b.score - a.score || b.amount - a.amount);
-  return out.slice(0, 5);
+  const top = out.slice(0, 2);
+  for (const extra of extras) {
+    if (top.length >= 3) break;
+    if (top.some((c) => Math.round(c.amount * 100) === Math.round(extra.amount * 100))) {
+      continue;
+    }
+    top.push(extra);
+  }
+  return top;
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -324,7 +356,9 @@ export function detectAmountFromOcr(text: string): {
   score: number;
   lock: boolean;
 } | null {
-  const candidates = collectScoredAmounts(text).filter((c) => c.score >= 20);
+  const candidates = collectScoredAmounts(text).filter(
+    (c) => c.totalish && c.score >= 40
+  );
   if (!candidates.length) return null;
 
   let consensus: { amount: number; score: number; count: number } | null = null;
