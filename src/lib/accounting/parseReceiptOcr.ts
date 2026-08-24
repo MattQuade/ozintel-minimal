@@ -172,6 +172,13 @@ function moneyMatchesInLine(
 function isFooterJunkAmount(line: string, amount: number): boolean {
   if (amount < 1) return true;
   const lower = line.toLowerCase();
+  // Coles: "GST INCLUDED IN TOTAL $x" sits under EFT — never the paid total.
+  if (
+    /\bg[s5]t\b/.test(lower) &&
+    /\b(included|includes|incl)\b/.test(lower)
+  ) {
+    return true;
+  }
   const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
   if (includesGst && amount < 10) return true;
   if (/\bg[s5]t\b/.test(lower) && !includesGst && amount < 15) return true;

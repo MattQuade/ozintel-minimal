@@ -220,6 +220,14 @@ TOTAL
   checks.push(eq("total label left amount", totalOnLeft?.amount, 65.22));
   checks.push(eq("total label left lock", totalOnLeft?.lockAmount, true));
 
+  const colesGstUnderEft = parseReceiptOcrText(`
+Coles
+EFT 87.40
+GST INCLUDED IN TOTAL $7.95
+`);
+  checks.push(eq("coles gst footer skipped", colesGstUnderEft?.amount, 87.4));
+  checks.push(eq("coles gst footer lock", colesGstUnderEft?.lockAmount, true));
+
   return checks;
 }
 
