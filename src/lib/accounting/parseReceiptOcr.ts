@@ -226,9 +226,15 @@ function collectScoredAmounts(
   score: number;
   count: number;
   totalish: boolean;
+  lastLine: number;
 }> {
   const lines = normalizeOcrNoise(text).split(/\n+/);
-  const raw: Array<{ amount: number; score: number; totalish: boolean }> = [];
+  const raw: Array<{
+    amount: number;
+    score: number;
+    totalish: boolean;
+    line: number;
+  }> = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -244,15 +250,25 @@ function collectScoredAmounts(
     for (const { amount } of matches) {
       raw.push({
         amount,
-        score: scoreAmountLine(totalish && !isTotalishLine(lower) ? `${prev} ${line}` : line, amount),
+        score: scoreAmountLine(
+          totalish && !isTotalishLine(lower) ? `${prev} ${line}` : line,
+          amount
+        ),
         totalish,
+        line: i,
       });
     }
   }
 
   const byCents = new Map<
     number,
-    { amount: number; score: number; count: number; totalish: boolean }
+    {
+      amount: number;
+      score: number;
+      count: number;
+      totalish: boolean;
+      lastLine: number;
+    }
   >();
   for (const row of raw) {
     const key = Math.round(row.amount * 100);
@@ -263,11 +279,13 @@ function collectScoredAmounts(
         score: row.score,
         count: 1,
         totalish: row.totalish,
+        lastLine: row.totalish ? row.line : -1,
       });
     } else {
       cur.count += 1;
       cur.score = Math.max(cur.score, row.score);
       cur.totalish = cur.totalish || row.totalish;
+      if (row.totalish) cur.lastLine = Math.max(cur.lastLine, row.line);
     }
   }
   return [...byCents.values()];
@@ -316,39 +334,41 @@ export function guessAliasFromHeader(text: string): string | null {
 }
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
-  const grouped = collectScoredAmounts(text).filter(
-    (row) => row.totalish && row.score >= 40
-  );
-  const out: ReceiptAmountCandidate[] = grouped.map((row) => ({
-    amount: row.amount,
-    score: row.score + (row.count > 1 ? 20 : 0),
-  }));
+  const grouped = collectScoredAmounts(text)
+    .filter((row) => row.totalish && row.score >= 40)
+    .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
+  if (!grouped.length) return [];
 
-  const extras: ReceiptAmountCandidate[] = [];
-  if (grouped.length === 1) {
-    const stripped = stripLeadingDollarFour(grouped[0].amount);
+  const bottom = grouped[0];
+  const out: ReceiptAmountCandidate[] = [
+    {
+      amount: bottom.amount,
+      score: bottom.score + 30,
+    },
+  ];
+
+  const pair = grouped.find(
+    (row) =>
+      row !== bottom &&
+      (isDollarAsFourPair(bottom.amount, row.amount) ||
+        isDollarAsFourPair(row.amount, bottom.amount))
+  );
+  if (pair) {
+    out.push({ amount: pair.amount, score: pair.score });
+  } else {
+    const stripped = stripLeadingDollarFour(bottom.amount);
     if (
       stripped != null &&
       !out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))
     ) {
-      extras.push({
+      out.push({
         amount: stripped,
-        score: Math.max(0, grouped[0].score - 10),
+        score: Math.max(0, bottom.score - 10),
         dollarGuess: true,
       });
     }
   }
-
-  out.sort((a, b) => b.score - a.score || b.amount - a.amount);
-  const top = out.slice(0, 2);
-  for (const extra of extras) {
-    if (top.length >= 3) break;
-    if (top.some((c) => Math.round(c.amount * 100) === Math.round(extra.amount * 100))) {
-      continue;
-    }
-    top.push(extra);
-  }
-  return top;
+  return out;
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -356,69 +376,27 @@ export function detectAmountFromOcr(text: string): {
   score: number;
   lock: boolean;
 } | null {
-  const candidates = collectScoredAmounts(text).filter(
-    (c) => c.totalish && c.score >= 40
-  );
+  const candidates = collectScoredAmounts(text)
+    .filter((c) => c.totalish && c.score >= 40)
+    .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
   if (!candidates.length) return null;
 
-  let consensus: { amount: number; score: number; count: number } | null = null;
-  for (const row of candidates) {
-    if (row.count < 2) continue;
-    if (
-      !consensus ||
-      row.count > consensus.count ||
-      (row.count === consensus.count && row.score > consensus.score)
-    ) {
-      consensus = row;
-    }
-  }
-
-  let best = consensus || candidates[0];
-  if (!consensus) {
-    for (const row of candidates) {
-      if (row.score > best.score) best = row;
-    }
-  }
-
+  const bottom = candidates[0];
   const pair = candidates.find(
-    (c) => c.amount !== best.amount && isDollarAsFourPair(best.amount, c.amount)
+    (c) =>
+      c !== bottom &&
+      (isDollarAsFourPair(bottom.amount, c.amount) ||
+        isDollarAsFourPair(c.amount, bottom.amount))
   );
-  if (pair) {
-    return {
-      amount: pair.amount,
-      score: Math.max(best.score, pair.score),
-      lock: true,
-    };
+
+  if (pair && isDollarAsFourPair(bottom.amount, pair.amount)) {
+    return { amount: pair.amount, score: pair.score, lock: true };
+  }
+  if (stripLeadingDollarFour(bottom.amount) != null && !pair) {
+    return { amount: bottom.amount, score: bottom.score, lock: false };
   }
 
-  if (best.amount >= 400 && best.amount < 500) {
-    const alts = candidates.filter((c) => c.amount >= 1 && c.amount < 200);
-    if (alts.length) {
-      let alt = alts[0];
-      for (const row of alts) {
-        if (row.score > alt.score) alt = row;
-      }
-      return {
-        amount: alt.amount,
-        score: alt.score,
-        lock: alt.count >= 2,
-      };
-    }
-  }
-
-  // '$65.22' read twice as 465.22 — show both chips, do not highlight.
-  if (stripLeadingDollarFour(best.amount) != null) {
-    return { amount: best.amount, score: best.score, lock: false };
-  }
-
-  const rivals = candidates
-    .filter((c) => Math.round(c.amount * 100) !== Math.round(best.amount * 100))
-    .sort((a, b) => b.score - a.score);
-  const second = rivals[0];
-  const clearLead = !second || best.score - second.score >= 15;
-  const lock = best.count >= 2 && best.score >= 40 && clearLead;
-
-  return { amount: best.amount, score: best.score, lock };
+  return { amount: bottom.amount, score: bottom.score, lock: true };
 }
 
 export function parseReceiptOcrText(

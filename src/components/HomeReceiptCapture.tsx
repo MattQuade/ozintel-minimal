@@ -218,7 +218,7 @@ export default function HomeReceiptCapture() {
           setHint(
             data.suggestion?.lockAmount
               ? 'Tap the shop and the total — edit if the highlight is wrong'
-              : 'Tap the total — nothing is highlighted unless TOTAL and EFTPOS agree'
+              : 'Tap the total at the bottom of the photo, or type it'
           );
         } else {
           setHint('Pick the shop and type the total');

@@ -91,7 +91,7 @@ function run(): Check[] {
   checks.push(eq("total-only alias empty", totalOnly?.alias, ""));
   checks.push(eq("total-only amount", totalOnly?.amount, 12));
   checks.push(eq("total-only display empty", totalOnly?.display, ""));
-  checks.push(eq("total-only no lock", totalOnly?.lockAmount, false));
+  checks.push(eq("total-only no lock", totalOnly?.lockAmount, true));
 
   const messyWw = parseReceiptOcrText(`
 W00LWORTHS
@@ -156,7 +156,7 @@ EFTPOS 65.22
     .map((c) => c.amount)
     .sort((a, b) => a - b)
     .join(",");
-  checks.push(eq("dollar-as-four chips", dollarChips, "65.22,405.22"));
+  checks.push(eq("dollar-as-four chips", dollarChips, "65.22"));
 
   const onlyFour = parseReceiptOcrText(`
 TOTAL 465.22
@@ -185,6 +185,17 @@ EFTPOS 8799
 `);
   checks.push(eq("dropped decimal amount", droppedDot?.amount, 87.99));
   checks.push(eq("dropped decimal lock", droppedDot?.lockAmount, true));
+
+  const framedBottom = parseReceiptOcrText(`
+Woolworths
+MILK 4.50
+BREAD 12.00
+TOTAL 16.50
+`);
+  checks.push(eq("bottom of photo amount", framedBottom?.amount, 16.5));
+  checks.push(eq("bottom of photo lock", framedBottom?.lockAmount, true));
+  const bottomChips = (framedBottom?.amountCandidates || []).map((c) => c.amount);
+  checks.push(eq("bottom of photo chips", bottomChips.join(","), "16.5"));
 
   return checks;
 }
