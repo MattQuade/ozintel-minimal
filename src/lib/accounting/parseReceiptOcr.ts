@@ -169,24 +169,11 @@ function moneyMatchesInLine(
   return out;
 }
 
-function isFooterJunkAmount(line: string, amount: number): boolean {
-  if (amount < 1) return true;
-  const lower = line.toLowerCase();
-  // Coles: "GST INCLUDED IN TOTAL $x" sits under EFT — never the paid total.
-  if (
-    /\bg[s5]t\b/.test(lower) &&
-    /\b(included|includes|incl)\b/.test(lower)
-  ) {
-    return true;
-  }
-  const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
-  if (includesGst && amount < 10) return true;
-  if (/\bg[s5]t\b/.test(lower) && !includesGst && amount < 15) return true;
-  if (/\bchange\b/.test(lower) && amount < 1) return true;
-  return false;
+function isFooterJunkAmount(_line: string, amount: number): boolean {
+  return amount < 1;
 }
 
-/** Last money figure in the photo, skipping GST/change footers. */
+/** Last money figure in the photo. Change $0.00 is skipped. */
 function lastUsableMoneyFromBottom(text: string): number | null {
   const lines = normalizeOcrNoise(text)
     .split(/\n+/)

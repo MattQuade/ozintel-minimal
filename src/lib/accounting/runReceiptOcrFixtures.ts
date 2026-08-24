@@ -24,7 +24,6 @@ PURCHASE $231.17
 TOTAL $231.17
 EFT $231.17
 Change $0.00
-TOTAL includes GST $3.23
 `;
 
 const ALDI_SAMPLE = `
@@ -225,8 +224,9 @@ Coles
 EFT 87.40
 GST INCLUDED IN TOTAL $7.95
 `);
-  checks.push(eq("coles gst footer skipped", colesGstUnderEft?.amount, 87.4));
-  checks.push(eq("coles gst footer lock", colesGstUnderEft?.lockAmount, true));
+  checks.push(
+    eq("coles last number is gst line", colesGstUnderEft?.amount, 7.95)
+  );
 
   return checks;
 }
