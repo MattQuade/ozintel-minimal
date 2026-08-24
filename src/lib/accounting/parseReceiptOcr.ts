@@ -139,7 +139,8 @@ function maskNonMoney(line: string): string {
 }
 
 function moneyMatchesInLine(
-  line: string
+  line: string,
+  opts?: { integerCents?: boolean }
 ): Array<{ amount: number; index: number }> {
   const out: Array<{ amount: number; index: number }> = [];
   const masked = maskNonMoney(line);
@@ -151,7 +152,10 @@ function moneyMatchesInLine(
   }
 
   const lower = masked.toLowerCase();
-  if (isTotalishLine(lower) && !/[.,]\d{2}/.test(masked)) {
+  const mostlyNumber = /^\s*\$?\s*\d{3,5}\s*$/.test(masked);
+  const allowInt =
+    Boolean(opts?.integerCents) || isTotalishLine(lower) || mostlyNumber;
+  if (allowInt && !/[.,]\d{2}/.test(masked)) {
     const whole = masked.match(/\b(\d{3,5})\b/);
     if (whole) {
       const n = Number(whole[1]);
@@ -161,6 +165,49 @@ function moneyMatchesInLine(
       );
       if (asCents != null) out.push({ amount: asCents, index: whole.index || 0 });
     }
+  }
+  return out;
+}
+
+function isFooterJunkAmount(line: string, amount: number): boolean {
+  if (amount < 1) return true;
+  const lower = line.toLowerCase();
+  const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
+  if (includesGst && amount < 10) return true;
+  if (/\bg[s5]t\b/.test(lower) && !includesGst && amount < 15) return true;
+  if (/\bchange\b/.test(lower) && amount < 1) return true;
+  return false;
+}
+
+/** Last money figure in the photo, skipping GST/change footers. */
+function lastUsableMoneyFromBottom(text: string): number | null {
+  const lines = normalizeOcrNoise(text)
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const matches = moneyMatchesInLine(lines[i], { integerCents: true });
+    for (let j = matches.length - 1; j >= 0; j--) {
+      const amount = matches[j].amount;
+      if (isFooterJunkAmount(lines[i], amount)) continue;
+      return amount;
+    }
+  }
+  return null;
+}
+
+function chipsFromAmount(amount: number, score: number): ReceiptAmountCandidate[] {
+  const out: ReceiptAmountCandidate[] = [{ amount, score }];
+  const stripped = stripLeadingDollarFour(amount);
+  if (
+    stripped != null &&
+    Math.round(stripped * 100) !== Math.round(amount * 100)
+  ) {
+    out.push({
+      amount: stripped,
+      score: Math.max(0, score - 10),
+      dollarGuess: true,
+    });
   }
   return out;
 }
@@ -337,38 +384,42 @@ export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
   const grouped = collectScoredAmounts(text)
     .filter((row) => row.totalish && row.score >= 40)
     .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
-  if (!grouped.length) return [];
+  if (grouped.length) {
+    const bottom = grouped[0];
+    const out: ReceiptAmountCandidate[] = [
+      {
+        amount: bottom.amount,
+        score: bottom.score + 30,
+      },
+    ];
 
-  const bottom = grouped[0];
-  const out: ReceiptAmountCandidate[] = [
-    {
-      amount: bottom.amount,
-      score: bottom.score + 30,
-    },
-  ];
-
-  const pair = grouped.find(
-    (row) =>
-      row !== bottom &&
-      (isDollarAsFourPair(bottom.amount, row.amount) ||
-        isDollarAsFourPair(row.amount, bottom.amount))
-  );
-  if (pair) {
-    out.push({ amount: pair.amount, score: pair.score });
-  } else {
-    const stripped = stripLeadingDollarFour(bottom.amount);
-    if (
-      stripped != null &&
-      !out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))
-    ) {
-      out.push({
-        amount: stripped,
-        score: Math.max(0, bottom.score - 10),
-        dollarGuess: true,
-      });
+    const pair = grouped.find(
+      (row) =>
+        row !== bottom &&
+        (isDollarAsFourPair(bottom.amount, row.amount) ||
+          isDollarAsFourPair(row.amount, bottom.amount))
+    );
+    if (pair) {
+      out.push({ amount: pair.amount, score: pair.score });
+    } else {
+      const stripped = stripLeadingDollarFour(bottom.amount);
+      if (
+        stripped != null &&
+        !out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))
+      ) {
+        out.push({
+          amount: stripped,
+          score: Math.max(0, bottom.score - 10),
+          dollarGuess: true,
+        });
+      }
     }
+    return out;
   }
-  return out;
+
+  const fallback = lastUsableMoneyFromBottom(text);
+  if (fallback == null) return [];
+  return chipsFromAmount(fallback, 40);
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -379,24 +430,32 @@ export function detectAmountFromOcr(text: string): {
   const candidates = collectScoredAmounts(text)
     .filter((c) => c.totalish && c.score >= 40)
     .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
-  if (!candidates.length) return null;
 
-  const bottom = candidates[0];
-  const pair = candidates.find(
-    (c) =>
-      c !== bottom &&
-      (isDollarAsFourPair(bottom.amount, c.amount) ||
-        isDollarAsFourPair(c.amount, bottom.amount))
-  );
+  if (candidates.length) {
+    const bottom = candidates[0];
+    const pair = candidates.find(
+      (c) =>
+        c !== bottom &&
+        (isDollarAsFourPair(bottom.amount, c.amount) ||
+          isDollarAsFourPair(c.amount, bottom.amount))
+    );
 
-  if (pair && isDollarAsFourPair(bottom.amount, pair.amount)) {
-    return { amount: pair.amount, score: pair.score, lock: true };
+    if (pair && isDollarAsFourPair(bottom.amount, pair.amount)) {
+      return { amount: pair.amount, score: pair.score, lock: true };
+    }
+    if (stripLeadingDollarFour(bottom.amount) != null && !pair) {
+      return { amount: bottom.amount, score: bottom.score, lock: false };
+    }
+
+    return { amount: bottom.amount, score: bottom.score, lock: true };
   }
-  if (stripLeadingDollarFour(bottom.amount) != null && !pair) {
-    return { amount: bottom.amount, score: bottom.score, lock: false };
-  }
 
-  return { amount: bottom.amount, score: bottom.score, lock: true };
+  const fallback = lastUsableMoneyFromBottom(text);
+  if (fallback == null) return null;
+  if (stripLeadingDollarFour(fallback) != null) {
+    return { amount: fallback, score: 40, lock: false };
+  }
+  return { amount: fallback, score: 40, lock: true };
 }
 
 export function parseReceiptOcrText(

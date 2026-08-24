@@ -197,6 +197,20 @@ TOTAL 16.50
   const bottomChips = (framedBottom?.amountCandidates || []).map((c) => c.amount);
   checks.push(eq("bottom of photo chips", bottomChips.join(","), "16.5"));
 
+  const unlabeledBottom = parseReceiptOcrText(`
+Woolworths
+The fresh food people
+MILK 4.50
+BREAD 12.00
+16.50
+`);
+  checks.push(eq("unlabeled bottom amount", unlabeledBottom?.amount, 16.5));
+  checks.push(eq("unlabeled bottom lock", unlabeledBottom?.lockAmount, true));
+  const unlabeledChips = (unlabeledBottom?.amountCandidates || []).map(
+    (c) => c.amount
+  );
+  checks.push(eq("unlabeled bottom chips", unlabeledChips.join(","), "16.5"));
+
   return checks;
 }
 
