@@ -195,6 +195,21 @@ export default function HomeReceiptCapture() {
         const data = await res.json().catch(() => ({}));
         if (ac.signal.aborted) return;
 
+        if (res.status === 401 || res.status === 403) {
+          setHint(
+            'Restore your account on Home first — reading needs you signed in'
+          );
+          return;
+        }
+        if (!res.ok) {
+          setHint(
+            data.error
+              ? `${data.error} — pick the shop and type the total`
+              : 'Could not read — pick the shop and type the total'
+          );
+          return;
+        }
+
         const choices: number[] = [];
         for (const row of data.amountCandidates || []) {
           const n = Number(row.amount ?? row);
@@ -220,8 +235,10 @@ export default function HomeReceiptCapture() {
               ? 'Tap the shop and the total — edit if the highlight is wrong'
               : 'Tap the total at the bottom of the photo, or type it'
           );
+        } else if (data.suggestion?.alias) {
+          setHint('Shop highlighted — type the total');
         } else {
-          setHint('Pick the shop and type the total');
+          setHint('Could not read this photo — pick the shop and type the total');
         }
       } catch {
         setHint('Pick the shop and type the total');
