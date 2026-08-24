@@ -381,45 +381,9 @@ export function guessAliasFromHeader(text: string): string | null {
 }
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
-  const grouped = collectScoredAmounts(text)
-    .filter((row) => row.totalish && row.score >= 40)
-    .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
-  if (grouped.length) {
-    const bottom = grouped[0];
-    const out: ReceiptAmountCandidate[] = [
-      {
-        amount: bottom.amount,
-        score: bottom.score + 30,
-      },
-    ];
-
-    const pair = grouped.find(
-      (row) =>
-        row !== bottom &&
-        (isDollarAsFourPair(bottom.amount, row.amount) ||
-          isDollarAsFourPair(row.amount, bottom.amount))
-    );
-    if (pair) {
-      out.push({ amount: pair.amount, score: pair.score });
-    } else {
-      const stripped = stripLeadingDollarFour(bottom.amount);
-      if (
-        stripped != null &&
-        !out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))
-      ) {
-        out.push({
-          amount: stripped,
-          score: Math.max(0, bottom.score - 10),
-          dollarGuess: true,
-        });
-      }
-    }
-    return out;
-  }
-
-  const fallback = lastUsableMoneyFromBottom(text);
-  if (fallback == null) return [];
-  return chipsFromAmount(fallback, 40);
+  const amount = lastUsableMoneyFromBottom(text);
+  if (amount == null) return [];
+  return chipsFromAmount(amount, 50);
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -427,35 +391,12 @@ export function detectAmountFromOcr(text: string): {
   score: number;
   lock: boolean;
 } | null {
-  const candidates = collectScoredAmounts(text)
-    .filter((c) => c.totalish && c.score >= 40)
-    .sort((a, b) => b.lastLine - a.lastLine || b.score - a.score);
-
-  if (candidates.length) {
-    const bottom = candidates[0];
-    const pair = candidates.find(
-      (c) =>
-        c !== bottom &&
-        (isDollarAsFourPair(bottom.amount, c.amount) ||
-          isDollarAsFourPair(c.amount, bottom.amount))
-    );
-
-    if (pair && isDollarAsFourPair(bottom.amount, pair.amount)) {
-      return { amount: pair.amount, score: pair.score, lock: true };
-    }
-    if (stripLeadingDollarFour(bottom.amount) != null && !pair) {
-      return { amount: bottom.amount, score: bottom.score, lock: false };
-    }
-
-    return { amount: bottom.amount, score: bottom.score, lock: true };
+  const amount = lastUsableMoneyFromBottom(text);
+  if (amount == null) return null;
+  if (stripLeadingDollarFour(amount) != null) {
+    return { amount, score: 40, lock: false };
   }
-
-  const fallback = lastUsableMoneyFromBottom(text);
-  if (fallback == null) return null;
-  if (stripLeadingDollarFour(fallback) != null) {
-    return { amount: fallback, score: 40, lock: false };
-  }
-  return { amount: fallback, score: 40, lock: true };
+  return { amount, score: 50, lock: true };
 }
 
 export function parseReceiptOcrText(

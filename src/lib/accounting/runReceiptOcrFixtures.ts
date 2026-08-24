@@ -211,6 +211,15 @@ BREAD 12.00
   );
   checks.push(eq("unlabeled bottom chips", unlabeledChips.join(","), "16.5"));
 
+  const totalOnLeft = parseReceiptOcrText(`
+Woolworths
+MILK 4.50
+TOTAL
+65.22
+`);
+  checks.push(eq("total label left amount", totalOnLeft?.amount, 65.22));
+  checks.push(eq("total label left lock", totalOnLeft?.lockAmount, true));
+
   return checks;
 }
 
