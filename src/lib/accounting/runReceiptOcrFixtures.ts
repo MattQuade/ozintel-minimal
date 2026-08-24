@@ -66,6 +66,7 @@ function run(): Check[] {
   const ww = parseReceiptOcrText(WW_SAMPLE);
   checks.push(eq("ww alias", ww?.alias, "ww"));
   checks.push(eq("ww amount", ww?.amount, 231.17));
+  checks.push(eq("ww lock amount", ww?.lockAmount, true));
 
   const aldi = parseReceiptOcrText(ALDI_SAMPLE);
   checks.push(eq("aldi alias", aldi?.alias, "aldi"));
@@ -90,6 +91,7 @@ function run(): Check[] {
   checks.push(eq("total-only alias empty", totalOnly?.alias, ""));
   checks.push(eq("total-only amount", totalOnly?.amount, 12));
   checks.push(eq("total-only display empty", totalOnly?.display, ""));
+  checks.push(eq("total-only no lock", totalOnly?.lockAmount, false));
 
   const messyWw = parseReceiptOcrText(`
 W00LWORTHS
@@ -158,6 +160,24 @@ EFTPOS 465.22
   const fourAlts = (onlyFour?.amountCandidates || []).map((c) => c.amount);
   checks.push(eq("dollar-guess includes 65.22", fourAlts.includes(65.22), true));
   checks.push(eq("dollar-guess includes 465.22", fourAlts.includes(465.22), true));
+  checks.push(eq("dollar-guess no lock", onlyFour?.lockAmount, false));
+
+  const lineItems = parseReceiptOcrText(`
+Woolworths
+MILK 4.50
+BREAD 3.99
+TOTAL 8.49
+EFTPOS 8.49
+`);
+  checks.push(eq("line items total", lineItems?.amount, 8.49));
+  checks.push(eq("line items lock", lineItems?.lockAmount, true));
+
+  const droppedDot = parseReceiptOcrText(`
+TOTAL 8799
+EFTPOS 8799
+`);
+  checks.push(eq("dropped decimal amount", droppedDot?.amount, 87.99));
+  checks.push(eq("dropped decimal lock", droppedDot?.lockAmount, true));
 
   return checks;
 }

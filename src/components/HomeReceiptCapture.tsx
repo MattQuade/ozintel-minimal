@@ -210,13 +210,20 @@ export default function HomeReceiptCapture() {
           setAlias(String(data.suggestion.alias));
           setOtherAlias('');
         }
-        if (!amountTouchedRef.current && Number.isFinite(suggestedAmount) && suggestedAmount > 0) {
-          setAmount(suggestedAmount);
-          setAmountText('');
+        if (!amountTouchedRef.current && data.suggestion?.lockAmount) {
+          const suggestedAmount = Number(data.suggestion?.amount);
+          if (Number.isFinite(suggestedAmount) && suggestedAmount > 0) {
+            setAmount(suggestedAmount);
+            setAmountText('');
+          }
         }
 
         if (choices.length) {
-          setHint('Tap the shop and the total — edit if the highlight is wrong');
+          setHint(
+            data.suggestion?.lockAmount
+              ? 'Tap the shop and the total — edit if the highlight is wrong'
+              : 'Tap the total — nothing is highlighted unless TOTAL and EFTPOS agree'
+          );
         } else {
           setHint('Pick the shop and type the total');
         }

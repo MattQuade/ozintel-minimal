@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
           display: suggestion.display,
           merchantLabel: suggestion.merchantLabel,
           confidence: suggestion.confidence,
+          lockAmount: Boolean(suggestion.lockAmount),
         },
         amountCandidates: suggestion.amountCandidates || [],
       });

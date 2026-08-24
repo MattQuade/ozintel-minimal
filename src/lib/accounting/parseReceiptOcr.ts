@@ -51,6 +51,8 @@ export type ReceiptAmountCandidate = {
 export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
   merchantLabel: string;
   confidence: "high" | "medium" | "low";
+  /** Only true when TOTAL/EFTPOS agree — UI should not guess otherwise. */
+  lockAmount: boolean;
   rawPreview: string;
   amountCandidates: ReceiptAmountCandidate[];
 };
@@ -121,15 +123,44 @@ function parseMoneyToken(whole: string, frac: string): number | null {
   return Math.round(n * 100) / 100;
 }
 
+function isTotalishLine(lower: string): boolean {
+  return (
+    /\b(purchase|sale\s*total|card\s*sales?|eftpos|\beft\b|amount|no\s*cash\s*out|cba\s*chg|\baud\b)\b/.test(
+      lower
+    ) || (/\btotal\b/.test(lower) && !/\bsubtotal\b/.test(lower))
+  );
+}
+
+function maskNonMoney(line: string): string {
+  return line
+    .replace(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g, " ")
+    .replace(/\b\d{2}\s+\d{3}\s+\d{3}\s+\d{3}\b/g, " ")
+    .replace(/\b0\d[\s-]?\d{4}[\s-]?\d{4}\b/g, " ");
+}
+
 function moneyMatchesInLine(
   line: string
 ): Array<{ amount: number; index: number }> {
   const out: Array<{ amount: number; index: number }> = [];
+  const masked = maskNonMoney(line);
   const re = /\$?\s*(\d{1,5})\s*[.,]\s*(\d{2})\b/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(line)) !== null) {
+  while ((m = re.exec(masked)) !== null) {
     const amount = parseMoneyToken(m[1], m[2]);
     if (amount != null) out.push({ amount, index: m.index });
+  }
+
+  const lower = masked.toLowerCase();
+  if (isTotalishLine(lower) && !/[.,]\d{2}/.test(masked)) {
+    const whole = masked.match(/\b(\d{3,5})\b/);
+    if (whole) {
+      const n = Number(whole[1]);
+      const asCents = parseMoneyToken(
+        String(Math.floor(n / 100)),
+        String(n % 100).padStart(2, "0")
+      );
+      if (asCents != null) out.push({ amount: asCents, index: whole.index || 0 });
+    }
   }
   return out;
 }
@@ -150,7 +181,7 @@ function scoreAmountLine(line: string, amount: number): number {
     else score -= 40;
   }
 
-  const hasTotal = /\btotal\b/.test(lower);
+  const hasTotal = /\btotal\b/.test(lower) && !/\bsubtotal\b/.test(lower);
   const includesGst = /includes?\s*g[s5]t|\([^\)]*g[s5]t[^\)]*\)/.test(lower);
   if (hasTotal && includesGst) {
     score += amount >= 10 ? 58 : 5;
@@ -158,12 +189,15 @@ function scoreAmountLine(line: string, amount: number): number {
     score += 50;
   }
 
-  if (/\bg[s5]t\b/.test(lower) && !includesGst && !hasTotal) score -= 35;
-  if (/\bsubtotal\b/.test(lower)) score -= 25;
-  if (/\beach\b/.test(lower) || /\bqty\b/.test(lower)) score -= 15;
+  if (/\bg[s5]t\b/.test(lower) && !includesGst && !hasTotal) score -= 40;
+  if (/\bsubtotal\b/.test(lower)) score -= 30;
+  if (/\beach\b/.test(lower) || /\bqty\b/.test(lower) || /\b@\s/.test(lower)) {
+    score -= 20;
+  }
+  if (/\d+\s*[x×]\s/.test(lower)) score -= 20;
 
   if (amount >= 5 && amount < 2000) score += 5;
-  if (amount < 1) score -= 20;
+  if (amount < 1) score -= 25;
 
   return score;
 }
@@ -260,12 +294,15 @@ export function guessAliasFromHeader(text: string): string | null {
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
   const grouped = collectScoredAmounts(text);
-  const out: ReceiptAmountCandidate[] = grouped.map((row) => ({
-    amount: row.amount,
-    score: row.score + (row.count > 1 ? 15 : 0),
-  }));
+  const out: ReceiptAmountCandidate[] = grouped
+    .filter((row) => row.score >= 15 || row.count >= 2)
+    .map((row) => ({
+      amount: row.amount,
+      score: row.score + (row.count > 1 ? 20 : 0),
+    }));
 
   for (const row of grouped) {
+    if (row.score < 15 && row.count < 2) continue;
     const stripped = stripLeadingDollarFour(row.amount);
     if (stripped == null) continue;
     if (out.some((c) => Math.round(c.amount * 100) === Math.round(stripped * 100))) {
@@ -279,12 +316,13 @@ export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
   }
 
   out.sort((a, b) => b.score - a.score || b.amount - a.amount);
-  return out.slice(0, 8);
+  return out.slice(0, 5);
 }
 
 export function detectAmountFromOcr(text: string): {
   amount: number;
   score: number;
+  lock: boolean;
 } | null {
   const candidates = collectScoredAmounts(text).filter((c) => c.score >= 20);
   if (!candidates.length) return null;
@@ -304,21 +342,21 @@ export function detectAmountFromOcr(text: string): {
   let best = consensus || candidates[0];
   if (!consensus) {
     for (const row of candidates) {
-      if (
-        row.score > best.score ||
-        (row.score === best.score && row.amount > best.amount)
-      ) {
-        best = row;
-      }
+      if (row.score > best.score) best = row;
     }
   }
 
   const pair = candidates.find(
     (c) => c.amount !== best.amount && isDollarAsFourPair(best.amount, c.amount)
   );
-  if (pair) return { amount: pair.amount, score: Math.max(best.score, pair.score) };
+  if (pair) {
+    return {
+      amount: pair.amount,
+      score: Math.max(best.score, pair.score),
+      lock: true,
+    };
+  }
 
-  // $65.22 often OCRs as 405.22 ($→4) while EFTPOS still reads 65.22.
   if (best.amount >= 400 && best.amount < 500) {
     const alts = candidates.filter((c) => c.amount >= 1 && c.amount < 200);
     if (alts.length) {
@@ -326,11 +364,27 @@ export function detectAmountFromOcr(text: string): {
       for (const row of alts) {
         if (row.score > alt.score) alt = row;
       }
-      return { amount: alt.amount, score: alt.score };
+      return {
+        amount: alt.amount,
+        score: alt.score,
+        lock: alt.count >= 2,
+      };
     }
   }
 
-  return { amount: best.amount, score: best.score };
+  // '$65.22' read twice as 465.22 — show both chips, do not highlight.
+  if (stripLeadingDollarFour(best.amount) != null) {
+    return { amount: best.amount, score: best.score, lock: false };
+  }
+
+  const rivals = candidates
+    .filter((c) => Math.round(c.amount * 100) !== Math.round(best.amount * 100))
+    .sort((a, b) => b.score - a.score);
+  const second = rivals[0];
+  const clearLead = !second || best.score - second.score >= 15;
+  const lock = best.count >= 2 && best.score >= 40 && clearLead;
+
+  return { amount: best.amount, score: best.score, lock };
 }
 
 export function parseReceiptOcrText(
@@ -346,10 +400,14 @@ export function parseReceiptOcrText(
 
   const alias = known ? normalizeReceiptAlias(known.alias) : "";
   const amount = amountHit?.amount || amountCandidates[0]?.amount || 0;
+  const lockAmount = Boolean(amountHit?.lock);
 
   let confidence: ReceiptOcrSuggestion["confidence"] = "medium";
-  if (known && amountHit && amountHit.score >= 50) confidence = "high";
-  else if (!known || !amountHit || amountHit.score < 35) confidence = "low";
+  if (known && lockAmount && amountHit && amountHit.score >= 50) {
+    confidence = "high";
+  } else if (!known || !lockAmount || !amountHit || amountHit.score < 35) {
+    confidence = "low";
+  }
 
   return {
     alias,
@@ -357,6 +415,7 @@ export function parseReceiptOcrText(
     display: alias && amount > 0 ? `${alias} ${amount.toFixed(2)}` : "",
     merchantLabel: known?.label || "",
     confidence,
+    lockAmount,
     rawPreview: raw.slice(0, 240),
     amountCandidates,
   };
