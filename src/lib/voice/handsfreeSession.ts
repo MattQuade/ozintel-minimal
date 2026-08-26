@@ -217,13 +217,16 @@ export function notifyInvoiceUpdated() {
   window.dispatchEvent(new Event("ozintel-invoice-updated"));
 }
 
-function pathOnly(href: string): string {
-  return String(href || "").split(/[?#]/)[0];
+function hrefParts(href: string): { path: string; search: string } {
+  const noHash = String(href || "").split("#")[0];
+  const q = noHash.indexOf("?");
+  if (q < 0) return { path: noHash, search: "" };
+  return { path: noHash.slice(0, q), search: noHash.slice(q) };
 }
 
 /**
- * Navigate only when the destination is a different page.
- * Same-invoice editor hops are skipped so voice edits do not jump to the top.
+ * Navigate only when the destination is a different page (path or query).
+ * Same-invoice editor hops without a query are skipped so line edits stay put.
  */
 export function pushUnlessCurrent(
   router: { push: (href: string) => void },
@@ -231,15 +234,23 @@ export function pushUnlessCurrent(
   currentPath?: string
 ): boolean {
   if (!href) return false;
-  const here = pathOnly(
+  const dest = hrefParts(href);
+  if (!dest.path) return false;
+  const herePath = hrefParts(
     currentPath ||
       (typeof window !== "undefined" ? window.location.pathname : "")
-  );
-  const next = pathOnly(href);
-  if (!next || next === here) return false;
-  const editing = here.match(/^\/invoices\/([^/]+)\/edit$/);
-  const dest = next.match(/^\/invoices\/([^/]+)(?:\/edit)?$/);
-  if (editing && dest && editing[1] === dest[1]) return false;
+  ).path;
+  const hereSearch =
+    typeof window !== "undefined" ? window.location.search : "";
+
+  if (dest.path === herePath && dest.search === hereSearch) return false;
+
+  const editing = herePath.match(/^\/invoices\/([^/]+)\/edit$/);
+  const destInv = dest.path.match(/^\/invoices\/([^/]+)(?:\/edit)?$/);
+  if (editing && destInv && editing[1] === destInv[1] && !dest.search) {
+    return false;
+  }
+
   router.push(href);
   return true;
 }

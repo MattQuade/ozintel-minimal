@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
+  createDraftFromCustomerLast,
   getInvoiceById,
   readInvoices,
   upsertInvoice,
@@ -428,13 +429,34 @@ export async function POST(req: Request) {
             { status: 404 }
           );
         }
-        return NextResponse.json({
-          success: true,
-          action: "select_customer",
-          href: `/invoices/new?customerId=${encodeURIComponent(match.id)}`,
-          label: `Selected ${match.name}`,
-          matchedCustomer: match,
-        });
+        try {
+          const result = await createDraftFromCustomerLast(match.id);
+          return NextResponse.json({
+            success: true,
+            action: "select_customer",
+            href: `/invoices/${result.invoice.id}`,
+            label: result.reusedDraft
+              ? `Opened ${match.name} ${result.invoice.number}`
+              : `Selected ${match.name}`,
+            matchedCustomer: match,
+            invoice: {
+              id: result.invoice.id,
+              number: result.invoice.number,
+            },
+          });
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "Could not open invoice";
+          return NextResponse.json(
+            {
+              success: false,
+              error: message,
+              href: `/invoices/new?customerId=${encodeURIComponent(match.id)}`,
+              matchedCustomer: match,
+            },
+            { status: 400 }
+          );
+        }
       }
 
       if (cmd.type === "edit_invoice") {
