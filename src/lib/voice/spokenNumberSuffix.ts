@@ -126,8 +126,12 @@ function parseCardinal(tokens: string[]): number | null {
 
 /**
  * Spoken or typed invoice number → digits, e.g. "two four six" / "246" / "inv 0246" → "246".
+ * Pass keepLeadingZeros when the spoken zeros are part of the invoice number.
  */
-export function parseSpokenInvoiceDigits(phrase: string): string | null {
+export function parseSpokenInvoiceDigits(
+  phrase: string,
+  opts?: { keepLeadingZeros?: boolean }
+): string | null {
   const raw = String(phrase || "")
     .toLowerCase()
     .replace(/[^\w\s-]+/g, " ")
@@ -186,7 +190,10 @@ export function parseSpokenInvoiceDigits(phrase: string): string | null {
     i += 1;
   }
 
-  const out = parts.join("").replace(/^0+(?=\d)/, "");
+  let out = parts.join("");
+  if (!opts?.keepLeadingZeros) {
+    out = out.replace(/^0+(?=\d)/, "");
+  }
   return /\d/.test(out) ? out : null;
 }
 
@@ -322,8 +329,9 @@ export function invoiceDateSuffixFromDate(
 }
 
 /**
- * Spoken/typed full invoice number → 0246 or 0246-0709-26.
+ * Spoken/typed full invoice number → the digits as said, e.g. 246 or 246-0709-26.
  * Does not treat a leading “dash …” as a whole number (that stays a suffix).
+ * Does not pad a leading 0 unless it was spoken or typed.
  */
 export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
   const raw = String(phrase || "")
@@ -337,8 +345,7 @@ export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
   const compact = raw.replace(/\s+/g, "");
   const typed = compact.match(/^(?:inv-?)?(\d+)((?:-\d+)*)$/i);
   if (typed && /^\d/.test(typed[1])) {
-    const seq = typed[1].replace(/^0+(?=\d)/, "") || typed[1];
-    return `${seq.padStart(4, "0")}${typed[2] || ""}`;
+    return `${typed[1]}${typed[2] || ""}`;
   }
 
   const parts = raw
@@ -348,9 +355,9 @@ export function parseSpokenFullInvoiceNumber(phrase: string): string | null {
   if (!parts.length) return null;
 
   const head = parts[0].replace(/^(inv|invoice|number|no)\s+/g, "").trim();
-  const seq = parseSpokenInvoiceDigits(head);
+  const seq = parseSpokenInvoiceDigits(head, { keepLeadingZeros: true });
   if (!seq) return null;
-  let out = seq.padStart(4, "0");
+  let out = seq;
   if (parts.length === 1) return out;
 
   const suffix = parseSpokenNumberSuffix(parts.slice(1).join(" dash "));
