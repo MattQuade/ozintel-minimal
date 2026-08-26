@@ -8,6 +8,7 @@ import {
   isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
   notifyInvoiceUpdated,
+  pushUnlessCurrent,
   requestVoiceListen,
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
@@ -154,8 +155,8 @@ export default function VoiceNavBar({
         setPendingInvoiceField(null);
         setHint(data.label || 'Saved');
         notifyInvoiceUpdated();
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Update failed');
         setBusy(false);
@@ -228,8 +229,8 @@ export default function VoiceNavBar({
         }
         setPendingInvoiceEmail(null);
         setHint(data.label || `Sent to ${pending.to}`);
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Email failed');
         setBusy(false);
@@ -250,7 +251,7 @@ export default function VoiceNavBar({
         setHint(`Opening ${cmd.label}…`);
       }
       setBusy(true);
-      router.push(cmd.href);
+      pushUnlessCurrent(router, cmd.href, pathname);
       return;
     }
 
@@ -273,8 +274,8 @@ export default function VoiceNavBar({
         setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
         notifyInvoiceUpdated();
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
         setBusy(false);
@@ -313,8 +314,8 @@ export default function VoiceNavBar({
         setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
         notifyInvoiceUpdated();
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
         setBusy(false);
@@ -341,8 +342,8 @@ export default function VoiceNavBar({
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
         setBusy(false);
@@ -378,15 +379,15 @@ export default function VoiceNavBar({
             awaitingLineIndex: Boolean(data.awaitingLineIndex),
           });
           setHint(data.prompt || data.label);
-          if (data.href) router.push(data.href);
-          else setBusy(false);
+          pushUnlessCurrent(router, data.href, pathname);
+          setBusy(false);
           return;
         }
         setPendingInvoiceField(null);
         setHint(data.label || cmd.label);
         notifyInvoiceUpdated();
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
         setBusy(false);
@@ -418,14 +419,14 @@ export default function VoiceNavBar({
             invoiceNumber: data.invoiceNumber || '',
           });
           setHint(data.label || `Email to ${data.to}? Say send.`);
-          if (data.href) router.push(data.href);
-          else setBusy(false);
+          pushUnlessCurrent(router, data.href, pathname);
+          setBusy(false);
           return;
         }
         setPendingInvoiceEmail(null);
         setHint(data.label || cmd.label);
-        if (data.href) router.push(data.href);
-        else setBusy(false);
+        pushUnlessCurrent(router, data.href, pathname);
+        setBusy(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
         setBusy(false);
@@ -450,8 +451,8 @@ export default function VoiceNavBar({
         throw new Error(data.error || 'Command failed');
       }
       setHint(data.label || cmd.label);
-      if (data.href) router.push(data.href);
-      else setBusy(false);
+      pushUnlessCurrent(router, data.href, pathname);
+      setBusy(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Command failed');
       setBusy(false);

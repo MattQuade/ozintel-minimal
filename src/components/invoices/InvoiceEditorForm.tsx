@@ -99,8 +99,9 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
   useEffect(() => {
     if (!invoiceId) return;
     let cancelled = false;
-    const loadInvoice = async () => {
-      setLoading(true);
+    const loadInvoice = async (silent = false) => {
+      const y = silent && typeof window !== "undefined" ? window.scrollY : null;
+      if (!silent) setLoading(true);
       setError('');
       try {
         const res = await fetch(`/api/invoices/${invoiceId}`);
@@ -109,7 +110,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         if (cancelled) return;
         if (data.status !== 'draft') {
           setError('Only draft invoices can be edited. Void and recreate if needed.');
-          setLoading(false);
+          if (!silent) setLoading(false);
           return;
         }
         setCustomerId(String(data.customerId || ''));
@@ -167,12 +168,19 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
           setError(err instanceof Error ? err.message : 'Failed to load');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          if (!silent) setLoading(false);
+          if (y != null) {
+            const restore = () => window.scrollTo(0, y);
+            restore();
+            requestAnimationFrame(() => requestAnimationFrame(restore));
+          }
+        }
       }
     };
-    void loadInvoice();
+    void loadInvoice(false);
     const onUpdated = () => {
-      void loadInvoice();
+      void loadInvoice(true);
     };
     window.addEventListener('ozintel-invoice-updated', onUpdated);
     return () => {

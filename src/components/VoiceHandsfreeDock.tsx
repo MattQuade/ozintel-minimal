@@ -9,6 +9,7 @@ import {
   isAwaitingInvoiceNumberSuffix,
   isHandsfreeEnabled,
   notifyInvoiceUpdated,
+  pushUnlessCurrent,
   requestVoiceListen,
   setAwaitingCustomerName,
   setAwaitingInvoiceNumberSuffix,
@@ -157,7 +158,7 @@ export default function VoiceHandsfreeDock() {
           setPendingInvoiceField(null);
           setHint(data.label || 'Saved');
           notifyInvoiceUpdated();
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Update failed');
         } finally {
@@ -297,7 +298,7 @@ export default function VoiceHandsfreeDock() {
           }
           setPendingInvoiceEmail(null);
           setHint(data.label || `Sent to ${pending.to}`);
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Email failed');
         } finally {
@@ -326,7 +327,7 @@ export default function VoiceHandsfreeDock() {
             setAwaitingInvoiceNumberSuffix(false);
             setPendingInvoiceField(null);
           }
-          router.push(cmd.href);
+          pushUnlessCurrent(router, cmd.href, pathnameRef.current);
           return;
         }
 
@@ -346,7 +347,7 @@ export default function VoiceHandsfreeDock() {
           setAwaitingInvoiceNumberSuffix(false);
           setHint(data.label || cmd.label);
           notifyInvoiceUpdated();
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
           return;
         }
 
@@ -377,7 +378,7 @@ export default function VoiceHandsfreeDock() {
           setAwaitingInvoiceNumberSuffix(false);
           setHint(data.label || cmd.label);
           notifyInvoiceUpdated();
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
           return;
         }
 
@@ -396,7 +397,7 @@ export default function VoiceHandsfreeDock() {
           setAwaitingCustomerName(false);
           setAwaitingInvoiceNumberSuffix(false);
           setHint(data.label || cmd.label);
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
           return;
         }
 
@@ -425,13 +426,13 @@ export default function VoiceHandsfreeDock() {
               awaitingLineIndex: Boolean(data.awaitingLineIndex),
             });
             setHint(data.prompt || data.label);
-            if (data.href) router.push(data.href);
+            pushUnlessCurrent(router, data.href, pathnameRef.current);
             return;
           }
           setPendingInvoiceField(null);
           setHint(data.label || cmd.label);
           notifyInvoiceUpdated();
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
           return;
         }
 
@@ -456,12 +457,12 @@ export default function VoiceHandsfreeDock() {
               invoiceNumber: data.invoiceNumber || '',
             });
             setHint(data.label || `Email to ${data.to}? Say send.`);
-            if (data.href) router.push(data.href);
+            pushUnlessCurrent(router, data.href, pathnameRef.current);
             return;
           }
           setPendingInvoiceEmail(null);
           setHint(data.label || cmd.label);
-          if (data.href) router.push(data.href);
+          pushUnlessCurrent(router, data.href, pathnameRef.current);
           return;
         }
 
@@ -480,7 +481,7 @@ export default function VoiceHandsfreeDock() {
         setAwaitingCustomerName(false);
         setAwaitingInvoiceNumberSuffix(false);
         setHint(data.label || cmd.label);
-        if (data.href) router.push(data.href);
+        pushUnlessCurrent(router, data.href, pathnameRef.current);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Command failed');
       } finally {

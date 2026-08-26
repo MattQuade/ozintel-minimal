@@ -217,6 +217,33 @@ export function notifyInvoiceUpdated() {
   window.dispatchEvent(new Event("ozintel-invoice-updated"));
 }
 
+function pathOnly(href: string): string {
+  return String(href || "").split(/[?#]/)[0];
+}
+
+/**
+ * Navigate only when the destination is a different page.
+ * Same-invoice editor hops are skipped so voice edits do not jump to the top.
+ */
+export function pushUnlessCurrent(
+  router: { push: (href: string) => void },
+  href: string | undefined,
+  currentPath?: string
+): boolean {
+  if (!href) return false;
+  const here = pathOnly(
+    currentPath ||
+      (typeof window !== "undefined" ? window.location.pathname : "")
+  );
+  const next = pathOnly(href);
+  if (!next || next === here) return false;
+  const editing = here.match(/^\/invoices\/([^/]+)\/edit$/);
+  const dest = next.match(/^\/invoices\/([^/]+)(?:\/edit)?$/);
+  if (editing && dest && editing[1] === dest[1]) return false;
+  router.push(href);
+  return true;
+}
+
 /** Ask the root-layout dock to start or stop continuous listening. */
 export function requestVoiceListen(on: boolean) {
   if (typeof window === "undefined") return;
