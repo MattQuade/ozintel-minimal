@@ -31,6 +31,23 @@ import {
   type SpeechRecognitionLike,
 } from '@/lib/voice/speechRecognition';
 
+function killRecognition(rec: SpeechRecognitionLike | null) {
+  if (!rec) return;
+  rec.onend = null;
+  rec.onresult = null;
+  rec.onerror = null;
+  try {
+    rec.abort?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    rec.stop();
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Persistent hands-free mic — lives in the root layout so it keeps listening
  * across page changes after the user taps Speak once.
@@ -49,6 +66,7 @@ export default function VoiceHandsfreeDock() {
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const wantListenRef = useRef(false);
+  const recGenRef = useRef(0);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processingRef = useRef(false);
   const pathnameRef = useRef(pathname);
@@ -66,14 +84,12 @@ export default function VoiceHandsfreeDock() {
 
   const stopRecognition = useCallback((clearSession: boolean) => {
     wantListenRef.current = false;
+    recGenRef.current += 1;
     clearRestartTimer();
     if (clearSession) setHandsfreeEnabled(false);
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
-    }
+    const rec = recognitionRef.current;
     recognitionRef.current = null;
+    killRecognition(rec);
     setListening(false);
     setInterim('');
     if (clearSession) {
@@ -459,7 +475,7 @@ export default function VoiceHandsfreeDock() {
     [router, stopRecognition]
   );
 
-  const startRecognition = useCallback(() => {
+  const startRecognition = useCallback((opts?: { freshHint?: boolean }) => {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
       setError('Voice needs Chrome or Edge');
@@ -472,13 +488,15 @@ export default function VoiceHandsfreeDock() {
     setHandsfreeEnabled(true);
     setVisible(true);
     setError('');
-    setHint('Listening… keep giving commands');
-
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      /* ignore */
+    setListening(true);
+    if (opts?.freshHint) {
+      setHint('Listening… keep giving commands');
     }
+
+    const gen = ++recGenRef.current;
+    const previous = recognitionRef.current;
+    recognitionRef.current = null;
+    killRecognition(previous);
 
     const rec = new Ctor();
     recognitionRef.current = rec;
@@ -487,6 +505,7 @@ export default function VoiceHandsfreeDock() {
     rec.interimResults = true;
 
     rec.onresult = (event) => {
+      if (recGenRef.current !== gen) return;
       let interimBits = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const piece = event.results[i][0].transcript.trim();
@@ -503,13 +522,10 @@ export default function VoiceHandsfreeDock() {
     };
 
     rec.onerror = (event) => {
+      if (recGenRef.current !== gen) return;
       const err = event.error || '';
       // Benign — Chrome ends / no-speech often; we restart from onend
-      if (
-        err === 'no-speech' ||
-        err === 'aborted' ||
-        err === 'network'
-      ) {
+      if (err === 'no-speech' || err === 'aborted' || err === 'network') {
         return;
       }
       if (err === 'not-allowed') {
@@ -521,25 +537,29 @@ export default function VoiceHandsfreeDock() {
     };
 
     rec.onend = () => {
-      setListening(false);
-      if (!wantListenRef.current || !isHandsfreeEnabled()) return;
-      // Restart after Chrome pauses between utterances / after navigation
+      if (recGenRef.current !== gen) return;
+      if (!wantListenRef.current || !isHandsfreeEnabled()) {
+        setListening(false);
+        return;
+      }
+      // Chrome pauses between phrases. Stay on “Listening…” and restart this instance.
       clearRestartTimer();
       restartTimerRef.current = setTimeout(() => {
+        if (recGenRef.current !== gen) return;
         if (!wantListenRef.current || !isHandsfreeEnabled()) return;
         try {
-          startRecognition();
+          rec.start();
+          setListening(true);
         } catch {
-          /* ignore */
+          startRecognition();
         }
-      }, 280);
+      }, 400);
     };
 
     try {
       rec.start();
       setListening(true);
     } catch {
-      // Already started — ignore
       setListening(true);
     }
   }, [runCommand, stopRecognition]);
@@ -549,7 +569,7 @@ export default function VoiceHandsfreeDock() {
 
     const onListenRequest = (e: Event) => {
       const detail = (e as CustomEvent<{ on?: boolean }>).detail;
-      if (detail?.on) startRecognition();
+      if (detail?.on) startRecognition({ freshHint: true });
       else stopRecognition(true);
     };
 
@@ -571,23 +591,21 @@ export default function VoiceHandsfreeDock() {
       );
       clearRestartTimer();
       wantListenRef.current = false;
-      try {
-        recognitionRef.current?.stop();
-      } catch {
-        /* ignore */
-      }
+      recGenRef.current += 1;
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      killRecognition(rec);
     };
     // intentionally once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // After client navigations, nudge restart if hands-free should still be on
+  // After client navigations, resume only if Chrome dropped the session
   useEffect(() => {
     if (!isHandsfreeEnabled()) return;
     setVisible(true);
-    if (!listening && wantListenRef.current === false) {
-      startRecognition();
-    } else if (isHandsfreeEnabled() && !listening) {
+    wantListenRef.current = true;
+    if (!recognitionRef.current) {
       startRecognition();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -617,9 +635,9 @@ export default function VoiceHandsfreeDock() {
           background: '#0f172a',
           color: 'white',
           borderRadius: 16,
-          border: listening
-            ? '2px solid #22c55e'
-            : '1px solid #334155',
+          border: '2px solid',
+          borderColor: listening ? '#22c55e' : '#334155',
+          boxSizing: 'border-box',
           boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
           padding: '12px 14px',
         }}
@@ -641,7 +659,7 @@ export default function VoiceHandsfreeDock() {
                 color: listening ? '#4ade80' : '#e2e8f0',
               }}
             >
-              {listening ? 'Listening…' : busy ? 'Working…' : 'Voice paused'}
+              {busy ? 'Working…' : listening ? 'Listening…' : 'Voice paused'}
             </p>
             <p
               style={{
@@ -673,7 +691,7 @@ export default function VoiceHandsfreeDock() {
             onClick={() =>
               listening || wantListenRef.current
                 ? stopRecognition(true)
-                : startRecognition()
+                : startRecognition({ freshHint: true })
             }
             style={{
               flexShrink: 0,
