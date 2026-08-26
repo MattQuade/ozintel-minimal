@@ -9,6 +9,7 @@ import {
   isSpokenNumberToken,
   parseSpokenFullInvoiceNumber,
   parseSpokenInvoiceDigits,
+  parseSpokenLineIndex,
   parseSpokenNumberSuffix,
 } from "@/lib/voice/spokenNumberSuffix";
 
@@ -523,37 +524,42 @@ function parseOpenInvoiceCommand(t: string): PlatformVoiceAction | null {
   };
 }
 
-const LINE_INDEX_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  first: 1,
-  second: 2,
-  third: 3,
-  fourth: 4,
-  fifth: 5,
-  last: -1,
-};
+function isLineFieldEdit(rest: string): boolean {
+  return (
+    /^(edit|change|modify)\s+(the\s+)?descriptions?$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?(qty|quantity|quantities)$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?units?(?:\s+prices?)?$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?unit\s+prices?$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?accounts?$/.test(rest) ||
+    /^(edit|change|modify)\s+(the\s+)?(tax|gst)$/.test(rest)
+  );
+}
 
 function parseTrailingLineIndex(t: string): {
   rest: string;
   lineIndex?: number;
 } {
-  const m = t.match(
-    /^(.*?)(?:\s+(?:on\s+|for\s+)?(?:the\s+)?(?:line|item)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|last))$/
+  const withWord = t.match(
+    /^(.*?)(?:\s+(?:on\s+|for\s+)?(?:the\s+)?(?:line|item)\s+(\S+))$/
   );
-  if (!m) return { rest: t };
-  const raw = m[2];
-  const n = /^\d+$/.test(raw) ? parseInt(raw, 10) : LINE_INDEX_WORDS[raw];
-  if (!n) return { rest: t };
-  return { rest: m[1].trim(), lineIndex: n };
+  if (withWord) {
+    const n = parseSpokenLineIndex(withWord[2]);
+    if (n != null && n > 0) {
+      return { rest: withWord[1].trim(), lineIndex: n };
+    }
+  }
+
+  const parts = t.split(/\s+/);
+  if (parts.length >= 2) {
+    const head = parts.slice(0, -1).join(" ");
+    if (isLineFieldEdit(head)) {
+      const n = parseSpokenLineIndex(parts[parts.length - 1]);
+      if (n != null && n > 0 && n <= 40) {
+        return { rest: head, lineIndex: n };
+      }
+    }
+  }
+  return { rest: t };
 }
 
 function fieldAction(

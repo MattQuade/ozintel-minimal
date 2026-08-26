@@ -33,7 +33,13 @@ export function displayInvoiceNumber(number: string): string {
 
 const SUBJECT_SMALL = new Set(["a", "an", "and", "of", "the", "to", "for", "or"]);
 
-/** Capitalise each subject word: "draft packaged" → "Draft Packaged". */
+/** Spoken/typed beer spelling — speech often returns “draft”. */
+const SUBJECT_SPELL: Record<string, string> = {
+  draft: "Draught",
+  drafts: "Draughts",
+};
+
+/** Capitalise each subject word: "draft packaged" → "Draught Packaged". */
 export function titleCaseSubject(raw: string): string {
   const words = String(raw || "")
     .trim()
@@ -47,6 +53,7 @@ export function titleCaseSubject(raw: string): string {
         .map((piece) => {
           if (!/[a-zA-Z]/.test(piece)) return piece;
           const lower = piece.toLowerCase();
+          if (SUBJECT_SPELL[lower]) return SUBJECT_SPELL[lower];
           if (i > 0 && SUBJECT_SMALL.has(lower)) return lower;
           return lower.charAt(0).toUpperCase() + lower.slice(1);
         })

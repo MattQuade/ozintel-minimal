@@ -232,6 +232,51 @@ export function parseSpokenAmount(phrase: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const LINE_INDEX_WORDS: Record<string, number> = {
+  one: 1,
+  two: 2,
+  to: 2,
+  too: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  last: -1,
+};
+
+/**
+ * Spoken line index: "2", "two", "line 2", "to" (speech for two).
+ * `last` is -1.
+ */
+export function parseSpokenLineIndex(phrase: string): number | null {
+  const t = String(phrase || "")
+    .toLowerCase()
+    .replace(/[^\w\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return null;
+  const m = t.match(
+    /^(?:(?:the\s+)?(?:line|item|number|no)\s+)?(\d+|one|two|to|too|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|last)$/
+  );
+  if (!m) return null;
+  const raw = m[1];
+  if (/^\d+$/.test(raw)) {
+    const n = parseInt(raw, 10);
+    return n > 0 ? n : null;
+  }
+  const n = LINE_INDEX_WORDS[raw];
+  return n != null ? n : null;
+}
+
 /**
  * Convert a spoken/typed suffix phrase to e.g. "-0709-26".
  * Returns null if nothing useful was parsed.

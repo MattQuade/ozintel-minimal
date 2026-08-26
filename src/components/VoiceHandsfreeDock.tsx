@@ -15,6 +15,7 @@ import {
   setHandsfreeEnabled,
   setPendingInvoiceEmail,
   setPendingInvoiceField,
+  takePendingLineIndex,
   todayIsoLocal,
 } from '@/lib/voice/handsfreeSession';
 import {
@@ -111,6 +112,19 @@ export default function VoiceHandsfreeDock() {
         cmd?.type === 'cancel_send' ||
         cmd?.type === 'scroll_down' ||
         cmd?.type === 'scroll_up';
+
+      if (pendingField?.awaitingLineIndex && !interruptPending && !cmd) {
+        const taken = takePendingLineIndex(raw);
+        if (taken?.ok === false) {
+          setError(taken.error);
+          return;
+        }
+        if (taken?.ok) {
+          setError('');
+          setHint(taken.hint);
+          return;
+        }
+      }
       const dictationField =
         pendingField &&
         (pendingField.field === 'notes' ||
@@ -405,8 +419,10 @@ export default function VoiceHandsfreeDock() {
               invoiceId: data.invoiceId,
               field: data.field,
               prompt: data.prompt || data.label || 'Say the value…',
+              valuePrompt: data.valuePrompt,
               lineIndex: data.lineIndex,
               createLine: Boolean(data.createLine),
+              awaitingLineIndex: Boolean(data.awaitingLineIndex),
             });
             setHint(data.prompt || data.label);
             if (data.href) router.push(data.href);

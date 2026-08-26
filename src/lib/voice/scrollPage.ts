@@ -1,5 +1,5 @@
-/** Default voice scroll: one third of the visible screen. */
-export const VOICE_SCROLL_FRACTION = 1 / 3;
+/** Default voice scroll: half of the visible screen. */
+export const VOICE_SCROLL_FRACTION = 1 / 2;
 
 export function scrollPageByViewport(
   direction: "down" | "up",

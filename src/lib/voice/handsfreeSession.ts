@@ -4,6 +4,7 @@
  */
 
 import type { InvoiceVoiceField } from "@/lib/invoices/applyInvoiceVoiceField";
+import { parseSpokenLineIndex } from "@/lib/voice/spokenNumberSuffix";
 
 export const HANDSFREE_STORAGE_KEY = "ozintel_voice_handsfree";
 export const AWAITING_CUSTOMER_KEY = "ozintel_voice_awaiting_customer";
@@ -30,8 +31,11 @@ export type PendingInvoiceField = {
   invoiceId: string;
   field: InvoiceVoiceField;
   prompt: string;
+  /** Prompt for the field value after the line number is known. */
+  valuePrompt?: string;
   lineIndex?: number;
   createLine?: boolean;
+  awaitingLineIndex?: boolean;
 };
 
 function clearAwaitingFlags() {
@@ -170,6 +174,34 @@ export function setPendingInvoiceField(pending: PendingInvoiceField | null) {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * After “Edit description”, the next utterance is the line number.
+ * Returns null if we are not waiting for a line index.
+ */
+export function takePendingLineIndex(raw: string):
+  | { ok: true; hint: string }
+  | { ok: false; error: string }
+  | null {
+  const pending = getPendingInvoiceField();
+  if (!pending?.awaitingLineIndex) return null;
+  const n = parseSpokenLineIndex(raw);
+  if (n == null || n < 1) {
+    return {
+      ok: false,
+      error: `Say the line number (heard “${raw}”).`,
+    };
+  }
+  const valuePrompt =
+    pending.valuePrompt || pending.prompt || "Say the value…";
+  setPendingInvoiceField({
+    ...pending,
+    lineIndex: n,
+    awaitingLineIndex: false,
+    prompt: valuePrompt,
+  });
+  return { ok: true, hint: `Line ${n}. ${valuePrompt}` };
 }
 
 export function todayIsoLocal(): string {

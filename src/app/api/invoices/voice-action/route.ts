@@ -11,6 +11,7 @@ import { matchCustomerByVoice } from "@/lib/invoices/voiceInvoiceParse";
 import {
   applyInvoiceVoiceField,
   fieldPrompt,
+  LINE_VOICE_FIELDS,
   type InvoiceVoiceField,
 } from "@/lib/invoices/applyInvoiceVoiceField";
 import {
@@ -556,20 +557,28 @@ export async function POST(req: Request) {
           nextField === "unitPrice" ||
           nextField === "account" ||
           nextField === "tax";
+        const lineIndex =
+          cmd.type === "edit_invoice_field" ? cmd.lineIndex : undefined;
+        const awaitingLineIndex =
+          cmd.type === "edit_invoice_field" &&
+          LINE_VOICE_FIELDS.includes(nextField) &&
+          !(lineIndex && lineIndex > 0);
+        const valuePrompt = fieldPrompt(nextField);
         return NextResponse.json({
           success: true,
           action: cmd.type,
           needsValue: true,
+          awaitingLineIndex,
           field: nextField,
           createLine: cmd.type === "add_line_item",
-          lineIndex:
-            cmd.type === "edit_invoice_field" ? cmd.lineIndex : undefined,
+          lineIndex,
           invoiceId: invoice.id,
           href: lineEdit
             ? `/invoices/${invoice.id}/edit`
             : `/invoices/${invoice.id}`,
-          prompt: fieldPrompt(nextField),
-          label: fieldPrompt(nextField),
+          prompt: awaitingLineIndex ? "Say the line number…" : valuePrompt,
+          valuePrompt,
+          label: awaitingLineIndex ? "Say the line number…" : valuePrompt,
         });
       }
 
