@@ -109,7 +109,7 @@ export default function AccountingHubPage() {
         {checking
           ? "Checking your access…"
           : hasAccess
-            ? "Full access enabled for your account."
+            ? "Full access for this account only — books, invoices, payroll, and receipt capture. Nobody else can see this data."
             : "Preview the modules below. Full access requires admin approval — restore your account on the Alerts home page first."}
       </p>
 

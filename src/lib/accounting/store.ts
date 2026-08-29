@@ -1,16 +1,21 @@
-import path from "path";
 import { promises as fs } from "fs";
 import {
   getAccountingDataDir,
   getAccountingRulesFilePath,
   getBankAccountsFilePath,
   getCoaFilePath,
+  getEmployeesFilePath,
+  getInvoicesFilePath,
   getLedgerFilePath,
-  getRepoSeedBankAccountsPath,
+  getPayRunsFilePath,
+  getReceiptFilesDir,
+  getReceiptsDir,
+  getReceiptsMetaFilePath,
+  getCustomersFilePath,
   getRepoSeedCoaPath,
-  getRepoSeedLedgerPath,
   getRepoSeedRulesPath,
 } from "@/lib/dataPaths";
+import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { stampLedgerGstFields } from "@/lib/accounting/gstTax";
 import { assertDatesUnlocked } from "@/lib/accounting/basPeriods";
 
@@ -83,46 +88,65 @@ async function ensureAccountingDir() {
   await fs.mkdir(getAccountingDataDir(), { recursive: true });
 }
 
-async function seedFileIfMissing(
-  targetPath: string,
-  seedPath: string,
-  fallbackContents: string,
-  legacyPath?: string
-) {
+/** Create an empty JSON file if this owner's silo does not already have one. */
+async function ensureJsonIfMissing(targetPath: string, contents: string) {
   try {
     await fs.access(targetPath);
     return;
   } catch {
-    // missing — migrate or seed below
+    // missing
   }
-
   await ensureAccountingDir();
+  await fs.writeFile(targetPath, contents, "utf8");
+}
 
-  if (legacyPath) {
-    try {
-      const legacyRaw = await fs.readFile(legacyPath, "utf8");
-      const parsed = JSON.parse(legacyRaw || "null");
-      const hasData = Array.isArray(parsed)
-        ? parsed.length > 0
-        : Boolean(parsed && typeof parsed === "object");
-      if (hasData) {
-        await fs.writeFile(targetPath, legacyRaw, "utf8");
-        console.log(`[accounting] Migrated legacy file to ${targetPath}`);
-        return;
-      }
-    } catch {
-      // no usable legacy file
-    }
-  }
-
+/**
+ * Product chart only — never copy another user's live ledger, banks, or rules.
+ */
+async function seedCoaIfMissing() {
+  const targetPath = getCoaFilePath();
   try {
-    const seedRaw = await fs.readFile(seedPath, "utf8");
-    await fs.writeFile(targetPath, seedRaw, "utf8");
-    console.log(`[accounting] Seeded ${targetPath} from repo`);
+    await fs.access(targetPath);
+    return;
   } catch {
-    await fs.writeFile(targetPath, fallbackContents, "utf8");
-    console.log(`[accounting] Created empty ${targetPath}`);
+    // missing
   }
+  await ensureAccountingDir();
+  try {
+    const seedRaw = await fs.readFile(getRepoSeedCoaPath(), "utf8");
+    await fs.writeFile(targetPath, seedRaw, "utf8");
+    console.log(`[accounting] Seeded COA template for ${targetPath}`);
+  } catch {
+    await fs.writeFile(targetPath, "[]", "utf8");
+  }
+}
+
+/**
+ * First-run files for one owner's accounting silo.
+ * Live books (ledger, banks, rules, receipts, customers, invoices, payroll)
+ * start empty. COA is a shared product template, not another user's data.
+ */
+export async function ensureOwnerAccountingSilo(ownerEmail: string): Promise<void> {
+  await runWithDataOwnerAsync(ownerEmail, async () => {
+    await ensureAccountingDir();
+    await fs.mkdir(getReceiptsDir(), { recursive: true });
+    await fs.mkdir(getReceiptFilesDir(), { recursive: true });
+    await ensureJsonIfMissing(getLedgerFilePath(), "[]");
+    await ensureJsonIfMissing(
+      getAccountingRulesFilePath(),
+      JSON.stringify({ rules: [] }, null, 2)
+    );
+    await ensureJsonIfMissing(getBankAccountsFilePath(), "[]");
+    await ensureJsonIfMissing(getCustomersFilePath(), "[]");
+    await ensureJsonIfMissing(getInvoicesFilePath(), "[]");
+    await ensureJsonIfMissing(getEmployeesFilePath(), "[]");
+    await ensureJsonIfMissing(getPayRunsFilePath(), "[]");
+    await ensureJsonIfMissing(
+      getReceiptsMetaFilePath(),
+      JSON.stringify({ receipts: [] }, null, 2)
+    );
+    await seedCoaIfMissing();
+  });
 }
 
 function ensureEntryId(entry: Record<string, unknown>, index: number): LedgerEntry {
@@ -203,12 +227,7 @@ function parseLedgerRows(raw: string): unknown[] {
 }
 
 async function readLedgerUnlocked(): Promise<LedgerEntry[]> {
-  await seedFileIfMissing(
-    getLedgerFilePath(),
-    getRepoSeedLedgerPath(),
-    "[]",
-    path.join(process.cwd(), "data", "ledger.json")
-  );
+  await ensureJsonIfMissing(getLedgerFilePath(), "[]");
   const raw = await fs.readFile(getLedgerFilePath(), "utf8");
   const rows = parseLedgerRows(raw);
   return rows.map((row, index) =>
@@ -346,12 +365,7 @@ export async function resetLedger() {
 }
 
 export async function readCoa(): Promise<CoaAccount[]> {
-  await seedFileIfMissing(
-    getCoaFilePath(),
-    getRepoSeedCoaPath(),
-    "[]",
-    path.join(process.cwd(), "data", "coa.json")
-  );
+  await seedCoaIfMissing();
   const raw = await fs.readFile(getCoaFilePath(), "utf8");
   const parsed = JSON.parse(raw || "[]");
   const existing: CoaAccount[] = Array.isArray(parsed) ? parsed : [];
@@ -427,9 +441,8 @@ export async function writeCoa(accounts: CoaAccount[]) {
 }
 
 export async function readRules(): Promise<BankRule[]> {
-  await seedFileIfMissing(
+  await ensureJsonIfMissing(
     getAccountingRulesFilePath(),
-    getRepoSeedRulesPath(),
     JSON.stringify({ rules: [] }, null, 2)
   );
   const raw = await fs.readFile(getAccountingRulesFilePath(), "utf8");
@@ -439,66 +452,7 @@ export async function readRules(): Promise<BankRule[]> {
     : Array.isArray(parsed.rules)
       ? parsed.rules
       : [];
-
-  // Merge any missing seed rules by id (keeps Restore defaults from being required
-  // every time we ship new bank rules).
-  let seedRules: BankRule[] = [];
-  try {
-    const seedRaw = await fs.readFile(getRepoSeedRulesPath(), "utf8");
-    const seedParsed = JSON.parse(seedRaw || '{"rules":[]}');
-    seedRules = Array.isArray(seedParsed)
-      ? seedParsed
-      : Array.isArray(seedParsed.rules)
-        ? seedParsed.rules
-        : [];
-  } catch {
-    seedRules = [];
-  }
-
-  const byId = new Map<number, BankRule>();
-  for (const r of existing) {
-    if (r && typeof r.id === "number") byId.set(r.id, r);
-  }
-  let added = 0;
-  let updated = 0;
-  for (const s of seedRules) {
-    if (!s || typeof s.id !== "number") continue;
-    const prev = byId.get(s.id);
-    if (!prev) {
-      byId.set(s.id, s);
-      added += 1;
-      continue;
-    }
-    // Prefer seed when match/account fields changed for the same id
-    const changed =
-      prev.matchValue !== s.matchValue ||
-      prev.accountCode !== s.accountCode ||
-      prev.direction !== s.direction ||
-      prev.bankAccountId !== s.bankAccountId ||
-      JSON.stringify(prev.matchValues || []) !==
-        JSON.stringify(s.matchValues || []);
-    if (changed) {
-      byId.set(s.id, { ...prev, ...s });
-      updated += 1;
-    }
-  }
-
-  // Keep any custom live-only rules (ids not in seed)
-  const seedIds = new Set(seedRules.map((r) => r.id));
-  for (const r of existing) {
-    if (r && typeof r.id === "number" && !seedIds.has(r.id)) {
-      byId.set(r.id, r);
-    }
-  }
-
-  const merged = [...byId.values()].sort((a, b) => a.id - b.id);
-  if (added > 0 || updated > 0) {
-    await writeRules(merged);
-    console.log(
-      `[accounting] Merged bank rules from seed (+${added} new, ~${updated} updated)`
-    );
-  }
-  return merged;
+  return existing;
 }
 
 export async function writeRules(rules: BankRule[]) {
@@ -531,42 +485,8 @@ export async function syncRulesFromSeed(): Promise<{
   return { rules: seedRules, count: seedRules.length };
 }
 
-const DEFAULT_BANKS: BankAccount[] = [
-  {
-    id: "2010",
-    name: "NAB Credit Card #9497 / 3436",
-    accountNumber: "9497/3436",
-    bsb: "",
-    openingBalance: 0,
-    openingAsAt: "2025-07-01",
-    type: "Credit Card",
-  },
-  {
-    id: "2020",
-    name: "NAB Business Account #4091",
-    accountNumber: "4091",
-    bsb: "",
-    openingBalance: 0,
-    openingAsAt: "2025-07-01",
-    type: "Cheque",
-  },
-  {
-    id: "3",
-    name: "ANZ Business Account",
-    accountNumber: "ANZ-BIZ-XXXX",
-    bsb: "013-XXX",
-    openingBalance: 0,
-    openingAsAt: "2025-07-01",
-    type: "Cheque",
-  },
-];
-
 export async function readBankAccounts(): Promise<BankAccount[]> {
-  await seedFileIfMissing(
-    getBankAccountsFilePath(),
-    getRepoSeedBankAccountsPath(),
-    JSON.stringify(DEFAULT_BANKS, null, 2)
-  );
+  await ensureJsonIfMissing(getBankAccountsFilePath(), "[]");
   const raw = await fs.readFile(getBankAccountsFilePath(), "utf8");
   const parsed = JSON.parse(raw || "[]");
   const rows = Array.isArray(parsed) ? parsed : [];

@@ -145,21 +145,14 @@ export function getReceiptFilesDir(): string {
   return path.join(getReceiptsDir(), "files");
 }
 
-/** Repo seeds used once when persistent accounting files are missing. */
-export function getRepoSeedLedgerPath(): string {
-  return path.join(process.cwd(), "data", "ledger.json");
-}
-
+/** Repo-bundled chart of accounts (product template, not live books). */
 export function getRepoSeedCoaPath(): string {
   return path.join(process.cwd(), "data", "coa.json");
 }
 
+/** Repo bank-rule pack — only copied when that user explicitly restores rules. */
 export function getRepoSeedRulesPath(): string {
   return path.join(process.cwd(), "src", "core", "rules", "rules.json");
-}
-
-export function getRepoSeedBankAccountsPath(): string {
-  return path.join(process.cwd(), "data", "bank-accounts.json");
 }
 
 /** Pre-silo legacy paths (migration only). */

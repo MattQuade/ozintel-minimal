@@ -1259,10 +1259,10 @@ export default function HomePage({
                       <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
                         <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
                         <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#94a3b8' }}>
-                          Each user only sees their own Accounting / Pub / Forestry data.
+                          Accounting is a private silo: full books plus receipt capture. Never shared with you or anyone else.
                         </p>
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting
+                          <input type="checkbox" checked={u.permissions.accounting} onChange={e => updatePermissions(u.email, 'accounting', e.target.checked)} /> Accounting (own books + receipts)
                         </label>
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
                           <input type="checkbox" checked={u.permissions.pubOps} onChange={e => updatePermissions(u.email, 'pubOps', e.target.checked)} /> Pub Ops
@@ -1771,7 +1771,9 @@ export default function HomePage({
         <a href="/accounting" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Accounting
         </a>
-        <HomeReceiptCapture />
+        {currentUser?.status === 'approved' && currentUser.permissions?.accounting ? (
+          <HomeReceiptCapture />
+        ) : null}
         <a href="/operations/pub" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#1d4ed8', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Pub Operations
         </a>
@@ -1780,7 +1782,7 @@ export default function HomePage({
         </a>
       </div>
 
-      <div style={{ marginTop: '40px', paddingBottom: '30px', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ marginTop: '40px', paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))', display: 'flex', justifyContent: 'center' }}>
         <button
           type="button"
           onClick={() => setShowAdminLogin(!showAdminLogin)}

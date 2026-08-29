@@ -10,6 +10,7 @@ import {
   runWithDataOwnerAsync,
 } from "@/lib/dataOwnerContext";
 import { ensureOwnerSiloMigration } from "@/lib/migrateOwnerSilos";
+import { ensureOwnerAccountingSilo } from "@/lib/accounting/store";
 
 const COOKIE_NAME = "ozintel_user_email";
 
@@ -107,7 +108,7 @@ function withOwnerRun(user: User, dataOwnerEmail: string): AccessOk {
 /**
  * Server-side gate for accounting APIs.
  * Requires restored cookie + approved user + permissions.accounting.
- * Data is always siloed to the signed-in user.
+ * Data is always siloed to the signed-in user. Accounting is never shared.
  */
 export async function requireAccountingAccess(
   req: Request
@@ -117,6 +118,7 @@ export async function requireAccountingAccess(
     denied: "Accounting access requires admin approval.",
   });
   if (!access.ok) return access;
+  await ensureOwnerAccountingSilo(access.user.email);
   return withOwnerRun(access.user, access.user.email);
 }
 

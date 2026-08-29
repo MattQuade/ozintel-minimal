@@ -7,6 +7,7 @@ import {
   type UserPermissions,
   type UserStatus,
 } from "@/lib/users";
+import { ensureOwnerAccountingSilo } from "@/lib/accounting/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
@@ -97,6 +98,9 @@ export async function PUT(req: NextRequest) {
         ...users[idx].permissions,
         ...(body.permissions as Partial<UserPermissions>),
       };
+      if (users[idx].permissions.accounting) {
+        await ensureOwnerAccountingSilo(users[idx].email);
+      }
     }
     if (body.shares && typeof body.shares === "object") {
       const incoming = body.shares as { pubOps?: unknown };
