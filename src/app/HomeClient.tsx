@@ -258,10 +258,19 @@ export default function HomePage({
       });
       const data = await res.json();
       if (data.success && data.user) {
-        const found = data.user as UserProfile;
+        let found = data.user as UserProfile;
+        setUserCookie(found.email);
+        try {
+          const meRes = await fetch(`${API_BASE}/api/me`, { cache: 'no-store' });
+          const meData = await meRes.json();
+          if (meData.success && meData.user) {
+            found = meData.user as UserProfile;
+          }
+        } catch {
+          /* cookie user from restore payload is enough */
+        }
         setCurrentUser(found);
         localStorage.setItem('ozintel_current_user', JSON.stringify(found));
-        setUserCookie(found.email);
         await loadContactsFromServer();
         if (!silent) {
           if (found.status === 'approved') {
@@ -712,18 +721,22 @@ export default function HomePage({
       }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    const listed = allUsers.find((u) => emailsMatch(u.email, user.email));
     const ok = await restoreFromServer(user.email, true);
     if (!ok) {
       setStatus(`❌ Could not open as ${user.name}.`);
       return;
     }
-    if (!user.permissions?.accounting) {
+    const accountingOn = Boolean(
+      listed?.permissions?.accounting || user.permissions?.accounting
+    );
+    if (!accountingOn) {
       setStatus(
-        `Opened as ${user.name}. Tick Accounting first, then Capture Receipt will appear.`
+        `Opened as ${user.name}. Tick Accounting on this user, then Capture Receipt will work.`
       );
     } else {
       setStatus(
-        `Opened as ${user.name} — their books and receipts only. Set shops and COA, test capture, then Restore my account.`
+        `Opened as ${user.name} — capture is under this banner. Shops and COA are this account only.`
       );
     }
   };
@@ -1163,6 +1176,20 @@ export default function HomePage({
 
   // Total SMS this month (all users)
   const totalSmsThisMonth = allUsers.reduce((sum, u) => sum + (u.smsCount || 0), 0);
+  const isTestingOtherUser = Boolean(
+    isAdminAuthenticated &&
+      currentUser &&
+      !emailsMatch(currentUser.email, ADMIN_SELF_EMAIL)
+  );
+  const listedCurrent = currentUser
+    ? allUsers.find((u) => emailsMatch(u.email, currentUser.email))
+    : undefined;
+  const canCaptureReceipts = Boolean(
+    currentUser?.status === 'approved' &&
+      (currentUser.permissions?.accounting ||
+        listedCurrent?.permissions?.accounting ||
+        isTestingOtherUser)
+  );
 
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
@@ -1189,10 +1216,20 @@ export default function HomePage({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Shops</a>
             <a href="/coa" style={{ background: '#0ea5e9', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>COA</a>
+            <a href="/accounting/receipts" style={{ background: '#c2410c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Receipts</a>
             <button type="button" onClick={() => void restoreMyAccount()} style={{ background: '#14532d', color: 'white', border: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>
               Restore my account
             </button>
           </div>
+          {canCaptureReceipts ? (
+            <div id="home-receipt-capture" style={{ marginTop: 14, textAlign: 'center' }}>
+              <HomeReceiptCapture />
+            </div>
+          ) : (
+            <p style={{ margin: '12px 0 0', color: '#fecaca', fontSize: '0.9rem' }}>
+              Tick Accounting on this user in the admin list so Capture Receipt appears here.
+            </p>
+          )}
         </div>
       )}
 
@@ -1845,7 +1882,7 @@ export default function HomePage({
         <a href="/accounting" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#f97316', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Accounting
         </a>
-        {currentUser?.status === 'approved' && currentUser.permissions?.accounting ? (
+        {canCaptureReceipts && !isTestingOtherUser ? (
           <HomeReceiptCapture />
         ) : null}
         <a href="/operations/pub" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#1d4ed8', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
