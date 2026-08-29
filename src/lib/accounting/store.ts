@@ -12,10 +12,12 @@ import {
   getReceiptsDir,
   getReceiptsMetaFilePath,
   getCustomersFilePath,
+  getMerchantsFilePath,
   getRepoSeedCoaPath,
   getRepoSeedRulesPath,
 } from "@/lib/dataPaths";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
+import { APPROVED_RECEIPT_MERCHANTS } from "@/lib/accounting/approvedMerchants";
 import { stampLedgerGstFields } from "@/lib/accounting/gstTax";
 import { assertDatesUnlocked } from "@/lib/accounting/basPeriods";
 
@@ -144,6 +146,10 @@ export async function ensureOwnerAccountingSilo(ownerEmail: string): Promise<voi
     await ensureJsonIfMissing(
       getReceiptsMetaFilePath(),
       JSON.stringify({ receipts: [] }, null, 2)
+    );
+    await ensureJsonIfMissing(
+      getMerchantsFilePath(),
+      JSON.stringify(APPROVED_RECEIPT_MERCHANTS, null, 2)
     );
     await seedCoaIfMissing();
   });

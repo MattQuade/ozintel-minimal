@@ -33,6 +33,8 @@ type UserProfile = {
 };
 
 const API_BASE = "";
+const ADMIN_SELF_EMAIL = 'mattquade2000@gmail.com';
+const ADMIN_RETURN_KEY = 'ozintel_admin_return_email';
 
 // ---------- Cookie helpers ----------
 const COOKIE_NAME = 'ozintel_user_email';
@@ -701,6 +703,49 @@ export default function HomePage({
     }
   };
 
+  const openAsUser = async (user: UserProfile) => {
+    if (!emailsMatch(user.email, ADMIN_SELF_EMAIL)) {
+      try {
+        localStorage.setItem(ADMIN_RETURN_KEY, ADMIN_SELF_EMAIL);
+      } catch {
+        /* ignore */
+      }
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const ok = await restoreFromServer(user.email, true);
+    if (!ok) {
+      setStatus(`❌ Could not open as ${user.name}.`);
+      return;
+    }
+    if (!user.permissions?.accounting) {
+      setStatus(
+        `Opened as ${user.name}. Tick Accounting first, then Capture Receipt will appear.`
+      );
+    } else {
+      setStatus(
+        `Opened as ${user.name} — their books and receipts only. Set shops and COA, test capture, then Restore my account.`
+      );
+    }
+  };
+
+  const restoreMyAccount = async () => {
+    let email = ADMIN_SELF_EMAIL;
+    try {
+      email = localStorage.getItem(ADMIN_RETURN_KEY) || ADMIN_SELF_EMAIL;
+    } catch {
+      email = ADMIN_SELF_EMAIL;
+    }
+    const ok = await restoreFromServer(email, true);
+    if (ok) {
+      try {
+        localStorage.removeItem(ADMIN_RETURN_KEY);
+      } catch {
+        /* ignore */
+      }
+      setStatus('Restored your account.');
+    }
+  };
+
   const updatePubOpsShare = async (ownerEmail: string, granteeEmail: string, enabled: boolean) => {
     const owner = allUsers.find(u => u.email === ownerEmail);
     if (!owner) return;
@@ -1125,6 +1170,32 @@ export default function HomePage({
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
 
+      {isAdminAuthenticated && currentUser && !emailsMatch(currentUser.email, ADMIN_SELF_EMAIL) && (
+        <div style={{
+          background: '#78350f',
+          border: '1px solid #f59e0b',
+          borderRadius: 12,
+          padding: '14px 16px',
+          margin: '12px auto',
+          maxWidth: 420,
+          textAlign: 'left',
+        }}>
+          <p style={{ margin: '0 0 10px', fontWeight: 700, color: '#fde68a' }}>
+            Testing as {currentUser.name}
+          </p>
+          <p style={{ margin: '0 0 12px', color: '#fed7aa', fontSize: '0.9rem' }}>
+            Books, shops, COA, and receipt capture are this account only. Restore yourself before handover.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Shops</a>
+            <a href="/coa" style={{ background: '#0ea5e9', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>COA</a>
+            <button type="button" onClick={() => void restoreMyAccount()} style={{ background: '#14532d', color: 'white', border: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>
+              Restore my account
+            </button>
+          </div>
+        </div>
+      )}
+
       {currentUser && (
         <div style={{ 
           background: currentUser.status === 'approved' ? '#14532d' : currentUser.status === 'blocked' ? '#450a0a' : '#78350f', 
@@ -1245,6 +1316,9 @@ export default function HomePage({
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <button onClick={() => setSelectedEditUser(selectedEditUser?.email === u.email ? null : u)} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                           {selectedEditUser?.email === u.email ? 'Close Edit' : 'Edit'}
+                        </button>
+                        <button onClick={() => void openAsUser(u)} style={{ background: '#7c3aed', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                          Open as
                         </button>
                         <button onClick={() => blockUser(u.email)} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                           Block

@@ -8,6 +8,7 @@ import os from "os";
 import { promises as fs } from "fs";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
+import { readMerchants } from "@/lib/accounting/merchants";
 import {
   parseReceiptOcrText,
   type ReceiptOcrSuggestion,
@@ -123,8 +124,9 @@ export async function readReceiptImage(image: Buffer): Promise<{
   text: string;
 }> {
   const text = await recognizeReceiptText(image);
+  const merchants = await readMerchants();
   return {
-    suggestion: parseReceiptOcrText(text),
+    suggestion: parseReceiptOcrText(text, merchants),
     text,
   };
 }

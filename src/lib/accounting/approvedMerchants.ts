@@ -124,26 +124,39 @@ export const APPROVED_RECEIPT_MERCHANTS: ApprovedMerchant[] = [
   },
 ];
 
-export function approvedMerchantByAlias(
+export function approvedMerchantByAliasFrom(
+  merchants: ApprovedMerchant[],
   alias: string
 ): ApprovedMerchant | undefined {
   const key = String(alias || "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
   if (!key) return undefined;
-  return APPROVED_RECEIPT_MERCHANTS.find(
+  return merchants.find(
     (m) => m.alias === key || (m.alsoAliases || []).includes(key)
   );
 }
 
+export function approvedMerchantByAlias(
+  alias: string
+): ApprovedMerchant | undefined {
+  return approvedMerchantByAliasFrom(APPROVED_RECEIPT_MERCHANTS, alias);
+}
+
 /** Bank-line match phrases keyed by every typed alias we accept. */
-export function approvedAliasBankTerms(): Record<string, string[]> {
+export function approvedAliasBankTermsFrom(
+  merchants: ApprovedMerchant[]
+): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const m of APPROVED_RECEIPT_MERCHANTS) {
+  for (const m of merchants) {
     out[m.alias] = m.bankTerms;
     for (const extra of m.alsoAliases || []) {
       out[extra] = m.bankTerms;
     }
   }
   return out;
+}
+
+export function approvedAliasBankTerms(): Record<string, string[]> {
+  return approvedAliasBankTermsFrom(APPROVED_RECEIPT_MERCHANTS);
 }

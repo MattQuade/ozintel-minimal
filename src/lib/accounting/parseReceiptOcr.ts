@@ -3,6 +3,7 @@
  * plus ranked total candidates. The confirm UI always remains the lock.
  */
 
+import type { ApprovedMerchant } from "@/lib/accounting/approvedMerchants";
 import { APPROVED_RECEIPT_MERCHANTS } from "@/lib/accounting/approvedMerchants";
 import {
   normalizeReceiptAlias,
@@ -332,7 +333,10 @@ function collectScoredAmounts(
   return [...byCents.values()];
 }
 
-export function detectMerchantFromOcr(text: string): {
+export function detectMerchantFromOcr(
+  text: string,
+  merchants: ApprovedMerchant[] = APPROVED_RECEIPT_MERCHANTS
+): {
   alias: string;
   label: string;
 } | null {
@@ -340,7 +344,7 @@ export function detectMerchantFromOcr(text: string): {
   if (!compact) return null;
 
   let best: { alias: string; label: string; len: number } | null = null;
-  for (const row of APPROVED_RECEIPT_MERCHANTS) {
+  for (const row of merchants) {
     for (const key of row.ocrKeys) {
       const needle = compactLetters(key);
       if (!compactContains(compact, needle)) continue;
@@ -394,12 +398,13 @@ export function detectAmountFromOcr(text: string): {
 }
 
 export function parseReceiptOcrText(
-  text: string
+  text: string,
+  merchants: ApprovedMerchant[] = APPROVED_RECEIPT_MERCHANTS
 ): ReceiptOcrSuggestion | null {
   const raw = normalizeOcrNoise(text).trim();
   if (!raw) return null;
 
-  const known = detectMerchantFromOcr(raw);
+  const known = detectMerchantFromOcr(raw, merchants);
   const amountHit = detectAmountFromOcr(raw);
   const amountCandidates = listAmountCandidates(raw);
   if (!amountHit && !amountCandidates.length && !known) return null;

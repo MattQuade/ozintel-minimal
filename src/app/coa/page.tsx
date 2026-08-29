@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AccountingGate from '@/components/AccountingGate';
 
 type COAAccount = {
@@ -12,7 +12,64 @@ type COAAccount = {
   isCapital?: boolean;
 };
 
+function truthy(raw: string): boolean {
+  const v = String(raw || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'y';
+}
+
+function parseCoaUpload(text: string): COAAccount[] {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+  if (raw.startsWith('[') || raw.startsWith('{')) {
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.accounts)
+        ? parsed.accounts
+        : [];
+    return list
+      .map((row: Record<string, unknown>) => ({
+        code: String(row.code || '').trim(),
+        name: String(row.name || '').trim(),
+        type: String(row.type || 'Expense'),
+        isBank: Boolean(row.isBank),
+        noGST: Boolean(row.noGST),
+        isCapital: Boolean(row.isCapital),
+      }))
+      .filter((row: COAAccount) => row.code && row.name);
+  }
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+  const header = lines[0].toLowerCase();
+  const hasHeader = header.includes('code') && header.includes('name');
+  const cols = hasHeader
+    ? lines[0].split(',').map((c) => c.trim().toLowerCase())
+    : ['code', 'name', 'type', 'nogst', 'isbank', 'iscapital'];
+  const start = hasHeader ? 1 : 0;
+  const out: COAAccount[] = [];
+  for (const line of lines.slice(start)) {
+    const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
+    const row: Record<string, string> = {};
+    cols.forEach((col, i) => {
+      row[col] = parts[i] || '';
+    });
+    const code = (row.code || parts[0] || '').trim();
+    const name = (row.name || parts[1] || '').trim();
+    if (!code || !name) continue;
+    out.push({
+      code,
+      name,
+      type: row.type || parts[2] || 'Expense',
+      noGST: truthy(row.nogst || row['no gst'] || ''),
+      isBank: truthy(row.isbank || row.bank || ''),
+      isCapital: truthy(row.iscapital || row.capital || ''),
+    });
+  }
+  return out;
+}
+
 export default function COAPage() {
+  const fileRef = useRef<HTMLInputElement>(null);
   const [accounts, setAccounts] = useState<COAAccount[]>([]);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [editData, setEditData] = useState<COAAccount | null>(null);
@@ -68,10 +125,34 @@ export default function COAPage() {
     }
   };
 
+  const uploadChart = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = parseCoaUpload(text);
+      if (parsed.length === 0) {
+        setStatus('No accounts found in that file');
+        return;
+      }
+      if (
+        !confirm(
+          `Replace this account’s Chart of Accounts with ${parsed.length} uploaded accounts?`
+        )
+      ) {
+        return;
+      }
+      await saveToServer(parsed);
+      setStatus(`Uploaded ${parsed.length} accounts`);
+    } catch {
+      setStatus('Could not read that chart file');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
   const syncDefaults = async () => {
     if (
       !confirm(
-        'Replace the Chart of Accounts with the London Aussie / Xero chart from the app seed? This overwrites the current account list on the server.'
+        'Replace this account’s Chart of Accounts with the starter chart? This overwrites the current list.'
       )
     ) {
       return;
@@ -213,6 +294,22 @@ export default function COAPage() {
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".json,.csv,.txt,application/json,text/csv,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadChart(file);
+              }}
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-2xl"
+            >
+              Upload chart
+            </button>
             <button
               onClick={syncDefaults}
               className="bg-slate-700 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl"

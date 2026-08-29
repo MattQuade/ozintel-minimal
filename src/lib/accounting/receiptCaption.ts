@@ -56,16 +56,17 @@ export function captionMerchantMatches(
     description?: string;
     accountName?: string;
     category?: string;
-  }
+  },
+  terms: Record<string, string[]> = ALIAS_TERMS
 ): boolean {
   const key = normalizeReceiptAlias(alias);
   if (!key) return false;
   const hay = haystackOf([parts.description, parts.accountName, parts.category]);
   if (!hay.trim()) return false;
 
-  const terms = ALIAS_TERMS[key];
-  if (terms) {
-    return terms.some((term) => {
+  const matchedTerms = terms[key];
+  if (matchedTerms) {
+    return matchedTerms.some((term) => {
       if (term.length <= 2) {
         const re = new RegExp(`(?:^|[^a-z0-9])${term}(?:[^a-z0-9]|$)`, "i");
         return re.test(hay);
@@ -129,7 +130,8 @@ function receiptMatchFields(receipt: CaptionMatchReceipt): {
  */
 export function pickUniqueCaptionMatches(
   receipts: CaptionMatchReceipt[],
-  entries: CaptionMatchEntry[]
+  entries: CaptionMatchEntry[],
+  terms: Record<string, string[]> = ALIAS_TERMS
 ): Array<{ receiptId: string; entryId: string }> {
   const openReceipts = receipts.filter(
     (r) => !Array.isArray(r.ledgerEntryIds) || r.ledgerEntryIds.length === 0
@@ -152,7 +154,7 @@ export function pickUniqueCaptionMatches(
           description: entry.description,
           accountName: entry.accountName,
           category: entry.category,
-        })
+        }, terms)
       ) {
         continue;
       }

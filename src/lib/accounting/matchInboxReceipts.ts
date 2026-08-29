@@ -3,6 +3,8 @@ import {
   listUnmatchedCaptionedReceipts,
 } from "@/lib/accounting/receipts";
 import { pickUniqueCaptionMatches } from "@/lib/accounting/receiptCaption";
+import { approvedAliasBankTermsFrom } from "@/lib/accounting/approvedMerchants";
+import { readMerchants } from "@/lib/accounting/merchants";
 import type { LedgerEntry } from "@/lib/accounting/store";
 
 /**
@@ -20,7 +22,12 @@ export async function attachInboxReceiptsToBankImportEntries(
   const inbox = await listUnmatchedCaptionedReceipts();
   if (inbox.length === 0) return savedEntries;
 
-  const matches = pickUniqueCaptionMatches(inbox, importEntries);
+  const merchants = await readMerchants();
+  const matches = pickUniqueCaptionMatches(
+    inbox,
+    importEntries,
+    approvedAliasBankTermsFrom(merchants)
+  );
   if (matches.length === 0) return savedEntries;
 
   const attachedIds = new Map<string, string[]>();

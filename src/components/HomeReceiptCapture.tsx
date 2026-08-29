@@ -5,7 +5,7 @@ import {
   prepareReceiptFile,
   prepareReceiptFileForOcr,
 } from '@/lib/client/compressReceiptImage';
-import { APPROVED_RECEIPT_MERCHANTS } from '@/lib/accounting/approvedMerchants';
+import { APPROVED_RECEIPT_MERCHANTS, type ApprovedMerchant } from '@/lib/accounting/approvedMerchants';
 import {
   normalizeReceiptAlias,
   parseReceiptCaption,
@@ -105,6 +105,9 @@ export default function HomeReceiptCapture() {
   const [hint, setHint] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [merchants, setMerchants] = useState<ApprovedMerchant[]>(
+    APPROVED_RECEIPT_MERCHANTS
+  );
 
   const effectiveAlias = alias || normalizeReceiptAlias(otherAlias);
   const typedAmount = parseTypedAmount(amountText);
@@ -113,6 +116,22 @@ export default function HomeReceiptCapture() {
     effectiveAlias && effectiveAmount && effectiveAmount > 0
       ? parseReceiptCaption(`${effectiveAlias} ${effectiveAmount.toFixed(2)}`)
       : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/merchants', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.merchants) || data.merchants.length === 0) {
+          return;
+        }
+        setMerchants(data.merchants);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -380,7 +399,7 @@ export default function HomeReceiptCapture() {
             Shop
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-            {[...APPROVED_RECEIPT_MERCHANTS]
+            {[...merchants]
               .sort((a, b) => a.label.localeCompare(b.label, 'en'))
               .map((m) => (
               <button

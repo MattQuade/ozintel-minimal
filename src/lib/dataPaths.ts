@@ -141,6 +141,11 @@ export function getReceiptsMetaFilePath(): string {
   return path.join(getReceiptsDir(), "receipts.json");
 }
 
+/** Per-owner receipt shop chips (alias / label / bank terms). */
+export function getMerchantsFilePath(): string {
+  return path.join(getAccountingDataDir(), "merchants.json");
+}
+
 export function getReceiptFilesDir(): string {
   return path.join(getReceiptsDir(), "files");
 }

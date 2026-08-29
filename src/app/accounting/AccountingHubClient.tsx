@@ -27,6 +27,10 @@ const previewLinks = [
     label: "Transactions",
   },
   {
+    href: "/accounting/pending?module=Accounting&section=Shops",
+    label: "Shops",
+  },
+  {
     href: "/accounting/pending?module=Accounting&section=Receipts",
     label: "Receipts",
   },
@@ -43,6 +47,7 @@ const previewLinks = [
 const fullLinks = [
   { href: "/bank/accounts", label: "Bank" },
   { href: "/coa", label: "Chart of Accounts" },
+  { href: "/accounting/shops", label: "Shops" },
   { href: "/invoices", label: "Invoices" },
   { href: "/customers", label: "Customers" },
   { href: "/journal", label: "Journal" },
