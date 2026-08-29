@@ -59,7 +59,7 @@ const greyBtn: CSSProperties = {
   touchAction: 'manipulation',
 };
 
-const OCR_CLIENT_MS = 10_000;
+const OCR_CLIENT_MS = 28_000;
 
 function chipStyle(selected: boolean): CSSProperties {
   return {
@@ -191,7 +191,7 @@ export default function HomeReceiptCapture() {
     setAmount(null);
     setAmountText('');
     setAmountChoices([]);
-    setHint('Pick the shop — reading total…');
+    setHint('Reading shop and total…');
     setStatus('');
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), OCR_CLIENT_MS);
@@ -199,7 +199,7 @@ export default function HomeReceiptCapture() {
       try {
         const forOcr = await prepareReceiptFileForOcr(file);
         if (ac.signal.aborted) {
-          setHint('Pick the shop and type the total');
+          setHint('Still reading — pick the shop if you need to go ahead');
           return;
         }
         const form = new FormData();
@@ -216,7 +216,7 @@ export default function HomeReceiptCapture() {
 
         if (res.status === 401 || res.status === 403) {
           setHint(
-            'Restore your account on Home first — reading needs you signed in'
+            'This account needs Accounting ticked so the photo can be read'
           );
           return;
         }
@@ -240,11 +240,16 @@ export default function HomeReceiptCapture() {
           setAlias(String(data.suggestion.alias));
           setOtherAlias('');
         }
-        if (!amountTouchedRef.current && data.suggestion?.lockAmount) {
+        if (!amountTouchedRef.current) {
           const suggestedAmount = Number(data.suggestion?.amount);
           if (Number.isFinite(suggestedAmount) && suggestedAmount > 0) {
-            setAmount(suggestedAmount);
-            setAmountText('');
+            if (
+              data.suggestion?.lockAmount ||
+              choices.includes(suggestedAmount)
+            ) {
+              setAmount(suggestedAmount);
+              setAmountText('');
+            }
           }
         }
 
@@ -259,8 +264,12 @@ export default function HomeReceiptCapture() {
         } else {
           setHint('Could not read this photo — pick the shop and type the total');
         }
-      } catch {
-        setHint('Pick the shop and type the total');
+      } catch (err) {
+        if (ac.signal.aborted) {
+          setHint('Still reading — pick the shop if you need to go ahead');
+          return;
+        }
+        setHint('Could not read this photo — pick the shop and type the total');
       }
     };
     void run();

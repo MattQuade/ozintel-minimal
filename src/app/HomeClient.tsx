@@ -721,24 +721,23 @@ export default function HomePage({
       }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    const listed = allUsers.find((u) => emailsMatch(u.email, user.email));
+    await updatePermissions(user.email, 'accounting', true);
     const ok = await restoreFromServer(user.email, true);
     if (!ok) {
       setStatus(`❌ Could not open as ${user.name}.`);
       return;
     }
-    const accountingOn = Boolean(
-      listed?.permissions?.accounting || user.permissions?.accounting
-    );
-    if (!accountingOn) {
-      setStatus(
-        `Opened as ${user.name}. Tick Accounting on this user, then Capture Receipt will work.`
-      );
-    } else {
-      setStatus(
-        `Opened as ${user.name} — capture is under this banner. Shops and COA are this account only.`
-      );
+    try {
+      await fetch(`${API_BASE}/api/merchants`, {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+    } catch {
+      /* silo warmup — capture still works if this fails */
     }
+    setStatus(
+      `Opened as ${user.name} — capture, read, shops, and COA are this account. Restore yourself before handover.`
+    );
   };
 
   const restoreMyAccount = async () => {
@@ -1211,7 +1210,7 @@ export default function HomePage({
             Testing as {currentUser.name}
           </p>
           <p style={{ margin: '0 0 12px', color: '#fed7aa', fontSize: '0.9rem' }}>
-            Books, shops, COA, and receipt capture are this account only. Restore yourself before handover.
+            Camera, read, shops, and COA are this account only. Restore yourself before handover.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Shops</a>
