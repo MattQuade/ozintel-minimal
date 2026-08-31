@@ -109,7 +109,7 @@ function InvoicesContent() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Invoices</h1>
           <p className="text-slate-500 mt-1">
-            AR invoicing — authorise posts to ledger
+            AR invoicing — bank deposits mark invoices paid when they uniquely match
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

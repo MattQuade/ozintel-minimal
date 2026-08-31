@@ -674,9 +674,10 @@ export default function InvoiceDetailPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Used with bank deposits for auto-reconcile. When a deposit amount
-                  matches amount due and the bank description contains this keyword,
-                  the payment is applied automatically. Also prints as Payment
+                  Used with bank deposits. When a deposit amount matches amount
+                  due and the bank text uniquely contains this keyword, the
+                  customer name, or the invoice number, reconciling that
+                  deposit marks the invoice paid. Also prints as Payment
                   Reference.
                 </p>
               </div>

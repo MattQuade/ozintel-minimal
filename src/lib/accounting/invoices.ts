@@ -1062,7 +1062,9 @@ export async function allocateBankDepositToInvoice(input: {
   }
 
   const noteParts = [
-    input.autoMatched ? "Auto-reconciled from bank import" : "Allocated from bank import",
+    input.autoMatched
+      ? "Auto-allocated from bank deposit"
+      : "Allocated from bank import",
     desc ? `“${desc.slice(0, 120)}”` : "",
     `bank-import:${bankImportKey}`,
   ].filter(Boolean);
@@ -1077,8 +1079,65 @@ export async function allocateBankDepositToInvoice(input: {
   });
 }
 
+const INVOICE_LEDGER_SOURCES = new Set([
+  "invoice",
+  "invoice-void",
+  "invoice-payment",
+]);
+
 /**
- * Auto-match one deposit to a unique open invoice (keyword + amountDue).
+ * If a bank deposit uniquely matches an open invoice, post the payment
+ * journal (Dr bank / Cr AR) and mark the invoice paid. Replaces the
+ * original ledger row so the deposit is not counted twice.
+ */
+export async function tryAllocateLedgerDepositToInvoice(entry: {
+  id?: string;
+  amount?: number;
+  date?: string;
+  description?: string;
+  bankAccountId?: string;
+  accountCode?: string;
+  source?: string;
+}): Promise<Invoice | null> {
+  try {
+    const id = String(entry?.id || "").trim();
+    if (!id) return null;
+    if (INVOICE_LEDGER_SOURCES.has(String(entry.source || ""))) return null;
+    const amount = Number(entry.amount) || 0;
+    if (!isDepositAmount(amount)) return null;
+
+    const banks = await readBankAccounts();
+    const bankAccountId = String(
+      entry.bankAccountId ||
+        banks.find((b) => b.id === String(entry.accountCode || ""))?.id ||
+        ""
+    ).trim();
+    if (!bankAccountId) return null;
+
+    const matched = await autoMatchDepositToInvoice({
+      amount,
+      description: String(entry.description || ""),
+    });
+    if (!matched) return null;
+
+    return allocateBankDepositToInvoice({
+      invoiceId: matched.id,
+      amount,
+      date: String(entry.date || ""),
+      bankAccountId,
+      description: String(entry.description || ""),
+      replaceLedgerEntryId: id,
+      autoMatched: true,
+    });
+  } catch (error) {
+    console.error("[invoices] Auto-allocate bank deposit failed", error);
+    return null;
+  }
+}
+
+/**
+ * Auto-match one deposit to a unique open invoice (amount due plus number,
+ * keyword, or customer name in the bank text).
  * Returns null when no unique match.
  */
 export async function autoMatchDepositToInvoice(opts: {

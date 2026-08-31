@@ -283,6 +283,10 @@ export default function BankImport() {
       const receiptIds = Array.isArray(item.receiptIds)
         ? item.receiptIds.filter((id) => typeof id === 'string' && id.trim())
         : [];
+      const ruleObj =
+        typeof item.rule === 'object' && item.rule
+          ? (item.rule as BankRule)
+          : null;
       return {
         date: toIsoDateInput(String(item.original[0] ?? '')) || item.original[0],
         amount: parseFloat(String(item.original[1] || 0)),
@@ -292,7 +296,7 @@ export default function BankImport() {
         accountName: item.accountName || '',
         noGST: Boolean(item.noGST),
         hasGST: !item.noGST,
-        reconciled: false,
+        reconciled: ruleObj?.autoReconcile !== false && Boolean(ruleObj),
         category:
           typeof item.rule === 'object' && item.rule && 'name' in (item.rule as object)
             ? String((item.rule as { name?: string }).name || 'Manual')
@@ -338,6 +342,10 @@ export default function BankImport() {
         const data = await res.json();
         count += data.saved || toSave.length;
         inboxAttached = Number(data.inboxAttached) || 0;
+        const extraPaid = Array.isArray(data.allocatedInvoices)
+          ? data.allocatedInvoices.length
+          : 0;
+        allocated += extraPaid;
         const savedEntries = Array.isArray(data.savedEntries)
           ? data.savedEntries
           : [];

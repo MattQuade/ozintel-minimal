@@ -537,9 +537,10 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
             placeholder="e.g. job name or reference"
           />
           <p className="text-xs text-slate-500 mt-1">
-            Used with bank deposits for auto-reconcile. When a deposit amount
-            matches amount due and the bank description contains this keyword,
-            the payment is applied automatically.
+            Used with bank deposits. When a deposit amount matches amount due
+            and the bank text uniquely contains this keyword, the customer
+            name, or the invoice number, the invoice is marked paid
+            automatically.
           </p>
         </div>
 

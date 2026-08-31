@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { appendLedgerEntries } from "@/lib/accounting/store";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 import { attachInboxReceiptsToBankImportEntries } from "@/lib/accounting/matchInboxReceipts";
+import { tryAllocateLedgerDepositToInvoice } from "@/lib/accounting/invoices";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -31,6 +32,23 @@ export async function POST(req: Request) {
       const savedEntries = await attachInboxReceiptsToBankImportEntries(
         result.savedEntries
       );
+      const allocatedInvoices: Array<{
+        id: string;
+        number: string;
+        status: string;
+        amountDue: number;
+      }> = [];
+      for (const entry of savedEntries) {
+        const invoice = await tryAllocateLedgerDepositToInvoice(entry);
+        if (invoice) {
+          allocatedInvoices.push({
+            id: invoice.id,
+            number: invoice.number,
+            status: invoice.status,
+            amountDue: invoice.amountDue,
+          });
+        }
+      }
       const inboxAttached = savedEntries.reduce((n, entry, i) => {
         const before = Array.isArray(result.savedEntries[i]?.receiptIds)
           ? result.savedEntries[i].receiptIds!.length
@@ -43,7 +61,10 @@ export async function POST(req: Request) {
 
       console.log(
         `Saved ${result.saved} transactions. Total now: ${result.total}` +
-          (inboxAttached ? ` (${inboxAttached} receipt(s) auto-attached)` : "")
+          (inboxAttached ? ` (${inboxAttached} receipt(s) auto-attached)` : "") +
+          (allocatedInvoices.length
+            ? ` (${allocatedInvoices.length} invoice payment(s) auto-allocated)`
+            : "")
       );
 
       return NextResponse.json({
@@ -52,6 +73,7 @@ export async function POST(req: Request) {
         total: result.total,
         savedEntries,
         inboxAttached,
+        allocatedInvoices,
       });
     } catch (err: unknown) {
       console.error("Save Error:", err);

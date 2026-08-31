@@ -38,6 +38,7 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const loadTransactions = async () => {
     const [ledRes, coaRes] = await Promise.all([
@@ -101,8 +102,20 @@ export default function JournalPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: tx.id, reconciled: next }),
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       alert('Failed to update reconciliation');
+      return;
+    }
+    if (data.allocatedInvoice) {
+      const inv = data.allocatedInvoice as {
+        number?: string;
+        status?: string;
+      };
+      await loadTransactions();
+      setNotice(
+        `Invoice ${inv.number || ''} marked ${inv.status || 'paid'} from this deposit`
+      );
       return;
     }
     setTransactions((prev) =>
@@ -182,6 +195,9 @@ export default function JournalPage() {
               {transactions.length} total • {openCount} unreconciled
               {loading ? ' • loading…' : ''}
             </p>
+            {notice && (
+              <p className="text-sm text-green-800 mt-2">{notice}</p>
+            )}
           </div>
           <div className="flex gap-3">
             <button

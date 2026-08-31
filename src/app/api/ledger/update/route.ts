@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { updateLedgerEntry } from "@/lib/accounting/store";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
+import { tryAllocateLedgerDepositToInvoice } from "@/lib/accounting/invoices";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -20,7 +21,22 @@ export async function POST(req: Request) {
       if (Array.isArray(updated.receiptIds) && updated.receiptIds.length > 0) {
         await registerLedgerEntryOnReceipts(updated.receiptIds, updated.id);
       }
-      return NextResponse.json({ success: true, entry: updated });
+      let allocatedInvoice = null;
+      if (updated.reconciled && (Number(updated.amount) || 0) > 0) {
+        allocatedInvoice = await tryAllocateLedgerDepositToInvoice(updated);
+      }
+      return NextResponse.json({
+        success: true,
+        entry: allocatedInvoice ? null : updated,
+        allocatedInvoice: allocatedInvoice
+          ? {
+              id: allocatedInvoice.id,
+              number: allocatedInvoice.number,
+              status: allocatedInvoice.status,
+              amountDue: allocatedInvoice.amountDue,
+            }
+          : null,
+      });
     } catch (err) {
       console.error(err);
       const message =
