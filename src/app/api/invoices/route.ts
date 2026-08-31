@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
   deleteInvoice,
+  ensureGrongGrongInvoice246A,
   readInvoices,
   upsertInvoice,
 } from "@/lib/accounting/invoices";
@@ -15,6 +16,9 @@ export async function GET(req: Request) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
+      await ensureGrongGrongInvoice246A().catch((error) => {
+        console.error("[invoices] 246A backfill skipped", error);
+      });
       const invoices = await readInvoices();
       invoices.sort(compareInvoiceLedgerOrder);
       return NextResponse.json(invoices);

@@ -1,5 +1,9 @@
 import { readCoa, type CoaAccount } from "@/lib/accounting/store";
 import {
+  DEFAULT_INVOICE_REVENUE_CODE,
+  defaultInvoiceRevenueCode,
+} from "@/lib/accounting/invoiceDefaults";
+import {
   upsertInvoice,
   type Invoice,
   type InvoiceLine,
@@ -220,7 +224,10 @@ export async function applyInvoiceVoiceField(input: {
 
   const coa = await readCoa();
   const revenue = coa.filter((a) => a.type === "Revenue");
-  const defaultCode = revenue[0]?.code || invoice.lines[0]?.accountCode || "0105";
+  const defaultCode =
+    defaultInvoiceRevenueCode(revenue) ||
+    invoice.lines[0]?.accountCode ||
+    DEFAULT_INVOICE_REVENUE_CODE;
 
   let lines = invoice.lines.map((l) => ({ ...l }));
   let line: InvoiceLine;

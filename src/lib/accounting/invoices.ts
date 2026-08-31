@@ -12,6 +12,7 @@ import {
   replaceLedgerEntries,
   type LedgerEntry,
 } from "@/lib/accounting/store";
+import { DEFAULT_INVOICE_REVENUE_CODE } from "@/lib/accounting/invoiceDefaults";
 import { getCustomerById, readCustomers } from "@/lib/accounting/customers";
 import {
   amountsMatch,
@@ -216,13 +217,41 @@ export async function createDraftFromCustomerLast(
   );
 
   const template = await getLastInvoiceForCustomer(customer.id);
+  const today = new Date().toISOString().slice(0, 10);
+  const dueDate = new Date(Date.now() + 14 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+
   if (!template || !template.lines?.length) {
-    throw new Error(
-      `No previous invoice for ${customer.name} — create the first one from scratch`
-    );
+    if (existingDraft) {
+      return {
+        invoice: existingDraft,
+        reusedDraft: true,
+        fromInvoiceNumber: existingDraft.number,
+      };
+    }
+    const invoice = await upsertInvoice({
+      customerId: customer.id,
+      issueDate: today,
+      dueDate,
+      subject: "Draught",
+      lines: [
+        {
+          description: "Draught",
+          quantity: 1,
+          unitPrice: 0,
+          accountCode: DEFAULT_INVOICE_REVENUE_CODE,
+          hasGST: true,
+        },
+      ],
+    });
+    return {
+      invoice,
+      reusedDraft: false,
+      fromInvoiceNumber: "",
+    };
   }
 
-  // Only an open draft exists — open it rather than cloning onto itself
   if (existingDraft && template.id === existingDraft.id) {
     return {
       invoice: existingDraft,
@@ -230,11 +259,6 @@ export async function createDraftFromCustomerLast(
       fromInvoiceNumber: existingDraft.number,
     };
   }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const dueDate = new Date(Date.now() + 14 * 86400000)
-    .toISOString()
-    .slice(0, 10);
 
   const clonedLines: Partial<InvoiceLine>[] = template.lines.map((l) => ({
     description: l.description,
@@ -1250,7 +1274,7 @@ export async function ensureGrongGrongInvoice246A(): Promise<void> {
           description: template?.description || "Draught",
           quantity: 1,
           unitPrice: unitExGst,
-          accountCode: template?.accountCode || "0105",
+          accountCode: template?.accountCode || DEFAULT_INVOICE_REVENUE_CODE,
           hasGST: true,
         },
       ],

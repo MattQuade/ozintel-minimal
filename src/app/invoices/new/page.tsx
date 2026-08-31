@@ -7,6 +7,7 @@ import AccountingGate from '@/components/AccountingGate';
 import InvoiceEditorForm from '@/components/invoices/InvoiceEditorForm';
 import VoiceNavBar from '@/components/VoiceNavBar';
 import { parsePlatformVoiceCommand } from '@/lib/voice/platformNav';
+import { readResponseJson } from '@/lib/readResponseJson';
 
 type Customer = { id: string; name: string };
 
@@ -80,8 +81,12 @@ function NewInvoiceContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customerId: id }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      const data = await readResponseJson<{
+        success?: boolean;
+        error?: string;
+        invoice?: { id: string };
+      }>(res);
+      if (!res.ok || !data.success || !data.invoice?.id) {
         throw new Error(
           data.error || 'Could not create draft from last invoice'
         );
@@ -115,7 +120,13 @@ function NewInvoiceContent() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ transcript: text }),
             });
-            const data = await res.json();
+            const data = await readResponseJson<{
+              success?: boolean;
+              error?: string;
+              href?: string;
+              ambiguous?: boolean;
+              candidates?: Customer[];
+            }>(res);
             if (data.ambiguous && Array.isArray(data.candidates)) {
               setCandidates(
                 data.candidates.map((c: Customer) => ({
@@ -146,7 +157,11 @@ function NewInvoiceContent() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ transcript: text }),
             });
-            const data = await res.json();
+            const data = await readResponseJson<{
+              success?: boolean;
+              error?: string;
+              href?: string;
+            }>(res);
             if (!res.ok || !data.success) {
               throw new Error(data.error || 'Voice command failed');
             }
@@ -164,7 +179,13 @@ function NewInvoiceContent() {
             customerId: pickCustomerId || undefined,
           }),
         });
-        const data = await res.json();
+        const data = await readResponseJson<{
+          success?: boolean;
+          error?: string;
+          invoice?: { id: string };
+          ambiguous?: boolean;
+          candidates?: Customer[];
+        }>(res);
         if (data.ambiguous && Array.isArray(data.candidates)) {
           setCandidates(
             data.candidates.map((c: Customer) => ({
@@ -176,7 +197,7 @@ function NewInvoiceContent() {
           setBusy(false);
           return;
         }
-        if (!res.ok || !data.success) {
+        if (!res.ok || !data.success || !data.invoice?.id) {
           throw new Error(data.error || 'Voice command failed');
         }
         router.push(`/invoices/${data.invoice.id}`);

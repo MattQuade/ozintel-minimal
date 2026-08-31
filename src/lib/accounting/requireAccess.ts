@@ -11,7 +11,6 @@ import {
 } from "@/lib/dataOwnerContext";
 import { ensureOwnerSiloMigration } from "@/lib/migrateOwnerSilos";
 import { ensureOwnerAccountingSilo } from "@/lib/accounting/store";
-import { ensureGrongGrongInvoice246A } from "@/lib/accounting/invoices";
 
 const COOKIE_NAME = "ozintel_user_email";
 
@@ -120,9 +119,7 @@ export async function requireAccountingAccess(
   });
   if (!access.ok) return access;
   await ensureOwnerAccountingSilo(access.user.email);
-  const result = withOwnerRun(access.user, access.user.email);
-  await result.run(() => ensureGrongGrongInvoice246A());
-  return result;
+  return withOwnerRun(access.user, access.user.email);
 }
 
 /**

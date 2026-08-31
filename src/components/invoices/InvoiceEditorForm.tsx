@@ -9,6 +9,11 @@ import {
   computeInvoiceTotals,
   computeLineTotals,
 } from '@/lib/accounting/invoiceMath';
+import {
+  DEFAULT_INVOICE_REVENUE_CODE,
+  defaultInvoiceRevenueCode,
+} from '@/lib/accounting/invoiceDefaults';
+import { readResponseJson } from '@/lib/readResponseJson';
 
 type Customer = { id: string; name: string };
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
@@ -78,7 +83,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
       description: '',
       quantity: '1',
       unitPrice: '',
-      accountCode: '0105',
+      accountCode: DEFAULT_INVOICE_REVENUE_CODE,
       hasGST: true,
     },
   ]);
@@ -107,7 +112,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
       try {
         const res = await fetch(`/api/invoices/${invoiceId}`);
         if (!res.ok) throw new Error('Invoice not found');
-        const data = await res.json();
+        const data = await readResponseJson<Record<string, unknown> & { status?: string; customerId?: string }>(res);
         if (cancelled) return;
         if (data.status === 'void') {
           setError('Void invoices cannot be edited.');
@@ -146,7 +151,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                   l.unitPrice == null || Number.isNaN(Number(l.unitPrice))
                     ? ''
                     : String(l.unitPrice),
-                accountCode: String(l.accountCode || '0105'),
+                accountCode: String(l.accountCode || DEFAULT_INVOICE_REVENUE_CODE),
                 hasGST: l.hasGST !== false,
               })
             )
@@ -160,7 +165,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                   description: '',
                   quantity: '1',
                   unitPrice: '',
-                  accountCode: '0105',
+                  accountCode: DEFAULT_INVOICE_REVENUE_CODE,
                   hasGST: true,
                 },
               ]
@@ -256,8 +261,14 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Save failed');
+      const data = await readResponseJson<{
+        success?: boolean;
+        error?: string;
+        invoice?: { id: string };
+      }>(res);
+      if (!res.ok || !data.success || !data.invoice?.id) {
+        throw new Error(data.error || 'Save failed');
+      }
       router.push(`/invoices/${data.invoice.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -389,7 +400,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                       description: 'Discount',
                       quantity: '1',
                       unitPrice: '',
-                      accountCode: revenueAccounts[0]?.code || '0105',
+                      accountCode: defaultInvoiceRevenueCode(revenueAccounts),
                       hasGST: true,
                     },
                   ])
@@ -408,7 +419,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                       description: '',
                       quantity: '1',
                       unitPrice: '',
-                      accountCode: revenueAccounts[0]?.code || '0105',
+                      accountCode: defaultInvoiceRevenueCode(revenueAccounts),
                       hasGST: true,
                     },
                   ])

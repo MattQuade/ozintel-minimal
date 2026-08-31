@@ -11,10 +11,10 @@ import {
   parseVoiceInvoiceTranscript,
 } from "@/lib/invoices/voiceInvoiceParse";
 
+import { DEFAULT_INVOICE_REVENUE_CODE } from "@/lib/accounting/invoiceDefaults";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const DEFAULT_REVENUE_CODE = "0105";
 
 /**
  * Voice / typed invoice command → draft invoice.
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
           description: l.description,
           quantity: l.quantity,
           unitPrice: l.unitPrice,
-          accountCode: DEFAULT_REVENUE_CODE,
+          accountCode: DEFAULT_INVOICE_REVENUE_CODE,
           hasGST: true,
         })),
       });
