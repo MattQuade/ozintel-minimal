@@ -8,6 +8,7 @@ import {
   type Invoice,
   type InvoiceLine,
 } from "@/lib/accounting/invoices";
+import { inclusiveFromExclusive } from "@/lib/accounting/invoiceMath";
 import { titleCaseSubject } from "@/lib/invoices/invoiceBrand";
 import { parseSpokenDate } from "@/lib/voice/spokenDate";
 import { parseSpokenAmount } from "@/lib/voice/spokenNumberSuffix";
@@ -139,7 +140,7 @@ export function fieldPrompt(field: InvoiceVoiceField): string {
     case "quantity":
       return "Say the quantity…";
     case "unitPrice":
-      return "Say the unit price…";
+      return "Say the unit price including GST…";
     case "account":
       return "Say the account…";
     case "tax":
@@ -229,7 +230,13 @@ export async function applyInvoiceVoiceField(input: {
     invoice.lines[0]?.accountCode ||
     DEFAULT_INVOICE_REVENUE_CODE;
 
-  let lines = invoice.lines.map((l) => ({ ...l }));
+  let lines = invoice.lines.map((l) => ({
+    ...l,
+    unitPrice:
+      invoice.pricesIncludeGst || !l.hasGST
+        ? l.unitPrice
+        : inclusiveFromExclusive(l.unitPrice, true),
+  }));
   let line: InvoiceLine;
 
   if (createLine) {
@@ -274,6 +281,7 @@ export async function applyInvoiceVoiceField(input: {
   const updated = await upsertInvoice({
     id: invoice.id,
     lines,
+    pricesIncludeGst: true,
   });
   const label = createLine
     ? `Added line “${line.description}”`

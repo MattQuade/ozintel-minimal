@@ -8,6 +8,10 @@ import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
 import {
   computeInvoiceTotals,
   computeLineTotals,
+  exclusiveFromInclusive,
+  formatUnitPriceInput,
+  inclusiveFromExclusive,
+  storedUnitToInput,
 } from '@/lib/accounting/invoiceMath';
 import {
   DEFAULT_INVOICE_REVENUE_CODE,
@@ -46,6 +50,7 @@ function lineForMath(line: LineDraft) {
     quantity: parseDraftNumber(line.quantity),
     unitPrice: parseDraftNumber(line.unitPrice),
     hasGST: line.hasGST,
+    unitPriceIncludesGst: true,
   };
 }
 
@@ -128,6 +133,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         setNotes(String(data.notes || ''));
         setMatchKeyword(String(data.matchKeyword || ''));
         setInvoiceNumber(displayInvoiceNumber(String(data.number || '')));
+        const pricesIncludeGst = Boolean(data.pricesIncludeGst);
         const loaded: LineDraft[] = Array.isArray(data.lines)
           ? data.lines.map(
               (
@@ -147,10 +153,11 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                   l.quantity == null || Number.isNaN(Number(l.quantity))
                     ? ''
                     : String(l.quantity),
-                unitPrice:
-                  l.unitPrice == null || Number.isNaN(Number(l.unitPrice))
-                    ? ''
-                    : String(l.unitPrice),
+                unitPrice: storedUnitToInput(
+                  Number(l.unitPrice),
+                  l.hasGST !== false,
+                  pricesIncludeGst
+                ),
                 accountCode: String(l.accountCode || DEFAULT_INVOICE_REVENUE_CODE),
                 hasGST: l.hasGST !== false,
               })
@@ -212,6 +219,16 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
           const acc = revenueAccounts.find((a) => a.code === patch.accountCode);
           if (acc?.noGST) next.hasGST = false;
         }
+        if (
+          next.hasGST !== line.hasGST &&
+          line.unitPrice.trim() !== '' &&
+          patch.unitPrice === undefined
+        ) {
+          const typed = parseDraftNumber(line.unitPrice);
+          next.unitPrice = next.hasGST
+            ? formatUnitPriceInput(inclusiveFromExclusive(typed, true))
+            : formatUnitPriceInput(exclusiveFromInclusive(typed, true));
+        }
         return next;
       })
     );
@@ -241,6 +258,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         subject: subject.trim(),
         notes,
         matchKeyword,
+        pricesIncludeGst: true,
         lines: lines
           .filter((l) => l.description.trim())
           .map((l) => ({
@@ -293,7 +311,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
           ? invoiceStatus === 'draft'
             ? 'Save to update the draft. Return to the invoice to preview the tax invoice layout, then authorise when ready.'
             : 'Save updates the invoice and replaces the AR / revenue / GST journal. Payments already recorded stay as they are.'
-          : 'Saves as draft. Authorise from the invoice page to post AR / revenue / GST. Use a line description containing "Discount" (or a negative unit) to reduce the total.'}
+          : 'Saves as draft. Authorise from the invoice page to post AR / revenue / GST. Type GST-inclusive unit prices — GST is 1/11 of each line. Use a line description containing "Discount" (or a negative unit) to reduce the total.'}
       </p>
 
       {customers.length === 0 && (
@@ -464,7 +482,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-xs text-slate-500 mb-1">
-                      Unit (ex GST)
+                      {line.hasGST ? 'Unit (incl GST)' : 'Unit'}
                     </label>
                     <input
                       type="number"
@@ -487,6 +505,9 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                       value={money(Math.abs(lineTot.gst))}
                       aria-label="Line GST"
                     />
+                    <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
+                      Line {money(Math.abs(lineTot.incl))} incl
+                    </p>
                   </div>
                   <div className="md:col-span-3">
                     <label className="block text-xs text-slate-500 mb-1">
@@ -567,11 +588,14 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-4">
           <div className="text-sm text-slate-600 space-y-1">
-            <div>Subtotal (ex GST): {money(totals.subtotal)}</div>
-            {totals.discountTotal > 0.009 && (
-              <div>Discount (ex GST): −{money(totals.discountTotal)}</div>
+            <div>Subtotal (incl GST): {money(totals.subtotalIncl)}</div>
+            {totals.discountIncl > 0.009 && (
+              <div>Discount (incl GST): −{money(totals.discountIncl)}</div>
             )}
-            <div>GST: {money(totals.gstTotal)}</div>
+            <div>GST (1/11): {money(totals.gstTotal)}</div>
+            <div className="text-xs text-slate-400">
+              Ex GST: {money(totals.netExGst)}
+            </div>
             <div className="text-lg font-semibold text-slate-900">
               Total: {money(totals.total)}
             </div>

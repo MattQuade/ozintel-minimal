@@ -127,6 +127,7 @@ export async function POST(req: Request) {
           accountCode: DEFAULT_INVOICE_REVENUE_CODE,
           hasGST: true,
         })),
+        pricesIncludeGst: true,
       });
 
       return NextResponse.json({

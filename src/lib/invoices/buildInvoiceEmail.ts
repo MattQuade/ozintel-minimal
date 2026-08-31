@@ -2,6 +2,7 @@ import { formatAuDate } from "@/lib/accounting/dates";
 import {
   computeLineTotals,
   isFreightLine,
+  linesForInvoiceMath,
   round2,
   unitPriceInclGst,
 } from "@/lib/accounting/invoiceMath";
@@ -37,7 +38,10 @@ export function buildInvoiceEmail(invoice: Invoice): {
   const discountRows: string[] = [];
   const textLines: string[] = [];
 
-  for (const line of invoice.lines || []) {
+  for (const line of linesForInvoiceMath(
+    invoice.lines,
+    invoice.pricesIncludeGst
+  )) {
     const t = computeLineTotals(line);
     const unitIncl = unitPriceInclGst(line);
     const qty = Number(line.quantity) || 0;

@@ -8,7 +8,11 @@ import VoiceNavBar from '@/components/VoiceNavBar';
 import InvoiceTaxDocument from '@/components/invoices/InvoiceTaxDocument';
 import { formatAuDate } from '@/lib/accounting/dates';
 import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
-import { computeLineTotals } from '@/lib/accounting/invoiceMath';
+import {
+  computeLineTotals,
+  linesForInvoiceMath,
+  unitPriceInclGst,
+} from '@/lib/accounting/invoiceMath';
 import { invoiceReceiptBankId } from '@/lib/accounting/invoiceDefaults';
 
 type InvoiceLine = {
@@ -48,6 +52,7 @@ type Invoice = {
   amountDue: number;
   notes: string;
   matchKeyword?: string;
+  pricesIncludeGst?: boolean;
   ledgerEntryIds: string[];
   journalRef: string;
   payments: InvoicePayment[];
@@ -533,32 +538,34 @@ export default function InvoiceDetailPage() {
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="text-left py-2 font-medium">Description</th>
                 <th className="text-right py-2 font-medium">Qty</th>
-                <th className="text-right py-2 font-medium">Unit</th>
+                <th className="text-right py-2 font-medium">Unit (incl GST)</th>
                 <th className="text-left py-2 font-medium pl-4">Account</th>
-                <th className="text-center py-2 font-medium">GST</th>
+                <th className="text-right py-2 font-medium">GST</th>
                 <th className="text-right py-2 font-medium">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {invoice.lines.map((line) => {
+              {linesForInvoiceMath(invoice.lines, invoice.pricesIncludeGst).map(
+                (line) => {
                 const t = computeLineTotals(line);
                 return (
                   <tr key={line.id} className="border-b border-slate-100">
                     <td className="py-2">{line.description}</td>
                     <td className="py-2 text-right">{line.quantity}</td>
-                    <td className="py-2 text-right">{money(line.unitPrice)}</td>
+                    <td className="py-2 text-right">{money(unitPriceInclGst(line))}</td>
                     <td className="py-2 pl-4 text-slate-600">
                       {line.accountCode} {line.accountName}
                     </td>
-                    <td className="py-2 text-center">
-                      {line.hasGST ? '10%' : '—'}
+                    <td className="py-2 text-right">
+                      {line.hasGST ? money(Math.abs(t.gst)) : '—'}
                     </td>
                     <td className="py-2 text-right">
-                      {t.isDiscount ? `−${money(Math.abs(t.excl))}` : money(t.excl)}
+                      {t.isDiscount ? `−${money(Math.abs(t.incl))}` : money(t.incl)}
                     </td>
                   </tr>
                 );
-              })}
+              }
+              )}
             </tbody>
           </table>
 

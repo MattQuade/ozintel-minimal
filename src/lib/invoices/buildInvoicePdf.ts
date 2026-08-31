@@ -3,6 +3,7 @@ import { formatAuDate } from "@/lib/accounting/dates";
 import {
   computeLineTotals,
   isFreightLine,
+  linesForInvoiceMath,
   round2,
   unitPriceInclGst,
 } from "@/lib/accounting/invoiceMath";
@@ -162,7 +163,10 @@ export async function buildInvoicePdf(invoice: Invoice): Promise<Buffer> {
   let subtotalIncl = 0;
   const discounts: Array<{ label: string; amount: number }> = [];
 
-  for (const line of invoice.lines || []) {
+  for (const line of linesForInvoiceMath(
+    invoice.lines,
+    invoice.pricesIncludeGst
+  )) {
     const t = computeLineTotals(line);
     const unitIncl = unitPriceInclGst(line);
     const qty = Number(line.quantity) || 0;

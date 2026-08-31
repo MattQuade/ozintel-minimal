@@ -8,7 +8,7 @@
 export type VoiceInvoiceLine = {
   description: string;
   quantity: number;
-  /** Unit price excluding GST (spoken $ treated as ex-GST unless noted). */
+  /** Unit price including GST (spoken $ treated as incl-GST). */
   unitPrice: number;
 };
 

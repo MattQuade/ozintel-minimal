@@ -9,6 +9,7 @@ import {
 import {
   computeLineTotals,
   isFreightLine,
+  linesForInvoiceMath,
   round2,
   unitPriceInclGst,
 } from '@/lib/accounting/invoiceMath';
@@ -30,6 +31,7 @@ export type InvoiceTaxData = {
   lines: InvoiceTaxLine[];
   total: number;
   matchKeyword?: string;
+  pricesIncludeGst?: boolean;
 };
 
 function fmtAmount(n: number) {
@@ -98,21 +100,25 @@ type Props = {
 };
 
 export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
+  const mathLines = useMemo(
+    () => linesForInvoiceMath(invoice.lines, invoice.pricesIncludeGst),
+    [invoice.lines, invoice.pricesIncludeGst]
+  );
   const rows = useMemo(() => {
     const product: InvoiceTaxLine[] = [];
     const discount: InvoiceTaxLine[] = [];
-    for (const line of invoice.lines) {
+    for (const line of mathLines) {
       const t = computeLineTotals(line);
       if (t.isDiscount) discount.push(line);
       else product.push(line);
     }
     return { product, discount };
-  }, [invoice.lines]);
+  }, [mathLines]);
 
   const printTotals = useMemo(() => {
     let subtotalIncl = 0;
     let discountIncl = 0;
-    for (const line of invoice.lines) {
+    for (const line of mathLines) {
       const t = computeLineTotals(line);
       if (t.isDiscount) discountIncl = round2(discountIncl + Math.abs(t.incl));
       else subtotalIncl = round2(subtotalIncl + t.incl);
@@ -122,7 +128,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
       discountIncl,
       totalIncl: round2(invoice.total),
     };
-  }, [invoice.lines, invoice.total]);
+  }, [mathLines, invoice.total]);
 
   const subject = subjectValue(
     String(invoice.subject || '').trim() || DEFAULT_SUBJECT

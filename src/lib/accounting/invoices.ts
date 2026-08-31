@@ -24,7 +24,8 @@ import {
 import {
   computeInvoiceTotals,
   computeLineTotals,
-  GST_RATE,
+  inclusiveFromExclusive,
+  linesForInvoiceMath,
   round2,
 } from "@/lib/accounting/invoiceMath";
 import {
@@ -38,7 +39,7 @@ export type InvoiceLine = {
   id: string;
   description: string;
   quantity: number;
-  /** Unit price excluding GST (may be negative for discounts) */
+  /** Unit price; GST-inclusive when invoice.pricesIncludeGst is true */
   unitPrice: number;
   accountCode: string;
   accountName: string;
@@ -51,6 +52,7 @@ export {
   GST_RATE,
   isDiscountLine,
   isFreightLine,
+  linesForInvoiceMath,
   round2,
   unitPriceInclGst,
 } from "@/lib/accounting/invoiceMath";
@@ -78,6 +80,11 @@ export type Invoice = {
   /** Optional print subject (e.g. "Draught"); empty falls back to env default */
   subject: string;
   lines: InvoiceLine[];
+  /**
+   * When true, line unitPrice is GST-inclusive (GST = 1/11 of the line).
+   * Older invoices omit this and store GST-exclusive unit prices.
+   */
+  pricesIncludeGst?: boolean;
   status: InvoiceStatus;
   /** Positive lines ex GST (before discount) */
   subtotal: number;
@@ -149,6 +156,7 @@ async function readInvoicesUnlocked(): Promise<Invoice[]> {
       subject: String(inv.subject || "").trim(),
       matchKeyword: String(inv.matchKeyword || "").trim(),
       notes: String(inv.notes || ""),
+      pricesIncludeGst: Boolean(inv.pricesIncludeGst),
       payments: Array.isArray(inv.payments) ? inv.payments : [],
       ledgerEntryIds: Array.isArray(inv.ledgerEntryIds)
         ? inv.ledgerEntryIds
@@ -235,6 +243,7 @@ export async function createDraftFromCustomerLast(
       issueDate: today,
       dueDate,
       subject: "Draught",
+      pricesIncludeGst: true,
       lines: [
         {
           description: "Draught",
@@ -263,7 +272,10 @@ export async function createDraftFromCustomerLast(
   const clonedLines: Partial<InvoiceLine>[] = template.lines.map((l) => ({
     description: l.description,
     quantity: l.quantity,
-    unitPrice: l.unitPrice,
+    unitPrice:
+      template.pricesIncludeGst || !l.hasGST
+        ? l.unitPrice
+        : inclusiveFromExclusive(l.unitPrice, true),
     accountCode: l.accountCode,
     hasGST: l.hasGST,
   }));
@@ -279,6 +291,7 @@ export async function createDraftFromCustomerLast(
     notes: template.notes || "",
     matchKeyword: template.matchKeyword || "",
     lines: clonedLines,
+    pricesIncludeGst: true,
   });
 
   return {
@@ -410,7 +423,7 @@ function buildAuthoriseEntries(inv: Invoice): Partial<LedgerEntry>[] {
     string,
     { excl: number; gst: number; name: string }
   >();
-  for (const line of inv.lines) {
+  for (const line of linesForInvoiceMath(inv.lines, inv.pricesIncludeGst)) {
     const t = computeLineTotals(line);
     if (t.excl === 0) continue;
     const prev = revenueByCode.get(line.accountCode) || {
@@ -593,7 +606,13 @@ export async function upsertInvoice(
     const lines = await enrichLines(
       rawLines.map((l, i) => normalizeLine(l, i))
     );
-    const totals = computeInvoiceTotals(lines);
+    const pricesIncludeGst =
+      input.pricesIncludeGst !== undefined
+        ? Boolean(input.pricesIncludeGst)
+        : Boolean(existing?.pricesIncludeGst);
+    const totals = computeInvoiceTotals(
+      linesForInvoiceMath(lines, pricesIncludeGst)
+    );
     const now = new Date().toISOString();
 
     const requestedNumber = String(
@@ -630,6 +649,7 @@ export async function upsertInvoice(
         )
       ),
       lines,
+      pricesIncludeGst: pricesIncludeGst || undefined,
       status: posted ? existing!.status : "draft",
       subtotal: totals.subtotal,
       discountTotal: totals.discountTotal,
@@ -793,7 +813,7 @@ export async function voidInvoice(id: string): Promise<Invoice> {
       string,
       { excl: number; gst: number; name: string }
     >();
-    for (const line of inv.lines) {
+    for (const line of linesForInvoiceMath(inv.lines, inv.pricesIncludeGst)) {
       const t = computeLineTotals(line);
       if (t.excl === 0) continue;
       const prev = revenueByCode.get(line.accountCode) || {
@@ -1269,7 +1289,7 @@ export async function ensureGrongGrongInvoice246A(): Promise<void> {
 
     const last = await getLastInvoiceForCustomer(grong.id);
     const template = last?.lines?.[0];
-    const unitExGst = round2(GRONG_246A_TOTAL_INCL / (1 + GST_RATE));
+    const unitIncl = round2(GRONG_246A_TOTAL_INCL);
     const draft = await upsertInvoice({
       number: GRONG_246A_NUMBER,
       customerId: grong.id,
@@ -1279,11 +1299,12 @@ export async function ensureGrongGrongInvoice246A(): Promise<void> {
       subject: last?.subject || "Draught",
       notes: last?.notes || "",
       matchKeyword: last?.matchKeyword || "",
+      pricesIncludeGst: true,
       lines: [
         {
           description: template?.description || "Draught",
           quantity: 1,
-          unitPrice: unitExGst,
+          unitPrice: unitIncl,
           accountCode: template?.accountCode || DEFAULT_INVOICE_REVENUE_CODE,
           hasGST: true,
         },
