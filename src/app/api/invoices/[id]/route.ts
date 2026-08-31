@@ -28,7 +28,7 @@ export async function GET(req: Request, { params }: Params) {
   });
 }
 
-/** Update notes / matchKeyword / print fields (any status); number editable while draft. */
+/** Update invoice fields (notes, number, print metadata, and full edits via POST). */
 export async function PATCH(req: Request, { params }: Params) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;

@@ -29,12 +29,6 @@ export const LINE_VOICE_FIELDS: InvoiceVoiceField[] = [
   "tax",
 ];
 
-export const DRAFT_ONLY_FIELDS: InvoiceVoiceField[] = [
-  "issueDate",
-  "dueDate",
-  ...LINE_VOICE_FIELDS,
-];
-
 function scoreText(query: string, name: string): number {
   const q = String(query || "").toLowerCase().replace(/\s+/g, " ").trim();
   const n = String(name || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -163,13 +157,6 @@ export async function applyInvoiceVoiceField(input: {
 
   if (invoice.status === "void") {
     throw new Error("Cannot edit a void invoice");
-  }
-
-  const needsDraft = DRAFT_ONLY_FIELDS.includes(field) || createLine;
-  if (needsDraft && invoice.status !== "draft") {
-    throw new Error(
-      `Only draft invoices can change that — ${invoice.number} is ${invoice.status}`
-    );
   }
 
   const goEdit = `/invoices/${invoice.id}/edit`;

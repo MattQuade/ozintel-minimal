@@ -267,6 +267,35 @@ export async function writeLedger(entries: LedgerEntry[]) {
   return withLedgerLock(() => writeLedgerUnlocked(entries));
 }
 
+function stampIncomingEntries(
+  incoming: Array<Partial<LedgerEntry>>,
+  coa: CoaAccount[],
+  startIndex: number
+): LedgerEntry[] {
+  return incoming.map((e, index) => {
+    const receiptIds = Array.isArray(e.receiptIds)
+      ? e.receiptIds.filter(
+          (x): x is string => typeof x === "string" && Boolean(x.trim())
+        )
+      : undefined;
+    const gst = stampLedgerGstFields(e, coa);
+    return ensureEntryId(
+      {
+        ...e,
+        taxCode: gst.taxCode,
+        gstAmount: gst.gstAmount,
+        noGST: gst.noGST,
+        hasGST: gst.hasGST,
+        amountIncludesGst: gst.amountIncludesGst,
+        ...(receiptIds && receiptIds.length > 0 ? { receiptIds } : {}),
+        timestamp: e.timestamp || new Date().toISOString(),
+        id: e.id || `LE${Date.now()}-${index}`,
+      },
+      startIndex + index
+    );
+  });
+}
+
 export async function appendLedgerEntries(
   incoming: Array<Partial<LedgerEntry>>
 ): Promise<{
@@ -279,28 +308,7 @@ export async function appendLedgerEntries(
     await assertDatesUnlocked(incoming.map((e) => String(e.date || "")));
     const coa = await readCoa();
     const ledger = await readLedgerUnlocked();
-    const stamped = incoming.map((e, index) => {
-      const receiptIds = Array.isArray(e.receiptIds)
-        ? e.receiptIds.filter(
-            (x): x is string => typeof x === "string" && Boolean(x.trim())
-          )
-        : undefined;
-      const gst = stampLedgerGstFields(e, coa);
-      return ensureEntryId(
-        {
-          ...e,
-          taxCode: gst.taxCode,
-          gstAmount: gst.gstAmount,
-          noGST: gst.noGST,
-          hasGST: gst.hasGST,
-          amountIncludesGst: gst.amountIncludesGst,
-          ...(receiptIds && receiptIds.length > 0 ? { receiptIds } : {}),
-          timestamp: e.timestamp || new Date().toISOString(),
-          id: e.id || `LE${Date.now()}-${index}`,
-        },
-        ledger.length + index
-      );
-    });
+    const stamped = stampIncomingEntries(incoming, coa, ledger.length);
     const next = [...ledger, ...stamped];
     await writeLedgerUnlocked(next);
     return {
@@ -308,6 +316,45 @@ export async function appendLedgerEntries(
       total: next.length,
       entries: next,
       savedEntries: stamped,
+    };
+  });
+}
+
+/**
+ * Remove existing rows and append replacements in one write so an authorised
+ * invoice edit cannot leave AR posted twice or not at all.
+ */
+export async function replaceLedgerEntries(
+  removeIds: string[],
+  incoming: Array<Partial<LedgerEntry>>
+): Promise<{
+  saved: number;
+  total: number;
+  entries: LedgerEntry[];
+  savedEntries: LedgerEntry[];
+  deleted: number;
+}> {
+  const idSet = new Set(
+    removeIds.map((id) => String(id || "").trim()).filter(Boolean)
+  );
+  return withLedgerLock(async () => {
+    const ledger = await readLedgerUnlocked();
+    const toDelete = ledger.filter((e) => idSet.has(e.id));
+    await assertDatesUnlocked([
+      ...toDelete.map((e) => e.date),
+      ...incoming.map((e) => String(e.date || "")),
+    ]);
+    const remaining = ledger.filter((e) => !idSet.has(e.id));
+    const coa = await readCoa();
+    const stamped = stampIncomingEntries(incoming, coa, remaining.length);
+    const next = [...remaining, ...stamped];
+    await writeLedgerUnlocked(next);
+    return {
+      saved: stamped.length,
+      total: next.length,
+      entries: next,
+      savedEntries: stamped,
+      deleted: toDelete.length,
     };
   });
 }

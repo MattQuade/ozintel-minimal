@@ -293,11 +293,11 @@ export async function POST(req: Request) {
             { status: 404 }
           );
         }
-        if (invoice.status !== "draft") {
+        if (invoice.status === "void") {
           return NextResponse.json(
             {
               success: false,
-              error: `Only draft invoice numbers can change (${invoice.number} is ${invoice.status})`,
+              error: `Cannot change a void invoice number (${invoice.number})`,
             },
             { status: 400 }
           );
@@ -340,11 +340,11 @@ export async function POST(req: Request) {
             { status: 404 }
           );
         }
-        if (invoice.status !== "draft") {
+        if (invoice.status === "void") {
           return NextResponse.json(
             {
               success: false,
-              error: `Only draft invoice numbers can change (${invoice.number} is ${invoice.status})`,
+              error: `Cannot change a void invoice number (${invoice.number})`,
             },
             { status: 400 }
           );
@@ -495,11 +495,11 @@ export async function POST(req: Request) {
             { status: 404 }
           );
         }
-        if (invoice.status !== "draft") {
+        if (invoice.status === "void") {
           return NextResponse.json(
             {
               success: false,
-              error: `Only draft invoice numbers can change (${invoice.number} is ${invoice.status})`,
+              error: `Cannot change a void invoice number (${invoice.number})`,
             },
             { status: 400 }
           );

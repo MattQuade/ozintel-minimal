@@ -8,6 +8,7 @@ import {
   deleteLedgerEntry,
   readBankAccounts,
   readCoa,
+  replaceLedgerEntries,
   type LedgerEntry,
 } from "@/lib/accounting/store";
 import { getCustomerById } from "@/lib/accounting/customers";
@@ -353,6 +354,164 @@ export type UpsertInvoiceInput = Omit<Partial<Invoice>, "lines"> & {
   lines?: Partial<InvoiceLine>[];
 };
 
+function invoiceJournalNeedsRepost(before: Invoice, after: Invoice): boolean {
+  if (before.number !== after.number) return true;
+  if (before.customerId !== after.customerId) return true;
+  if (before.customerName !== after.customerName) return true;
+  if (before.issueDate !== after.issueDate) return true;
+  if (before.total !== after.total) return true;
+  if (before.gstTotal !== after.gstTotal) return true;
+  if (before.subtotal !== after.subtotal) return true;
+  if (before.discountTotal !== after.discountTotal) return true;
+  const key = (l: InvoiceLine) =>
+    [l.id, l.description, l.quantity, l.unitPrice, l.accountCode, l.hasGST].join(
+      "|"
+    );
+  return before.lines.map(key).join("\n") !== after.lines.map(key).join("\n");
+}
+
+function buildAuthoriseEntries(inv: Invoice): Partial<LedgerEntry>[] {
+  const journalRef = `INV-AUTH-${inv.number}`;
+  const desc = `Invoice ${inv.number} — ${inv.customerName}`;
+  const ts = new Date().toISOString();
+  const entries: Partial<LedgerEntry>[] = [];
+  let i = 0;
+
+  const revenueByCode = new Map<
+    string,
+    { excl: number; gst: number; name: string }
+  >();
+  for (const line of inv.lines) {
+    const t = computeLineTotals(line);
+    if (t.excl === 0) continue;
+    const prev = revenueByCode.get(line.accountCode) || {
+      excl: 0,
+      gst: 0,
+      name: line.accountName,
+    };
+    prev.excl = round2(prev.excl + t.excl);
+    prev.gst = round2(prev.gst + t.gst);
+    prev.name = line.accountName || prev.name;
+    revenueByCode.set(line.accountCode, prev);
+  }
+
+  entries.push({
+    id: stampId("inv-ar", i++),
+    date: inv.issueDate,
+    description: desc,
+    amount: inv.total,
+    type: "Asset",
+    account: `${AR_CODE} - Accounts Receivable`,
+    accountCode: AR_CODE,
+    accountName: "Accounts Receivable",
+    hasGST: false,
+    noGST: true,
+    reconciled: false,
+    source: "invoice",
+    invoiceId: inv.id,
+    invoiceNumber: inv.number,
+    journalRef,
+    timestamp: ts,
+  });
+
+  for (const [code, { excl, gst, name }] of revenueByCode) {
+    entries.push({
+      id: stampId("inv-rev", i++),
+      date: inv.issueDate,
+      description: desc,
+      amount: -excl,
+      type: "Revenue",
+      account: `${code} - ${name || ""}`,
+      accountCode: code,
+      accountName: name || "",
+      hasGST: false,
+      noGST: Boolean(gst <= 0.009),
+      taxCode: gst > 0.009 ? "GST" : "FRE",
+      ...(gst > 0.009 ? { gstExclusive: true, gstAmount: gst } : {}),
+      reconciled: false,
+      source: "invoice",
+      invoiceId: inv.id,
+      invoiceNumber: inv.number,
+      journalRef,
+      timestamp: ts,
+    });
+  }
+
+  if (inv.gstTotal > 0.009) {
+    entries.push({
+      id: stampId("inv-gst", i++),
+      date: inv.issueDate,
+      description: desc,
+      amount: -inv.gstTotal,
+      type: "Liability",
+      account: `${GST_CODE} - GST`,
+      accountCode: GST_CODE,
+      accountName: "GST",
+      hasGST: false,
+      noGST: true,
+      taxCode: "N-T" as const,
+      reconciled: false,
+      source: "invoice",
+      invoiceId: inv.id,
+      invoiceNumber: inv.number,
+      journalRef,
+      timestamp: ts,
+    });
+  }
+
+  return entries;
+}
+
+async function fillAuthoriseAccountNames(
+  entries: Partial<LedgerEntry>[]
+): Promise<Partial<LedgerEntry>[]> {
+  const coa = await readCoa();
+  const byCode = new Map(coa.map((a) => [a.code, a]));
+  return entries.map((e) => {
+    const acc = e.accountCode ? byCode.get(e.accountCode) : undefined;
+    if (!acc) return e;
+    const name = acc.name || e.accountName || "";
+    return {
+      ...e,
+      type: acc.type || e.type,
+      accountName: name,
+      account: `${e.accountCode} - ${name}`,
+    };
+  });
+}
+
+function assertBalancedJournal(entries: Partial<LedgerEntry>[]) {
+  const debit = entries
+    .filter((e) => (e.amount || 0) > 0)
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const credit = entries
+    .filter((e) => (e.amount || 0) < 0)
+    .reduce((s, e) => s + Math.abs(e.amount || 0), 0);
+  if (Math.abs(debit - credit) > 0.02) {
+    throw new Error(
+      `Unbalanced invoice journal (Dr ${debit} vs Cr ${credit})`
+    );
+  }
+}
+
+async function postAuthoriseJournal(
+  inv: Invoice,
+  previousLedgerIds: string[] = []
+): Promise<{ ledgerEntryIds: string[]; journalRef: string }> {
+  const entries = await fillAuthoriseAccountNames(buildAuthoriseEntries(inv));
+  assertBalancedJournal(entries);
+  const journalRef = String(
+    entries[0]?.journalRef || `INV-AUTH-${inv.number}`
+  );
+  const result = previousLedgerIds.length
+    ? await replaceLedgerEntries(previousLedgerIds, entries)
+    : await appendLedgerEntries(entries);
+  return {
+    ledgerEntryIds: result.savedEntries.map((e) => e.id),
+    journalRef,
+  };
+}
+
 export async function upsertInvoice(
   input: UpsertInvoiceInput
 ): Promise<Invoice> {
@@ -362,46 +521,36 @@ export async function upsertInvoice(
     const idx = id ? invoices.findIndex((inv) => inv.id === id) : -1;
     const existing = idx >= 0 ? invoices[idx] : undefined;
 
-    if (
-      existing &&
-      (existing.status === "authorised" ||
-        existing.status === "paid" ||
-        existing.status === "void")
-    ) {
-      // Allow print metadata after authorise; structural edits blocked
-      if (input.status && input.status !== existing.status) {
-        // status changes go through authorise/pay/void actions
-      }
-      const editableNotes = String(input.notes ?? existing.notes ?? "");
-      const editableKeyword = String(
-        input.matchKeyword !== undefined
-          ? input.matchKeyword
-          : existing.matchKeyword ?? ""
-      ).trim();
-      const editableOrderDate = String(
-        input.orderDate !== undefined
-          ? input.orderDate
-          : existing.orderDate ?? ""
-      )
-        .trim()
-        .slice(0, 10);
-      const editableSubject = titleCaseSubject(
-        String(
-          input.subject !== undefined ? input.subject : existing.subject ?? ""
-        )
-      );
+    if (existing && existing.status === "void") {
       const next: Invoice = {
         ...existing,
-        notes: editableNotes,
-        matchKeyword: editableKeyword,
-        orderDate: editableOrderDate,
-        subject: editableSubject,
+        notes: String(input.notes ?? existing.notes ?? ""),
+        matchKeyword: String(
+          input.matchKeyword !== undefined
+            ? input.matchKeyword
+            : existing.matchKeyword ?? ""
+        ).trim(),
+        orderDate: String(
+          input.orderDate !== undefined
+            ? input.orderDate
+            : existing.orderDate ?? ""
+        )
+          .trim()
+          .slice(0, 10),
+        subject: titleCaseSubject(
+          String(
+            input.subject !== undefined ? input.subject : existing.subject ?? ""
+          )
+        ),
         updatedAt: new Date().toISOString(),
       };
       invoices[idx] = next;
       await writeInvoicesUnlocked(invoices);
       return next;
     }
+
+    const posted =
+      existing?.status === "authorised" || existing?.status === "paid";
 
     const customerId = String(input.customerId || existing?.customerId || "").trim();
     if (!customerId) throw new Error("Customer is required");
@@ -452,13 +601,13 @@ export async function upsertInvoice(
         )
       ),
       lines,
-      status: "draft",
+      status: posted ? existing!.status : "draft",
       subtotal: totals.subtotal,
       discountTotal: totals.discountTotal,
       gstTotal: totals.gstTotal,
       total: totals.total,
-      amountPaid: 0,
-      amountDue: totals.total,
+      amountPaid: posted ? existing!.amountPaid : 0,
+      amountDue: posted ? existing!.amountDue : totals.total,
       notes: String(input.notes ?? existing?.notes ?? "").trim(),
       matchKeyword: String(
         input.matchKeyword !== undefined
@@ -469,11 +618,35 @@ export async function upsertInvoice(
       journalRef: existing?.journalRef || "",
       voidLedgerEntryIds: existing?.voidLedgerEntryIds || [],
       payments: existing?.payments || [],
+      authorisedAt: existing?.authorisedAt,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     };
 
-    const next = applyMoneyFields(base, totals);
+    if (posted) {
+      if (totals.total <= 0.009) {
+        throw new Error("Invoice has no amount to post");
+      }
+      if (round2(existing!.amountPaid) > totals.total + 0.01) {
+        throw new Error(
+          `Cannot reduce the invoice below payments already recorded (${existing!.amountPaid})`
+        );
+      }
+    }
+
+    let next = applyMoneyFields(base, totals);
+    if (posted && invoiceJournalNeedsRepost(existing!, next)) {
+      const postedJournal = await postAuthoriseJournal(
+        next,
+        existing!.ledgerEntryIds || []
+      );
+      next = {
+        ...next,
+        ledgerEntryIds: postedJournal.ledgerEntryIds,
+        journalRef: postedJournal.journalRef,
+        updatedAt: now,
+      };
+    }
     if (idx >= 0) invoices[idx] = next;
     else invoices.push(next);
     await writeInvoicesUnlocked(invoices);
@@ -527,123 +700,13 @@ export async function authoriseInvoice(id: string): Promise<Invoice> {
       throw new Error("Invoice has no amount to post");
     }
 
-    const coa = await readCoa();
-    const byCode = new Map(coa.map((a) => [a.code, a]));
-    const ar = byCode.get(AR_CODE);
-    const gstAcc = byCode.get(GST_CODE);
-    const journalRef = `INV-AUTH-${inv.number}`;
-    const desc = `Invoice ${inv.number} — ${inv.customerName}`;
-    const ts = new Date().toISOString();
-
-    const revenueByCode = new Map<
-      string,
-      { excl: number; gst: number; name: string }
-    >();
-    for (const line of inv.lines) {
-      const t = computeLineTotals(line);
-      if (t.excl === 0) continue;
-      const prev = revenueByCode.get(line.accountCode) || {
-        excl: 0,
-        gst: 0,
-        name: line.accountName,
-      };
-      prev.excl = round2(prev.excl + t.excl);
-      prev.gst = round2(prev.gst + t.gst);
-      prev.name = line.accountName || prev.name;
-      revenueByCode.set(line.accountCode, prev);
-    }
-
-    const entries: Partial<LedgerEntry>[] = [];
-    let i = 0;
-
-    // Dr Accounts Receivable (total incl GST)
-    entries.push({
-      id: stampId("inv-ar", i++),
-      date: inv.issueDate,
-      description: desc,
-      amount: inv.total,
-      type: ar?.type || "Asset",
-      account: `${AR_CODE} - ${ar?.name || "Accounts Receivable"}`,
-      accountCode: AR_CODE,
-      accountName: ar?.name || "Accounts Receivable",
-      hasGST: false,
-      noGST: true,
-      reconciled: false,
-      source: "invoice",
-      invoiceId: inv.id,
-      invoiceNumber: inv.number,
-      journalRef,
-      timestamp: ts,
-    });
-
-    for (const [code, { excl, gst, name }] of revenueByCode) {
-      const acc = byCode.get(code);
-      entries.push({
-        id: stampId("inv-rev", i++),
-        date: inv.issueDate,
-        description: desc,
-        amount: -excl,
-        type: acc?.type || "Revenue",
-        account: `${code} - ${name || acc?.name || ""}`,
-        accountCode: code,
-        accountName: name || acc?.name || "",
-        hasGST: false,
-        noGST: Boolean(gst <= 0.009),
-        taxCode: gst > 0.009 ? "GST" : "FRE",
-        /** Tax-exclusive revenue — BAS converts when gstExclusive */
-        ...(gst > 0.009
-          ? { gstExclusive: true, gstAmount: gst }
-          : {}),
-        reconciled: false,
-        source: "invoice",
-        invoiceId: inv.id,
-        invoiceNumber: inv.number,
-        journalRef,
-        timestamp: ts,
-      });
-    }
-
-    if (inv.gstTotal > 0.009) {
-      entries.push({
-        id: stampId("inv-gst", i++),
-        date: inv.issueDate,
-        description: desc,
-        amount: -inv.gstTotal,
-        type: gstAcc?.type || "Liability",
-        account: `${GST_CODE} - ${gstAcc?.name || "GST"}`,
-        accountCode: GST_CODE,
-        accountName: gstAcc?.name || "GST",
-        hasGST: false,
-        noGST: true,
-        taxCode: "N-T" as const,
-        reconciled: false,
-        source: "invoice",
-        invoiceId: inv.id,
-        invoiceNumber: inv.number,
-        journalRef,
-        timestamp: ts,
-      });
-    }
-
-    const debit = entries
-      .filter((e) => (e.amount || 0) > 0)
-      .reduce((s, e) => s + (e.amount || 0), 0);
-    const credit = entries
-      .filter((e) => (e.amount || 0) < 0)
-      .reduce((s, e) => s + Math.abs(e.amount || 0), 0);
-    if (Math.abs(debit - credit) > 0.02) {
-      throw new Error(
-        `Unbalanced invoice journal (Dr ${debit} vs Cr ${credit})`
-      );
-    }
-
-    const result = await appendLedgerEntries(entries);
+    const postedJournal = await postAuthoriseJournal(inv);
     const now = new Date().toISOString();
     const next: Invoice = {
       ...inv,
       status: "authorised",
-      ledgerEntryIds: result.savedEntries.map((e) => e.id),
-      journalRef,
+      ledgerEntryIds: postedJournal.ledgerEntryIds,
+      journalRef: postedJournal.journalRef,
       authorisedAt: now,
       amountDue: inv.total,
       amountPaid: 0,

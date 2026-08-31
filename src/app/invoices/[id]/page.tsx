@@ -318,7 +318,11 @@ export default function InvoiceDetailPage() {
   const canPay =
     (invoice.status === 'authorised' || invoice.status === 'paid') &&
     invoice.amountDue > 0.009;
-  const canEditNumber = invoice.status === 'draft';
+  const canEdit =
+    invoice.status === 'draft' ||
+    invoice.status === 'authorised' ||
+    invoice.status === 'paid';
+  const canEditNumber = canEdit;
 
   return (
     <AccountingGate section="Invoices" backHref="/invoices" backLabel="← Back to Invoices">
@@ -383,14 +387,16 @@ export default function InvoiceDetailPage() {
                 Email invoice
               </button>
             )}
+            {canEdit && (
+              <Link
+                href={`/invoices/${invoice.id}/edit`}
+                className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium"
+              >
+                Edit
+              </Link>
+            )}
             {invoice.status === 'draft' && (
               <>
-                <Link
-                  href={`/invoices/${invoice.id}/edit`}
-                  className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2 rounded-xl text-sm font-medium"
-                >
-                  Edit
-                </Link>
                 <button
                   type="button"
                   disabled={busy}
@@ -490,6 +496,18 @@ export default function InvoiceDetailPage() {
 
         {invoice.status !== 'draft' && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+          {canEdit && (
+            <p className="text-sm text-slate-500 mb-4">
+              Need to change lines or dates?{' '}
+              <Link
+                href={`/invoices/${invoice.id}/edit`}
+                className="font-medium text-orange-700 hover:underline"
+              >
+                Edit
+              </Link>{' '}
+              — saving replaces the AR / revenue / GST journal.
+            </p>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-6">
             <div>
               <div className="text-slate-500">Issue date</div>

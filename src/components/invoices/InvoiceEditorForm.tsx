@@ -45,7 +45,7 @@ function lineForMath(line: LineDraft) {
 }
 
 type Props = {
-  /** When set, loads and updates an existing draft invoice */
+  /** When set, loads and updates an existing invoice (draft, authorised, or paid) */
   invoiceId?: string;
 };
 
@@ -68,6 +68,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
   const [notes, setNotes] = useState('');
   const [matchKeyword, setMatchKeyword] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceStatus, setInvoiceStatus] = useState('draft');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
@@ -108,11 +109,12 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         if (!res.ok) throw new Error('Invoice not found');
         const data = await res.json();
         if (cancelled) return;
-        if (data.status !== 'draft') {
-          setError('Only draft invoices can be edited. Void and recreate if needed.');
+        if (data.status === 'void') {
+          setError('Void invoices cannot be edited.');
           if (!silent) setLoading(false);
           return;
         }
+        setInvoiceStatus(String(data.status || 'draft'));
         setCustomerId(String(data.customerId || ''));
         setIssueDate(String(data.issueDate || '').slice(0, 10));
         setDueDate(String(data.dueDate || '').slice(0, 10));
@@ -237,6 +239,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         lines: lines
           .filter((l) => l.description.trim())
           .map((l) => ({
+            id: l.id,
             description: l.description,
             quantity: parseDraftNumber(l.quantity),
             unitPrice: parseDraftNumber(l.unitPrice),
@@ -270,11 +273,15 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">
-        {isEdit ? `Edit draft ${invoiceNumber || ''}`.trim() : 'New invoice'}
+        {isEdit
+          ? `Edit ${invoiceStatus === 'draft' ? 'draft ' : ''}${invoiceNumber || ''}`.trim()
+          : 'New invoice'}
       </h1>
       <p className="text-slate-500 mb-8">
         {isEdit
-          ? 'Save to update the draft. Return to the invoice to preview the tax invoice layout, then authorise when ready.'
+          ? invoiceStatus === 'draft'
+            ? 'Save to update the draft. Return to the invoice to preview the tax invoice layout, then authorise when ready.'
+            : 'Save updates the invoice and replaces the AR / revenue / GST journal. Payments already recorded stay as they are.'
           : 'Saves as draft. Authorise from the invoice page to post AR / revenue / GST. Use a line description containing "Discount" (or a negative unit) to reduce the total.'}
       </p>
 
@@ -574,7 +581,11 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                 disabled={saving}
                 className="bg-orange-600 hover:bg-orange-700 text-white font-medium px-6 py-2.5 rounded-xl disabled:opacity-50"
               >
-                {saving ? 'Saving…' : isEdit ? 'Save draft' : 'Save draft'}
+                {saving
+                  ? 'Saving…'
+                  : invoiceStatus === 'draft' || !isEdit
+                    ? 'Save draft'
+                    : 'Save'}
               </button>
             </div>
           </div>
