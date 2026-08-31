@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
 import VoiceNavBar from '@/components/VoiceNavBar';
 import { formatAuDate } from '@/lib/accounting/dates';
-import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
+import { displayInvoiceNumber, compareInvoiceLedgerOrder } from '@/lib/invoices/invoiceBrand';
 
 type Invoice = {
   id: string;
@@ -98,9 +98,10 @@ function InvoicesContent() {
     }
   };
 
-  const visible = invoices.filter(
-    (inv) => filter === 'all' || inv.status === filter
-  );
+  const visible = invoices
+    .filter((inv) => filter === 'all' || inv.status === filter)
+    .slice()
+    .sort(compareInvoiceLedgerOrder);
 
   return (
     <div className="p-8 max-w-6xl mx-auto">

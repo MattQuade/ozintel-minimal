@@ -31,6 +31,41 @@ export function displayInvoiceNumber(number: string): string {
   return String(number || "").trim().replace(/^INV-/i, "");
 }
 
+/**
+ * Ledger order: sequence descending, lettered twins above the plain number
+ * (246A above 246-1008-26), then the rest of the suffix.
+ */
+export function compareInvoiceLedgerOrder(
+  a: { number?: string; issueDate?: string },
+  b: { number?: string; issueDate?: string }
+): number {
+  const pa = invoiceLedgerParts(a.number);
+  const pb = invoiceLedgerParts(b.number);
+  if (pb.seq !== pa.seq) return pb.seq - pa.seq;
+  if (pa.letter !== pb.letter) {
+    if (!pa.letter) return 1;
+    if (!pb.letter) return -1;
+    return pb.letter.localeCompare(pa.letter);
+  }
+  if (pa.rest !== pb.rest) return pb.rest.localeCompare(pa.rest);
+  return String(b.issueDate || "").localeCompare(String(a.issueDate || ""));
+}
+
+function invoiceLedgerParts(number: string | undefined): {
+  seq: number;
+  letter: string;
+  rest: string;
+} {
+  const raw = displayInvoiceNumber(String(number || ""));
+  const m = raw.match(/^(\d+)([A-Za-z]*)(.*)$/);
+  if (!m) return { seq: 0, letter: "", rest: raw };
+  return {
+    seq: parseInt(m[1], 10) || 0,
+    letter: (m[2] || "").toUpperCase(),
+    rest: m[3] || "",
+  };
+}
+
 const SUBJECT_SMALL = new Set(["a", "an", "and", "of", "the", "to", "for", "or"]);
 
 /** Spoken/typed beer spelling — speech often returns “draft”. */

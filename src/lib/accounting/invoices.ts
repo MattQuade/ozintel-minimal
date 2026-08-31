@@ -3,6 +3,7 @@ import {
   getAccountingDataDir,
   getInvoicesFilePath,
 } from "@/lib/dataPaths";
+import { getDataOwnerEmail } from "@/lib/dataOwnerContext";
 import {
   appendLedgerEntries,
   deleteLedgerEntry,
@@ -11,7 +12,7 @@ import {
   replaceLedgerEntries,
   type LedgerEntry,
 } from "@/lib/accounting/store";
-import { getCustomerById } from "@/lib/accounting/customers";
+import { getCustomerById, readCustomers } from "@/lib/accounting/customers";
 import {
   amountsMatch,
   findUniqueDepositInvoiceMatch,
@@ -22,9 +23,13 @@ import {
 import {
   computeInvoiceTotals,
   computeLineTotals,
+  GST_RATE,
   round2,
 } from "@/lib/accounting/invoiceMath";
-import { titleCaseSubject } from "@/lib/invoices/invoiceBrand";
+import {
+  displayInvoiceNumber,
+  titleCaseSubject,
+} from "@/lib/invoices/invoiceBrand";
 
 export type InvoiceStatus = "draft" | "authorised" | "paid" | "void";
 
@@ -1096,3 +1101,105 @@ export async function autoMatchDepositToInvoice(opts: {
 }
 
 export { amountsMatch, findUniqueDepositInvoiceMatch };
+
+function normalizeInvNumber(number: string): string {
+  return displayInvoiceNumber(number).toLowerCase();
+}
+
+function pickGrongGrongCustomer(
+  customers: { id: string; name: string }[]
+): { id: string; name: string } | undefined {
+  const hits = customers.filter((c) => /grong/i.test(c.name));
+  if (!hits.length) return undefined;
+  return (
+    hits.find((c) => /royal/i.test(c.name)) ||
+    hits.find((c) => /grong\s*grong/i.test(c.name)) ||
+    hits[0]
+  );
+}
+
+async function placeInvoiceBeforeNumber(
+  invoiceId: string,
+  beforeNumber: string
+): Promise<void> {
+  return withInvoicesLock(async () => {
+    const invoices = await readInvoicesUnlocked();
+    const from = invoices.findIndex((inv) => inv.id === invoiceId);
+    if (from < 0) return;
+    const target = normalizeInvNumber(beforeNumber);
+    const [row] = invoices.splice(from, 1);
+    const dest = invoices.findIndex(
+      (inv) => normalizeInvNumber(inv.number) === target
+    );
+    if (dest < 0) invoices.push(row);
+    else invoices.splice(dest, 0, row);
+    await writeInvoicesUnlocked(invoices);
+  });
+}
+
+const GRONG_246A_NUMBER = "246A-1006-26";
+const RAILWAY_246_NUMBER = "246-1008-26";
+const GRONG_246A_TOTAL_INCL = 791.19;
+
+let grong246ADone = new Set<string>();
+
+/**
+ * One-shot: Royal Hotel Grong Grong 246A-1006-26 at $791.19 incl GST,
+ * posted and placed above 246-1008-26. Skips if that number already exists
+ * and is posted.
+ */
+export async function ensureGrongGrongInvoice246A(): Promise<void> {
+  const owner = getDataOwnerEmail() || "";
+  if (owner && grong246ADone.has(owner)) return;
+  try {
+    const invoices = await readInvoicesUnlocked();
+    const existing = invoices.find(
+      (inv) => normalizeInvNumber(inv.number) === normalizeInvNumber(GRONG_246A_NUMBER)
+    );
+    if (existing) {
+      if (existing.status === "draft") {
+        const posted = await authoriseInvoice(existing.id);
+        await placeInvoiceBeforeNumber(posted.id, RAILWAY_246_NUMBER);
+      } else if (existing.status !== "void") {
+        await placeInvoiceBeforeNumber(existing.id, RAILWAY_246_NUMBER);
+      }
+      if (owner) grong246ADone.add(owner);
+      return;
+    }
+
+    const customers = await readCustomers();
+    const grong = pickGrongGrongCustomer(customers);
+    if (!grong) {
+      if (owner) grong246ADone.add(owner);
+      return;
+    }
+
+    const last = await getLastInvoiceForCustomer(grong.id);
+    const template = last?.lines?.[0];
+    const unitExGst = round2(GRONG_246A_TOTAL_INCL / (1 + GST_RATE));
+    const draft = await upsertInvoice({
+      number: GRONG_246A_NUMBER,
+      customerId: grong.id,
+      issueDate: "2026-06-10",
+      dueDate: "2026-06-24",
+      orderDate: last?.orderDate || "",
+      subject: last?.subject || "Draught",
+      notes: last?.notes || "",
+      matchKeyword: last?.matchKeyword || "",
+      lines: [
+        {
+          description: template?.description || "Draught",
+          quantity: 1,
+          unitPrice: unitExGst,
+          accountCode: template?.accountCode || "0105",
+          hasGST: true,
+        },
+      ],
+    });
+    const posted = await authoriseInvoice(draft.id);
+    await placeInvoiceBeforeNumber(posted.id, RAILWAY_246_NUMBER);
+    if (owner) grong246ADone.add(owner);
+  } catch (error) {
+    console.error("[invoices] Failed to add 246A-1006-26 for Grong Grong", error);
+  }
+}

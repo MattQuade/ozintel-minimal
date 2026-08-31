@@ -5,6 +5,7 @@ import {
   readInvoices,
   upsertInvoice,
 } from "@/lib/accounting/invoices";
+import { compareInvoiceLedgerOrder } from "@/lib/invoices/invoiceBrand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,9 +16,7 @@ export async function GET(req: Request) {
   return access.run(async () => {
     try {
       const invoices = await readInvoices();
-      invoices.sort((a, b) =>
-        String(b.issueDate).localeCompare(String(a.issueDate))
-      );
+      invoices.sort(compareInvoiceLedgerOrder);
       return NextResponse.json(invoices);
     } catch (error) {
       console.error("Invoices GET error:", error);
