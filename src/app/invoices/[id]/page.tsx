@@ -9,6 +9,7 @@ import InvoiceTaxDocument from '@/components/invoices/InvoiceTaxDocument';
 import { formatAuDate } from '@/lib/accounting/dates';
 import { displayInvoiceNumber } from '@/lib/invoices/invoiceBrand';
 import { computeLineTotals } from '@/lib/accounting/invoiceMath';
+import { invoiceReceiptBankId } from '@/lib/accounting/invoiceDefaults';
 
 type InvoiceLine = {
   id: string;
@@ -121,7 +122,7 @@ export default function InvoiceDetailPage() {
       .then((d) => {
         const list = Array.isArray(d) ? d : [];
         setBanks(list);
-        if (list[0]) setPayBankId(list[0].id);
+        setPayBankId((current) => current || invoiceReceiptBankId(list));
       })
       .catch(() => {});
   }, [load]);

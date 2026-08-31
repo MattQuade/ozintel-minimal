@@ -12,7 +12,7 @@ import {
   replaceLedgerEntries,
   type LedgerEntry,
 } from "@/lib/accounting/store";
-import { DEFAULT_INVOICE_REVENUE_CODE } from "@/lib/accounting/invoiceDefaults";
+import { DEFAULT_INVOICE_REVENUE_CODE, invoiceReceiptBankId } from "@/lib/accounting/invoiceDefaults";
 import { getCustomerById, readCustomers } from "@/lib/accounting/customers";
 import {
   amountsMatch,
@@ -936,7 +936,9 @@ export async function recordInvoicePayment(
     }
 
     const banks = await readBankAccounts();
-    const bank = banks.find((b) => b.id === input.bankAccountId);
+    const bankAccountId =
+      String(input.bankAccountId || "").trim() || invoiceReceiptBankId(banks);
+    const bank = banks.find((b) => b.id === bankAccountId);
     if (!bank) throw new Error("Bank account not found");
 
     const coa = await readCoa();
@@ -1074,8 +1076,15 @@ export async function allocateBankDepositToInvoice(input: {
 
   const date = String(input.date || "").trim();
   const desc = String(input.description || "").trim();
+  const banks = await readBankAccounts();
+  const bankAccountId = input.autoMatched
+    ? invoiceReceiptBankId(banks, input.bankAccountId)
+    : String(input.bankAccountId || "").trim();
+  if (!bankAccountId) {
+    throw new Error("Bank account not found");
+  }
   const bankImportKey = [
-    input.bankAccountId,
+    bankAccountId,
     date,
     amount.toFixed(2),
     desc.slice(0, 80),
@@ -1096,7 +1105,7 @@ export async function allocateBankDepositToInvoice(input: {
   return recordInvoicePayment(input.invoiceId, {
     amount: payAmount,
     date,
-    bankAccountId: input.bankAccountId,
+    bankAccountId,
     note: noteParts.join(" · "),
     reconciled: true,
     bankImportKey,
@@ -1131,11 +1140,12 @@ export async function tryAllocateLedgerDepositToInvoice(entry: {
     if (!isDepositAmount(amount)) return null;
 
     const banks = await readBankAccounts();
-    const bankAccountId = String(
+    const fromEntry = String(
       entry.bankAccountId ||
         banks.find((b) => b.id === String(entry.accountCode || ""))?.id ||
         ""
     ).trim();
+    const bankAccountId = invoiceReceiptBankId(banks, fromEntry);
     if (!bankAccountId) return null;
 
     const matched = await autoMatchDepositToInvoice({
