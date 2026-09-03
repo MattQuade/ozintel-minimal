@@ -19,3 +19,6 @@ ios/DerivedData
 tsconfig.tsbuildinfo
 # Tesseract.js may drop a cache copy in the app cwd on Render; keep vendored data.
 /eng.traineddata
+
+# Per-account Accounting/Ops PIN hashes (live on OZINTEL_DATA_DIR in production)
+data/accounting-pins.json

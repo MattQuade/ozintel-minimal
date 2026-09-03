@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { checkAccountingAccess } from "@/lib/accounting/access";
+import AccountingPinLock from "@/components/AccountingPinLock";
 import VoiceNavBar from "@/components/VoiceNavBar";
 
 const previewLinks = [
@@ -9,6 +10,10 @@ const previewLinks = [
   {
     href: "/accounting/pending?module=Accounting&section=Chart%20of%20Accounts",
     label: "Chart of Accounts",
+  },
+  {
+    href: "/accounting/pending?module=Accounting&section=Suppliers",
+    label: "Suppliers",
   },
   {
     href: "/accounting/pending?module=Accounting&section=Invoices",
@@ -27,10 +32,6 @@ const previewLinks = [
     label: "Transactions",
   },
   {
-    href: "/accounting/pending?module=Accounting&section=Shops",
-    label: "Shops",
-  },
-  {
     href: "/accounting/pending?module=Accounting&section=Receipts",
     label: "Receipts",
   },
@@ -47,7 +48,7 @@ const previewLinks = [
 const fullLinks = [
   { href: "/bank/accounts", label: "Bank" },
   { href: "/coa", label: "Chart of Accounts" },
-  { href: "/accounting/shops", label: "Shops" },
+  { href: "/accounting/shops", label: "Suppliers" },
   { href: "/invoices", label: "Invoices" },
   { href: "/customers", label: "Customers" },
   { href: "/journal", label: "Journal" },
@@ -82,7 +83,7 @@ export default function AccountingHubPage() {
 
   const links = hasAccess ? fullLinks : previewLinks;
 
-  return (
+  const hub = (
     <main
       style={{
         fontFamily: "system-ui",
@@ -161,4 +162,9 @@ export default function AccountingHubPage() {
       </div>
     </main>
   );
+
+  if (hasAccess) {
+    return <AccountingPinLock>{hub}</AccountingPinLock>;
+  }
+  return hub;
 }
