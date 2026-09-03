@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
-export const PIN_COOKIE_NAME = "ozintel_accounting_pin";
-const PIN_COOKIE_MAX_AGE = 60 * 60 * 12;
+export const PIN_COOKIE_NAME = "ozintel_accounting_pin_v2";
+const PIN_COOKIE_MAX_AGE = 60 * 30;
 
 type PinPayload = {
   email: string;
