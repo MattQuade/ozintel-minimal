@@ -102,8 +102,10 @@ export async function POST(req: NextRequest) {
         accounting: false,
         pubOps: false,
         forestryOps: false,
+        logisticsOps: false,
       },
       shares: { pubOps: [] },
+      pin: "",
       lastAlert: null,
     };
     users.push(user);

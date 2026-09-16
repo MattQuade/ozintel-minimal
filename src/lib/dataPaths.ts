@@ -71,6 +71,23 @@ export function getKegsArchiveFilePath(month: string): string {
   return path.join(getKegsArchiveDir(), `kegs-${month}.json`);
 }
 
+/** Logistics Operations data folder (kegs, later freight) — siloed per owner. */
+export function getLogisticsOpsDataDir(): string {
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "operations", "logistics");
+}
+
+export function getLogisticsKegsFilePath(): string {
+  return path.join(getLogisticsOpsDataDir(), "kegs.json");
+}
+
+export function getLogisticsKegsArchiveDir(): string {
+  return path.join(getLogisticsOpsDataDir(), "archives");
+}
+
+export function getLogisticsKegsArchiveFilePath(month: string): string {
+  return path.join(getLogisticsKegsArchiveDir(), `kegs-${month}.json`);
+}
+
 /** Forestry Operations data folder (reports/photos) — siloed per owner. */
 export function getForestryDataDir(): string {
   return path.join(getOwnerDataRoot(ownerOrThrow()), "operations", "forestry");

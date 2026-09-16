@@ -9,6 +9,7 @@ export type UserPermissions = {
   accounting: boolean;
   pubOps: boolean;
   forestryOps: boolean;
+  logisticsOps: boolean;
 };
 
 /** Per-module share lists: emails allowed to open THIS user's siloed data. */
@@ -31,6 +32,8 @@ export type User = {
   smsMonth: string;
   permissions: UserPermissions;
   shares: UserShares;
+  /** Optional 4-digit restore PIN (unique among users). */
+  pin: string;
   lastAlert?: LastAlert | null;
 };
 function currentMonthKey() {
@@ -47,6 +50,7 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     accounting: false,
     pubOps: false,
     forestryOps: false,
+    logisticsOps: false,
   };
   if (Array.isArray(permissionsRaw)) {
     permissions = {
@@ -56,12 +60,16 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
       forestryOps:
         permissionsRaw.includes("forestry") ||
         permissionsRaw.includes("forestryOps"),
+      logisticsOps:
+        permissionsRaw.includes("logistics") ||
+        permissionsRaw.includes("logisticsOps"),
     };
   } else if (permissionsRaw && typeof permissionsRaw === "object") {
     permissions = {
       accounting: Boolean((permissionsRaw as UserPermissions).accounting),
       pubOps: Boolean((permissionsRaw as UserPermissions).pubOps),
       forestryOps: Boolean((permissionsRaw as UserPermissions).forestryOps),
+      logisticsOps: Boolean((permissionsRaw as UserPermissions).logisticsOps),
     };
   }
 
@@ -72,6 +80,10 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
         .filter(Boolean)
     : [];
 
+  const pin = String((raw as { pin?: string }).pin || "")
+    .replace(/\D/g, "")
+    .slice(0, 6);
+
   return {
     name: raw.name || "Unknown",
     email: String(raw.email).trim(),
@@ -81,6 +93,7 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     smsMonth: month,
     permissions,
     shares: { pubOps: [...new Set(pubOpsShares)] },
+    pin,
     lastAlert: raw.lastAlert ?? null,
   };
 }
@@ -189,10 +202,15 @@ export async function readUsers(): Promise<User[]> {
     if (!(u as { shares?: unknown }).shares) {
       changed = true;
     }
+    if (String((u as { pin?: string }).pin || "") !== next.pin) {
+      changed = true;
+    }
     return next;
   });
-  if (changed) await writeUsers(normalized);
-  return normalized;
+  const ensured = ensureKnownUsers(normalized);
+  const finalUsers = ensured.users;
+  if (changed || ensured.changed) await writeUsers(finalUsers);
+  return finalUsers;
 }
 export async function writeUsers(users: User[]) {
   await ensureStore();
@@ -214,8 +232,9 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
- * Restore lookup: email (case-insensitive), phone (AU-normalized),
- * or exact full name (case-insensitive). Name only wins when unique.
+ * Restore lookup: email (case-insensitive), unique PIN (4–6 digits),
+ * phone (AU-normalized), or exact full name (case-insensitive).
+ * Name only wins when unique.
  */
 export function matchUserForRestore(
   query: string,
@@ -228,6 +247,12 @@ export function matchUserForRestore(
     (u) => u.email.trim().toLowerCase() === q.toLowerCase()
   );
   if (byEmail) return byEmail;
+
+  const pinQ = q.replace(/\s/g, "");
+  if (/^\d{4,6}$/.test(pinQ)) {
+    const pinMatches = users.filter((u) => u.pin && u.pin === pinQ);
+    if (pinMatches.length === 1) return pinMatches[0];
+  }
 
   const qPhone = normalizePhone(q);
   if (qPhone.length >= 8) {
@@ -271,6 +296,56 @@ export async function listPubOpsShareOwnersFor(
 export async function findUserForRestore(query: string) {
   const users = await readUsers();
   return matchUserForRestore(query, users);
+}
+
+const GARRY_EMAIL = "gary@ozintel.com.au";
+
+/** Ensure seeded operational accounts exist on persistent disk after first deploy. */
+export function ensureKnownUsers(users: User[]): { users: User[]; changed: boolean } {
+  const month = currentMonthKey();
+  let changed = false;
+  const next = [...users];
+  const garryIdx = next.findIndex(
+    (u) => u.email.trim().toLowerCase() === GARRY_EMAIL
+  );
+  if (garryIdx < 0) {
+    next.push(
+      normalizeUser({
+        name: "Garry Greenfreight",
+        email: GARRY_EMAIL,
+        phone: "No phone yet",
+        status: "approved",
+        smsCount: 0,
+        smsMonth: month,
+        permissions: {
+          accounting: false,
+          pubOps: false,
+          forestryOps: false,
+          logisticsOps: true,
+        },
+        shares: { pubOps: [] },
+        pin: "4444",
+        lastAlert: null,
+      })
+    );
+    const mattIdx = next.findIndex(
+      (u) => u.email.trim().toLowerCase() === "mattquade2000@gmail.com"
+    );
+    if (mattIdx >= 0) {
+      next[mattIdx] = {
+        ...next[mattIdx],
+        permissions: { ...next[mattIdx].permissions, logisticsOps: true },
+      };
+    }
+    changed = true;
+  } else {
+    const garry = next[garryIdx];
+    if (!garry.pin) {
+      next[garryIdx] = { ...garry, pin: "4444" };
+      changed = true;
+    }
+  }
+  return { users: next, changed };
 }
 
 export { currentMonthKey };

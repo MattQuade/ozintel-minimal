@@ -8,10 +8,11 @@ export type AccountingUser = {
     accounting?: boolean;
     pubOps?: boolean;
     forestryOps?: boolean;
+    logisticsOps?: boolean;
   };
 };
 
-export type OpsPermission = "pubOps" | "forestryOps";
+export type OpsPermission = "pubOps" | "forestryOps" | "logisticsOps";
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,

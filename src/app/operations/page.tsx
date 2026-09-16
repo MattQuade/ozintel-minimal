@@ -60,6 +60,22 @@ export default function OperationsIndexPage() {
         >
           Forestry Operations
         </a>
+        <a
+          href="/operations/logistics"
+          style={{
+            display: "block",
+            width: "90%",
+            maxWidth: 400,
+            padding: 16,
+            borderRadius: 12,
+            background: "#0f766e",
+            color: "white",
+            textDecoration: "none",
+            fontWeight: "bold",
+          }}
+        >
+          Logistics Operations
+        </a>
       </div>
     </main>
   );

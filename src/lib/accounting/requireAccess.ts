@@ -151,24 +151,28 @@ export async function resolvePubOpsDataOwner(
 }
 
 /**
- * Server-side gate for Pub / Forestry ops APIs.
+ * Server-side gate for Pub / Forestry / Logistics ops APIs.
  * Requires restored cookie + approved user + the matching ops permission.
- * Forestry data is siloed to the signed-in user.
+ * Forestry and Logistics data are siloed to the signed-in user.
  * Pub Ops may open another owner's silo when shared.
  */
 export async function requireOpsAccess(
   req: Request,
-  permission: "pubOps" | "forestryOps"
+  permission: "pubOps" | "forestryOps" | "logisticsOps"
 ): Promise<AccessResult> {
   const label =
-    permission === "pubOps" ? "Pub Operations" : "Forestry Operations";
+    permission === "pubOps"
+      ? "Pub Operations"
+      : permission === "forestryOps"
+        ? "Forestry Operations"
+        : "Logistics Operations";
   const access = await requirePermission(req, permission, {
     signIn: `Sign in / restore your account to use ${label}.`,
     denied: `${label} access requires admin approval.`,
   });
   if (!access.ok) return access;
 
-  if (permission === "forestryOps") {
+  if (permission !== "pubOps") {
     return withOwnerRun(access.user, access.user.email);
   }
 

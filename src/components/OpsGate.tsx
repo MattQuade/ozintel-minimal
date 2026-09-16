@@ -15,7 +15,7 @@ type Props = {
 };
 
 /**
- * Blocks ops pages unless Admin has granted pubOps / forestryOps
+ * Blocks ops pages unless Admin has granted pubOps / forestryOps / logisticsOps
  * to the restored, approved user. Others are sent to the teaser pending page.
  */
 export default function OpsGate({ children, permission, section }: Props) {

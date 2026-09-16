@@ -10,7 +10,8 @@
       "permissions": {
         "accounting": true,
         "pubOps": true,
-        "forestryOps": true
+        "forestryOps": true,
+        "logisticsOps": true
       },
       "lastAlert": null
     },
@@ -152,6 +153,22 @@
         "pubOps": false,
         "forestryOps": false
       },
+      "lastAlert": null
+    },
+    {
+      "name": "Garry Greenfreight",
+      "email": "gary@ozintel.com.au",
+      "phone": "No phone yet",
+      "status": "approved",
+      "smsCount": 0,
+      "smsMonth": "2026-09",
+      "permissions": {
+        "accounting": false,
+        "pubOps": false,
+        "forestryOps": false,
+        "logisticsOps": true
+      },
+      "pin": "4444",
       "lastAlert": null
     }
   ]

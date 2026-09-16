@@ -21,6 +21,7 @@ type UserProfile = {
     accounting: boolean;
     pubOps: boolean;
     forestryOps: boolean;
+    logisticsOps: boolean;
   };
   shares?: {
     pubOps: string[];
@@ -686,7 +687,7 @@ export default function HomePage({
     }
   };
 
-  const updatePermissions = async (email: string, key: 'accounting' | 'pubOps' | 'forestryOps', val: boolean) => {
+  const updatePermissions = async (email: string, key: 'accounting' | 'pubOps' | 'forestryOps' | 'logisticsOps', val: boolean) => {
     const user = allUsers.find(u => u.email === email);
     if (!user) return;
 
@@ -1380,6 +1381,9 @@ export default function HomePage({
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
                           <input type="checkbox" checked={u.permissions.forestryOps} onChange={e => updatePermissions(u.email, 'forestryOps', e.target.checked)} /> Forestry Ops
                         </label>
+                        <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={Boolean(u.permissions.logisticsOps)} onChange={e => updatePermissions(u.email, 'logisticsOps', e.target.checked)} /> Logistics Ops
+                        </label>
                         <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #334155' }}>
                           <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: '#f97316' }}>
                             Share this user’s Pub Ops data with:
@@ -1727,7 +1731,7 @@ export default function HomePage({
               textAlign: 'center',
             }}
           >
-            Enter the <strong>signup email</strong>, mobile, or exact full name.
+            Enter the <strong>signup email</strong>, mobile, exact full name, or PIN.
             Use the address stored in Admin (it may not look like their name).
           </p>
           <div
@@ -1742,7 +1746,7 @@ export default function HomePage({
               name="restore"
               type="text"
               required
-              placeholder="Email, phone, or full name"
+              placeholder="Email, phone, full name, or PIN"
               defaultValue={restoreEmail}
               autoComplete="username"
               style={{
@@ -1889,6 +1893,9 @@ export default function HomePage({
         </a>
         <a href="/operations/forestry" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#15803d', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Forestry Operations
+        </a>
+        <a href="/operations/logistics" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#0f766e', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
+          Logistics Operations
         </a>
       </div>
 
