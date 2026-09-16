@@ -66,6 +66,15 @@ export async function ensureAccountingPinIfUnset(email: string, pin: string) {
   return true;
 }
 
+export async function deleteAccountingPin(email: string) {
+  const key = normalizeEmail(email);
+  const map = await readPinMap();
+  if (!map[key]) return false;
+  delete map[key];
+  await writePinMap(map);
+  return true;
+}
+
 export async function verifyAccountingPin(email: string, pin: string) {
   if (!isFourDigitPin(pin)) return false;
   const key = normalizeEmail(email);

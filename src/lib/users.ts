@@ -1,4 +1,5 @@
 ﻿import { promises as fs } from "fs";
+import path from "path";
 import {
   getDataDir,
   getRepoSeedUsersPath,
@@ -200,8 +201,12 @@ export async function readUsers(): Promise<User[]> {
   const ensured = ensureKnownUsers(normalized);
   const finalUsers = ensured.users;
   if (changed || ensured.changed) await writeUsers(finalUsers);
-  const { ensureAccountingPinIfUnset } = await import("@/lib/accounting/pinStore");
+  await migrateGarryOwnerSilo();
+  const { ensureAccountingPinIfUnset, deleteAccountingPin } = await import(
+    "@/lib/accounting/pinStore"
+  );
   await ensureAccountingPinIfUnset(GARRY_EMAIL, "4444");
+  await deleteAccountingPin(GARRY_EMAIL_LEGACY);
   return finalUsers;
 }
 export async function writeUsers(users: User[]) {
@@ -283,7 +288,31 @@ export async function findUserForRestore(query: string) {
   return matchUserForRestore(query, users);
 }
 
-const GARRY_EMAIL = "gary@ozintel.com.au";
+const GARRY_EMAIL = "garry@ozintel.com.au";
+const GARRY_EMAIL_LEGACY = "gary@ozintel.com.au";
+
+function ownerDirSegment(email: string) {
+  return String(email || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[/\\]/g, "_");
+}
+
+async function migrateGarryOwnerSilo() {
+  const from = path.join(getDataDir(), "owners", ownerDirSegment(GARRY_EMAIL_LEGACY));
+  const to = path.join(getDataDir(), "owners", ownerDirSegment(GARRY_EMAIL));
+  try {
+    await fs.access(from);
+  } catch {
+    return;
+  }
+  try {
+    await fs.access(to);
+    return;
+  } catch {
+    await fs.rename(from, to);
+  }
+}
 
 /** Ensure seeded operational accounts exist on persistent disk after first deploy. */
 export function ensureKnownUsers(users: User[]): { users: User[]; changed: boolean } {
@@ -293,7 +322,16 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
   const garryIdx = next.findIndex(
     (u) => u.email.trim().toLowerCase() === GARRY_EMAIL
   );
-  if (garryIdx < 0) {
+  const legacyIdx = next.findIndex(
+    (u) => u.email.trim().toLowerCase() === GARRY_EMAIL_LEGACY
+  );
+  if (garryIdx < 0 && legacyIdx >= 0) {
+    next[legacyIdx] = { ...next[legacyIdx], email: GARRY_EMAIL };
+    changed = true;
+  } else if (garryIdx >= 0 && legacyIdx >= 0) {
+    next.splice(legacyIdx, 1);
+    changed = true;
+  } else if (garryIdx < 0) {
     next.push(
       normalizeUser({
         name: "Garry Greenfreight",
