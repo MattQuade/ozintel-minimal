@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { checkAccountingAccess } from "@/lib/accounting/access";
+import AccountingPinLock from "@/components/AccountingPinLock";
 
 type Props = {
   children: ReactNode;
@@ -88,33 +89,35 @@ export default function AccountingGate({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
-      <div className="border-b border-gray-200 bg-white sticky top-0 z-20 print:hidden">
-        <div className="max-w-screen-2xl mx-auto px-6 py-3 flex flex-wrap items-center gap-4">
-          <Link
-            href={backHref}
-            className="inline-flex items-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 text-sm"
-          >
-            {backLabel}
-          </Link>
-          {backHref !== "/accounting" ? (
+    <AccountingPinLock>
+      <div className="min-h-screen bg-gray-50 print:min-h-0 print:bg-white">
+        <div className="border-b border-gray-200 bg-white sticky top-0 z-20 print:hidden">
+          <div className="max-w-screen-2xl mx-auto px-6 py-3 flex flex-wrap items-center gap-4">
             <Link
-              href="/accounting"
-              className="text-sm text-slate-500 hover:text-slate-800 hover:underline"
+              href={backHref}
+              className="inline-flex items-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 text-sm"
             >
-              Accounting hub
+              {backLabel}
             </Link>
-          ) : (
-            <Link
-              href="/"
-              className="text-sm text-slate-500 hover:text-slate-800 hover:underline"
-            >
-              Alerts home
-            </Link>
-          )}
+            {backHref !== "/accounting" ? (
+              <Link
+                href="/accounting"
+                className="text-sm text-slate-500 hover:text-slate-800 hover:underline"
+              >
+                Accounting hub
+              </Link>
+            ) : (
+              <Link
+                href="/"
+                className="text-sm text-slate-500 hover:text-slate-800 hover:underline"
+              >
+                Alerts home
+              </Link>
+            )}
+          </div>
         </div>
+        {children}
       </div>
-      {children}
-    </div>
+    </AccountingPinLock>
   );
 }

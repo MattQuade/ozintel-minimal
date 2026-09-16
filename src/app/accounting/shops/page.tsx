@@ -18,7 +18,7 @@ const field: CSSProperties = {
 export default function ShopsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [merchants, setMerchants] = useState<ApprovedMerchant[]>([]);
-  const [status, setStatus] = useState("Loading shops…");
+  const [status, setStatus] = useState("Loading suppliers…");
   const [alias, setAlias] = useState("");
   const [label, setLabel] = useState("");
   const [bankTerms, setBankTerms] = useState("");
@@ -30,9 +30,9 @@ export default function ShopsPage() {
       const data = await res.json();
       const list = Array.isArray(data.merchants) ? data.merchants : [];
       setMerchants(list);
-      setStatus(`${list.length} shop chip${list.length === 1 ? "" : "s"}`);
+      setStatus(`${list.length} supplier${list.length === 1 ? "" : "s"}`);
     } catch {
-      setStatus("Could not load shops");
+      setStatus("Could not load suppliers");
     }
   };
 
@@ -65,7 +65,7 @@ export default function ShopsPage() {
     const nextAlias = alias.trim().toLowerCase().replace(/[^a-z0-9]/g, "") ||
       nextLabel.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!nextLabel || !nextAlias) {
-      setStatus("Shop name is required");
+      setStatus("Supplier name is required");
       return;
     }
     const terms = bankTerms
@@ -90,11 +90,11 @@ export default function ShopsPage() {
 
   const removeShop = async (shopAlias: string) => {
     const next = merchants.filter((m) => m.alias !== shopAlias);
-    await saveList(next, "Shop removed");
+    await saveList(next, "Supplier removed");
   };
 
   const loadDefaults = async () => {
-    if (!confirm("Replace this account’s shop chips with the OzIntel starter list?")) {
+    if (!confirm("Replace this account’s suppliers with the OzIntel starter list?")) {
       return;
     }
     setSaving(true);
@@ -107,9 +107,9 @@ export default function ShopsPage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error("Could not load defaults");
       setMerchants(Array.isArray(data.merchants) ? data.merchants : []);
-      setStatus("Loaded starter shops");
+      setStatus("Loaded starter suppliers");
     } catch {
-      setStatus("Could not load starter shops");
+      setStatus("Could not load starter suppliers");
     } finally {
       setSaving(false);
     }
@@ -129,7 +129,7 @@ export default function ShopsPage() {
         throw new Error(data.error || "Upload failed");
       }
       setMerchants(Array.isArray(data.merchants) ? data.merchants : []);
-      setStatus(`Uploaded ${data.merchants.length} shops`);
+      setStatus(`Uploaded ${data.merchants.length} suppliers`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -139,7 +139,7 @@ export default function ShopsPage() {
   };
 
   return (
-    <AccountingGate section="Shops" backHref="/accounting" backLabel="← Back to Accounting">
+    <AccountingGate section="Suppliers" backHref="/accounting" backLabel="← Back to Accounting">
       <main
         style={{
           fontFamily: "system-ui",
@@ -151,7 +151,7 @@ export default function ShopsPage() {
           margin: "0 auto",
         }}
       >
-        <h1 style={{ color: "#fb923c", marginTop: 0 }}>Receipt shops</h1>
+        <h1 style={{ color: "#fb923c", marginTop: 0 }}>Suppliers</h1>
         <p style={{ color: "#94a3b8" }}>
           These chips appear on Capture Receipt for this account only. CSV:
           alias,label,bankTerms — or a JSON list.
@@ -175,7 +175,7 @@ export default function ShopsPage() {
               cursor: "pointer",
             }}
           >
-            Upload shops
+            Upload suppliers
           </button>
           <button
             type="button"
@@ -237,7 +237,7 @@ export default function ShopsPage() {
               cursor: "pointer",
             }}
           >
-            Add shop
+            Add supplier
           </button>
         </form>
 

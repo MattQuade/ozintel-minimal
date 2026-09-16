@@ -737,7 +737,7 @@ export default function HomePage({
       /* silo warmup — capture still works if this fails */
     }
     setStatus(
-      `Opened as ${user.name} — capture, read, shops, and COA are this account. Restore yourself before handover.`
+      `Opened as ${user.name} — capture, read, suppliers, and COA are this account. Restore yourself before handover.`
     );
   };
 
@@ -1102,11 +1102,6 @@ export default function HomePage({
       }
     } catch (err) {
       console.error(err);
-      // Last resort: native form submit without JS fetch
-      if (e?.currentTarget) {
-        e.currentTarget.submit();
-        return;
-      }
       setStatus('❌ Could not send safe alert. Try again.');
     } finally {
       setIsSendingAlert(false);
@@ -1160,10 +1155,6 @@ export default function HomePage({
       }
     } catch (err) {
       console.error(err);
-      if (e?.currentTarget) {
-        e.currentTarget.submit();
-        return;
-      }
       setStatus('❌ Could not send emergency alert. Try again.');
     } finally {
       setIsSendingAlert(false);
@@ -1211,10 +1202,10 @@ export default function HomePage({
             Testing as {currentUser.name}
           </p>
           <p style={{ margin: '0 0 12px', color: '#fed7aa', fontSize: '0.9rem' }}>
-            Camera, read, shops, and COA are this account only. Restore yourself before handover.
+            Camera, read, suppliers, and COA are this account only. Restore yourself before handover.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Shops</a>
+            <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Suppliers</a>
             <a href="/coa" style={{ background: '#0ea5e9', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>COA</a>
             <a href="/accounting/receipts" style={{ background: '#c2410c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Receipts</a>
             <button type="button" onClick={() => void restoreMyAccount()} style={{ background: '#14532d', color: 'white', border: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>

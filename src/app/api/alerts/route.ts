@@ -8,6 +8,26 @@ import { SESSION_COOKIE_NAME } from "@/lib/sessionCookie";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const ALERT_LOCK_MS = 3000;
+const recentAlerts = new Map<
+  string,
+  { at: number; kind: "SAFE ARRIVAL" | "EMERGENCY" }
+>();
+
+function takeAlertLock(
+  email: string,
+  kind: "SAFE ARRIVAL" | "EMERGENCY"
+): "SAFE ARRIVAL" | "EMERGENCY" | null {
+  const key = email.trim().toLowerCase();
+  const now = Date.now();
+  const prev = recentAlerts.get(key);
+  if (prev && now - prev.at < ALERT_LOCK_MS) {
+    return prev.kind;
+  }
+  recentAlerts.set(key, { at: now, kind });
+  return null;
+}
+
 function readEmail(req: NextRequest): string {
   const raw = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!raw) return "";
@@ -219,6 +239,28 @@ export async function POST(req: NextRequest) {
       ? "EMERGENCY"
       : "SAFE ARRIVAL";
     const listKey = isEmergency ? "emergency" : "safe";
+
+    const lockedKind = takeAlertLock(user.email, alertType);
+    if (lockedKind) {
+      const firstEmergency = lockedKind === "EMERGENCY";
+      if (html) {
+        return NextResponse.redirect(
+          publicHomeUrl(req, {
+            alert: firstEmergency ? "emergency-ok" : "safe-ok",
+            sent: "1",
+          }),
+          303
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        sent: 0,
+        failed: 0,
+        duplicate: true,
+        kind: firstEmergency ? "emergency" : "safe",
+        alertType: lockedKind,
+      });
+    }
 
     const contactsFile = await readAlertContacts(user.email);
     const contacts = contactsFile[listKey];

@@ -6,6 +6,7 @@ import {
   checkOpsAccess,
   type OpsPermission,
 } from "@/lib/accounting/access";
+import AccountingPinLock from "@/components/AccountingPinLock";
 
 type Props = {
   children: ReactNode;
@@ -58,5 +59,5 @@ export default function OpsGate({ children, permission, section }: Props) {
     );
   }
 
-  return <>{children}</>;
+  return <AccountingPinLock>{children}</AccountingPinLock>;
 }

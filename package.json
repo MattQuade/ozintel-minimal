@@ -11,6 +11,7 @@
     "test:receipts": "npx tsx src/lib/accounting/runReceiptCaptionFixtures.ts",
     "test:receipt-ocr": "npx tsx src/lib/accounting/runReceiptOcrFixtures.ts",
     "test:silos": "npx tsx src/lib/accounting/runSiloIsolationFixtures.ts",
+    "test:pin": "npx tsx src/lib/accounting/runPinFixtures.ts",
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android"
