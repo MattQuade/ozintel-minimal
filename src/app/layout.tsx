@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: 'OzIntel - Emergency Alert System',
   applicationName: 'OzIntel',
   // Cache-bust so Android Chrome / Samsung Internet pick up new home-screen icons
-  manifest: '/manifest.webmanifest?v=6',
+  manifest: '/manifest.webmanifest?v=7',
   appleWebApp: {
     capable: true,
     title: 'OzIntel',
@@ -16,11 +16,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icons/icon-192.png?v=6', sizes: '192x192', type: 'image/png' },
-      { url: '/icons/icon-512.png?v=6', sizes: '512x512', type: 'image/png' },
+      { url: '/icons/icon-192.png?v=7', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png?v=7', sizes: '512x512', type: 'image/png' },
     ],
-    apple: [{ url: '/icons/apple-touch-icon.png?v=6', sizes: '180x180', type: 'image/png' }],
-    shortcut: ['/icons/icon-192.png?v=6'],
+    apple: [{ url: '/icons/apple-touch-icon.png?v=7', sizes: '180x180', type: 'image/png' }],
+    shortcut: ['/icons/icon-192.png?v=7'],
   },
 };
 
