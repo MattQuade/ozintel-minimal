@@ -58,6 +58,14 @@ export async function setAccountingPin(email: string, pin: string) {
   await writePinMap(map);
 }
 
+/** Set PIN only if this email does not already have one. */
+export async function ensureAccountingPinIfUnset(email: string, pin: string) {
+  if (!isFourDigitPin(pin)) return false;
+  if (await hasAccountingPin(email)) return false;
+  await setAccountingPin(email, pin);
+  return true;
+}
+
 export async function verifyAccountingPin(email: string, pin: string) {
   if (!isFourDigitPin(pin)) return false;
   const key = normalizeEmail(email);

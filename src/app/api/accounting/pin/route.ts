@@ -32,7 +32,8 @@ function canUseModulePin(user: User) {
     user.status === "approved" &&
       (user.permissions?.accounting ||
         user.permissions?.pubOps ||
-        user.permissions?.forestryOps)
+        user.permissions?.forestryOps ||
+        user.permissions?.logisticsOps)
   );
 }
 

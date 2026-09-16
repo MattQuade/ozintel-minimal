@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
         logisticsOps: false,
       },
       shares: { pubOps: [] },
-      pin: "",
       lastAlert: null,
     };
     users.push(user);
@@ -131,9 +130,6 @@ export async function PUT(req: NextRequest) {
     }
     if (typeof body.name === "string") users[idx].name = body.name.trim();
     if (typeof body.phone === "string") users[idx].phone = body.phone.trim();
-    if (typeof body.pin === "string") {
-      users[idx].pin = String(body.pin).replace(/\D/g, "").slice(0, 6);
-    }
     await writeUsers(users);
     return NextResponse.json({
       success: true,

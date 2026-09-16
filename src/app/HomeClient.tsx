@@ -1722,7 +1722,7 @@ export default function HomePage({
               textAlign: 'center',
             }}
           >
-            Enter the <strong>signup email</strong>, mobile, exact full name, or PIN.
+            Enter the <strong>signup email</strong>, mobile, or exact full name.
             Use the address stored in Admin (it may not look like their name).
           </p>
           <div
@@ -1737,7 +1737,7 @@ export default function HomePage({
               name="restore"
               type="text"
               required
-              placeholder="Email, phone, full name, or PIN"
+              placeholder="Email, phone, or full name"
               defaultValue={restoreEmail}
               autoComplete="username"
               style={{

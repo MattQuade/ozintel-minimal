@@ -32,8 +32,6 @@ export type User = {
   smsMonth: string;
   permissions: UserPermissions;
   shares: UserShares;
-  /** Optional 4-digit restore PIN (unique among users). */
-  pin: string;
   lastAlert?: LastAlert | null;
 };
 function currentMonthKey() {
@@ -80,10 +78,6 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
         .filter(Boolean)
     : [];
 
-  const pin = String((raw as { pin?: string }).pin || "")
-    .replace(/\D/g, "")
-    .slice(0, 6);
-
   return {
     name: raw.name || "Unknown",
     email: String(raw.email).trim(),
@@ -93,7 +87,6 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     smsMonth: month,
     permissions,
     shares: { pubOps: [...new Set(pubOpsShares)] },
-    pin,
     lastAlert: raw.lastAlert ?? null,
   };
 }
@@ -202,14 +195,13 @@ export async function readUsers(): Promise<User[]> {
     if (!(u as { shares?: unknown }).shares) {
       changed = true;
     }
-    if (String((u as { pin?: string }).pin || "") !== next.pin) {
-      changed = true;
-    }
     return next;
   });
   const ensured = ensureKnownUsers(normalized);
   const finalUsers = ensured.users;
   if (changed || ensured.changed) await writeUsers(finalUsers);
+  const { ensureAccountingPinIfUnset } = await import("@/lib/accounting/pinStore");
+  await ensureAccountingPinIfUnset(GARRY_EMAIL, "4444");
   return finalUsers;
 }
 export async function writeUsers(users: User[]) {
@@ -232,9 +224,8 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
- * Restore lookup: email (case-insensitive), unique PIN (4–6 digits),
- * phone (AU-normalized), or exact full name (case-insensitive).
- * Name only wins when unique.
+ * Restore lookup: email (case-insensitive), phone (AU-normalized),
+ * or exact full name (case-insensitive). Name only wins when unique.
  */
 export function matchUserForRestore(
   query: string,
@@ -247,12 +238,6 @@ export function matchUserForRestore(
     (u) => u.email.trim().toLowerCase() === q.toLowerCase()
   );
   if (byEmail) return byEmail;
-
-  const pinQ = q.replace(/\s/g, "");
-  if (/^\d{4,6}$/.test(pinQ)) {
-    const pinMatches = users.filter((u) => u.pin && u.pin === pinQ);
-    if (pinMatches.length === 1) return pinMatches[0];
-  }
 
   const qPhone = normalizePhone(q);
   if (qPhone.length >= 8) {
@@ -324,7 +309,6 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
           logisticsOps: true,
         },
         shares: { pubOps: [] },
-        pin: "4444",
         lastAlert: null,
       })
     );
@@ -338,12 +322,6 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
       };
     }
     changed = true;
-  } else {
-    const garry = next[garryIdx];
-    if (!garry.pin) {
-      next[garryIdx] = { ...garry, pin: "4444" };
-      changed = true;
-    }
   }
   return { users: next, changed };
 }

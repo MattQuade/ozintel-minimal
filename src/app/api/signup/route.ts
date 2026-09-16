@@ -105,7 +105,6 @@ export async function POST(req: NextRequest) {
         logisticsOps: false,
       },
       shares: { pubOps: [] },
-      pin: "",
       lastAlert: null,
     };
     users.push(user);
