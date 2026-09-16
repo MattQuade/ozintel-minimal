@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         forestryOps: false,
         logisticsOps: false,
       },
-      shares: { pubOps: [] },
+      shares: { pubOps: [], logisticsOps: [] },
       lastAlert: null,
     };
     users.push(user);
@@ -104,19 +104,29 @@ export async function PUT(req: NextRequest) {
       }
     }
     if (body.shares && typeof body.shares === "object") {
-      const incoming = body.shares as { pubOps?: unknown };
-      const pubOps = Array.isArray(incoming.pubOps)
-        ? incoming.pubOps
-            .map((e) => String(e || "").trim().toLowerCase())
-            .filter(Boolean)
-        : users[idx].shares?.pubOps || [];
-      const nextShares = [...new Set(pubOps)].filter(
+      const incoming = body.shares as {
+        pubOps?: unknown;
+        logisticsOps?: unknown;
+      };
+      const existing = {
+        pubOps: users[idx].shares?.pubOps || [],
+        logisticsOps: users[idx].shares?.logisticsOps || [],
+      };
+      const clean = (raw: unknown, fallback: string[]) =>
+        Array.isArray(raw)
+          ? raw
+              .map((e) => String(e || "").trim().toLowerCase())
+              .filter(Boolean)
+          : fallback;
+      const pubOps = [...new Set(clean(incoming.pubOps, existing.pubOps))].filter(
         (e) => e !== users[idx].email.toLowerCase()
       );
-      users[idx].shares = { pubOps: nextShares };
+      const logisticsOps = [
+        ...new Set(clean(incoming.logisticsOps, existing.logisticsOps)),
+      ].filter((e) => e !== users[idx].email.toLowerCase());
+      users[idx].shares = { pubOps, logisticsOps };
 
-      // Ensure grantees can pass the Pub Ops gate to open this owner's silo.
-      for (const granteeEmail of nextShares) {
+      for (const granteeEmail of pubOps) {
         const gIdx = users.findIndex(
           (u) => u.email.toLowerCase() === granteeEmail
         );
@@ -124,6 +134,17 @@ export async function PUT(req: NextRequest) {
           users[gIdx].permissions = {
             ...users[gIdx].permissions,
             pubOps: true,
+          };
+        }
+      }
+      for (const granteeEmail of logisticsOps) {
+        const gIdx = users.findIndex(
+          (u) => u.email.toLowerCase() === granteeEmail
+        );
+        if (gIdx >= 0) {
+          users[gIdx].permissions = {
+            ...users[gIdx].permissions,
+            logisticsOps: true,
           };
         }
       }

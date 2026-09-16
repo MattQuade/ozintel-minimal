@@ -168,6 +168,10 @@
         "forestryOps": false,
         "logisticsOps": true
       },
+      "shares": {
+        "pubOps": [],
+        "logisticsOps": ["mattquade2000@gmail.com"]
+      },
       "lastAlert": null
     }
   ]

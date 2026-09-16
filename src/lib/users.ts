@@ -16,6 +16,7 @@ export type UserPermissions = {
 /** Per-module share lists: emails allowed to open THIS user's siloed data. */
 export type UserShares = {
   pubOps: string[];
+  logisticsOps: string[];
 };
 
 export type LastAlert = {
@@ -78,6 +79,11 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
         .map((e) => String(e || "").trim().toLowerCase())
         .filter(Boolean)
     : [];
+  const logisticsShares = Array.isArray(sharesRaw?.logisticsOps)
+    ? sharesRaw!.logisticsOps
+        .map((e) => String(e || "").trim().toLowerCase())
+        .filter(Boolean)
+    : [];
 
   return {
     name: raw.name || "Unknown",
@@ -87,7 +93,10 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     smsCount,
     smsMonth: month,
     permissions,
-    shares: { pubOps: [...new Set(pubOpsShares)] },
+    shares: {
+      pubOps: [...new Set(pubOpsShares)],
+      logisticsOps: [...new Set(logisticsShares)],
+    },
     lastAlert: raw.lastAlert ?? null,
   };
 }
@@ -273,12 +282,26 @@ export async function findUserByEmail(email: string) {
 export async function listPubOpsShareOwnersFor(
   granteeEmail: string
 ): Promise<string[]> {
+  return listShareOwnersFor("pubOps", granteeEmail);
+}
+
+/** Owner emails that explicitly shared Logistics Ops data with this grantee. */
+export async function listLogisticsOpsShareOwnersFor(
+  granteeEmail: string
+): Promise<string[]> {
+  return listShareOwnersFor("logisticsOps", granteeEmail);
+}
+
+async function listShareOwnersFor(
+  module: "pubOps" | "logisticsOps",
+  granteeEmail: string
+): Promise<string[]> {
   const needle = String(granteeEmail || "").trim().toLowerCase();
   if (!needle) return [];
   const users = await readUsers();
   return users
     .filter((u) =>
-      (u.shares?.pubOps || []).some((e) => e.toLowerCase() === needle)
+      (u.shares?.[module] || []).some((e) => e.toLowerCase() === needle)
     )
     .map((u) => u.email.trim().toLowerCase());
 }
@@ -290,6 +313,7 @@ export async function findUserForRestore(query: string) {
 
 const GARRY_EMAIL = "garry@ozintel.com.au";
 const GARRY_EMAIL_LEGACY = "gary@ozintel.com.au";
+const ADMIN_SELF_EMAIL = "mattquade2000@gmail.com";
 
 function ownerDirSegment(email: string) {
   return String(email || "")
@@ -346,12 +370,12 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
           forestryOps: false,
           logisticsOps: true,
         },
-        shares: { pubOps: [] },
+        shares: { pubOps: [], logisticsOps: [ADMIN_SELF_EMAIL] },
         lastAlert: null,
       })
     );
     const mattIdx = next.findIndex(
-      (u) => u.email.trim().toLowerCase() === "mattquade2000@gmail.com"
+      (u) => u.email.trim().toLowerCase() === ADMIN_SELF_EMAIL
     );
     if (mattIdx >= 0) {
       next[mattIdx] = {
@@ -359,6 +383,37 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
         permissions: { ...next[mattIdx].permissions, logisticsOps: true },
       };
     }
+    changed = true;
+  }
+
+  const gIdx = next.findIndex(
+    (u) => u.email.trim().toLowerCase() === GARRY_EMAIL
+  );
+  if (gIdx >= 0) {
+    const garry = next[gIdx];
+    const logistics = new Set(
+      (garry.shares?.logisticsOps || []).map((e) => e.toLowerCase())
+    );
+    if (!logistics.has(ADMIN_SELF_EMAIL)) {
+      logistics.add(ADMIN_SELF_EMAIL);
+      next[gIdx] = {
+        ...garry,
+        shares: {
+          pubOps: garry.shares?.pubOps || [],
+          logisticsOps: [...logistics],
+        },
+      };
+      changed = true;
+    }
+  }
+  const mattIdx = next.findIndex(
+    (u) => u.email.trim().toLowerCase() === ADMIN_SELF_EMAIL
+  );
+  if (mattIdx >= 0 && !next[mattIdx].permissions.logisticsOps) {
+    next[mattIdx] = {
+      ...next[mattIdx],
+      permissions: { ...next[mattIdx].permissions, logisticsOps: true },
+    };
     changed = true;
   }
   return { users: next, changed };

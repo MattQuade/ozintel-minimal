@@ -25,6 +25,7 @@ type UserProfile = {
   };
   shares?: {
     pubOps: string[];
+    logisticsOps?: string[];
   };
   lastAlert?: {
     timestamp: number;
@@ -759,10 +760,20 @@ export default function HomePage({
     }
   };
 
-  const updatePubOpsShare = async (ownerEmail: string, granteeEmail: string, enabled: boolean) => {
+  const updateOpsShare = async (
+    ownerEmail: string,
+    granteeEmail: string,
+    enabled: boolean,
+    module: 'pubOps' | 'logisticsOps'
+  ) => {
     const owner = allUsers.find(u => u.email === ownerEmail);
     if (!owner) return;
-    const current = new Set((owner.shares?.pubOps || []).map(e => e.toLowerCase()));
+    const current = new Set(
+      (module === 'pubOps'
+        ? owner.shares?.pubOps || []
+        : owner.shares?.logisticsOps || []
+      ).map(e => e.toLowerCase())
+    );
     const g = granteeEmail.toLowerCase();
     if (enabled) current.add(g);
     else current.delete(g);
@@ -772,19 +783,23 @@ export default function HomePage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: ownerEmail,
-          shares: { pubOps: [...current] },
+          shares: { [module]: [...current] },
         }),
       });
       const data = await res.json();
       if (data.success) {
         setAllUsers(data.users);
       } else {
-        alert(data.error || 'Failed to update Pub Ops share');
+        alert(data.error || `Failed to update ${module === 'pubOps' ? 'Pub' : 'Logistics'} Ops share`);
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to update Pub Ops share');
+      alert(`Failed to update ${module === 'pubOps' ? 'Pub' : 'Logistics'} Ops share`);
     }
+  };
+
+  const updatePubOpsShare = async (ownerEmail: string, granteeEmail: string, enabled: boolean) => {
+    await updateOpsShare(ownerEmail, granteeEmail, enabled, 'pubOps');
   };
 
   /** Prefer DOM/FormData so mobile autofill still works even if React state lagged. */
@@ -1398,6 +1413,36 @@ export default function HomePage({
                                     checked={shared}
                                     onChange={(e) =>
                                       updatePubOpsShare(u.email, other.email, e.target.checked)
+                                    }
+                                  />{' '}
+                                  {other.name} ({other.email})
+                                </label>
+                              );
+                            })}
+                        </div>
+                        <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #334155' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: '#14b8a6' }}>
+                            Share this user’s Logistics Ops data with:
+                          </p>
+                          <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            Shared users open this keg counter (not their own empty one). Logistics Ops permission is enabled automatically.
+                          </p>
+                          {approvedUsersList
+                            .filter((other) => other.email.toLowerCase() !== u.email.toLowerCase())
+                            .map((other) => {
+                              const shared = (u.shares?.logisticsOps || []).some(
+                                (e) => e.toLowerCase() === other.email.toLowerCase()
+                              );
+                              return (
+                                <label
+                                  key={`logistics-${other.email}`}
+                                  style={{ display: 'block', margin: '4px 0', cursor: 'pointer', fontSize: '0.85rem' }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={shared}
+                                    onChange={(e) =>
+                                      updateOpsShare(u.email, other.email, e.target.checked, 'logisticsOps')
                                     }
                                   />{' '}
                                   {other.name} ({other.email})

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   findUserByEmail,
+  listLogisticsOpsShareOwnersFor,
   listPubOpsShareOwnersFor,
   type User,
   type UserPermissions,
@@ -123,38 +124,46 @@ export async function requireAccountingAccess(
 }
 
 /**
- * Resolve whose Pub Ops keg store this actor should use.
- * - Own silo by default
- * - If another user shared Pub Ops with this actor, use that owner's silo
- * - Optional ?owner= / body.ownerEmail when multiple shares exist
+ * Resolve whose shared ops keg store this actor should use.
+ * Own silo by default; a share from another owner opens that owner's silo.
  */
-export async function resolvePubOpsDataOwner(
+export async function resolveSharedOpsDataOwner(
+  module: "pubOps" | "logisticsOps",
   actor: User,
   requestedOwner?: string | null
 ): Promise<string> {
   const self = normalizeOwnerEmail(actor.email);
-  const sharedFrom = await listPubOpsShareOwnersFor(self);
+  const sharedFrom =
+    module === "pubOps"
+      ? await listPubOpsShareOwnersFor(self)
+      : await listLogisticsOpsShareOwnersFor(self);
   const requested = requestedOwner
     ? normalizeOwnerEmail(requestedOwner)
     : "";
+  const label = module === "pubOps" ? "Pub Ops" : "Logistics Ops";
 
   if (requested) {
     if (requested === self) return self;
     if (sharedFrom.some((e) => e === requested)) return requested;
-    throw new Error("You do not have access to that Pub Ops data owner.");
+    throw new Error(`You do not have access to that ${label} data owner.`);
   }
 
-  // Shared-only users (and anyone shared into exactly one owner) open the shared store.
-  if (sharedFrom.length === 1) return sharedFrom[0];
-  if (sharedFrom.length > 1) return sharedFrom[0];
+  if (sharedFrom.length >= 1) return sharedFrom[0];
   return self;
+}
+
+export async function resolvePubOpsDataOwner(
+  actor: User,
+  requestedOwner?: string | null
+): Promise<string> {
+  return resolveSharedOpsDataOwner("pubOps", actor, requestedOwner);
 }
 
 /**
  * Server-side gate for Pub / Forestry / Logistics ops APIs.
  * Requires restored cookie + approved user + the matching ops permission.
- * Forestry and Logistics data are siloed to the signed-in user.
- * Pub Ops may open another owner's silo when shared.
+ * Forestry data is siloed to the signed-in user.
+ * Pub Ops and Logistics Ops may open another owner's silo when shared.
  */
 export async function requireOpsAccess(
   req: Request,
@@ -172,7 +181,7 @@ export async function requireOpsAccess(
   });
   if (!access.ok) return access;
 
-  if (permission !== "pubOps") {
+  if (permission === "forestryOps") {
     return withOwnerRun(access.user, access.user.email);
   }
 
@@ -182,7 +191,11 @@ export async function requireOpsAccess(
       url.searchParams.get("owner") ||
       url.searchParams.get("ownerEmail") ||
       "";
-    const owner = await resolvePubOpsDataOwner(access.user, requested || null);
+    const owner = await resolveSharedOpsDataOwner(
+      permission === "pubOps" ? "pubOps" : "logisticsOps",
+      access.user,
+      requested || null
+    );
     return withOwnerRun(access.user, owner);
   } catch (err) {
     return {
@@ -190,7 +203,7 @@ export async function requireOpsAccess(
       response: NextResponse.json(
         {
           success: false,
-          error: err instanceof Error ? err.message : "Pub Ops owner denied",
+          error: err instanceof Error ? err.message : `${label} owner denied`,
         },
         { status: 403 }
       ),

@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         forestryOps: false,
         logisticsOps: false,
       },
-      shares: { pubOps: [] },
+      shares: { pubOps: [], logisticsOps: [] },
       lastAlert: null,
     };
     users.push(user);
