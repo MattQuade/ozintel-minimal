@@ -198,12 +198,11 @@ function moneyMatchesInLine(
   return out;
 }
 
-function isFooterJunkAmount(line: string, amount: number): boolean {
-  if (amount < 1) return true;
-  return isGstComponentLine(line.toLowerCase());
+function isFooterJunkAmount(_line: string, amount: number): boolean {
+  return amount < 1;
 }
 
-/** Last money figure in the photo. Change $0.00 is skipped. */
+/** Last money figure in the photo, rightmost on the lowest line. Change $0.00 is skipped. */
 function lastUsableMoneyFromBottom(text: string): number | null {
   const lines = normalizeOcrNoise(text)
     .split(/\n+/)
@@ -425,7 +424,9 @@ export function guessAliasFromHeader(text: string): string | null {
 }
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
-  return pickAmountFromOcr(text)?.candidates || [];
+  const amount = lastUsableMoneyFromBottom(text);
+  if (amount == null) return [];
+  return chipsFromAmount(amount, 50);
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -433,82 +434,12 @@ export function detectAmountFromOcr(text: string): {
   score: number;
   lock: boolean;
 } | null {
-  const picked = pickAmountFromOcr(text);
-  if (!picked) return null;
-  return { amount: picked.amount, score: picked.score, lock: picked.lock };
-}
-
-function sortScored(
-  a: { score: number; count: number; lastLine: number },
-  b: { score: number; count: number; lastLine: number }
-): number {
-  return b.score - a.score || b.count - a.count || b.lastLine - a.lastLine;
-}
-
-function pickAmountFromOcr(text: string): {
-  amount: number;
-  score: number;
-  lock: boolean;
-  candidates: ReceiptAmountCandidate[];
-} | null {
-  const scored = collectScoredAmounts(text);
-  const payments = scored.filter((row) => row.payment).sort(sortScored);
-  const saleTotals = scored.filter((row) => row.saleTotal).sort(sortScored);
-  const agreed = scored
-    .filter((row) => row.payment && row.saleTotal)
-    .sort(sortScored);
-
-  let best = agreed[0] || payments[0] || saleTotals[0] || null;
-  if (best) {
-    const stripped = stripLeadingDollarFour(best.amount);
-    if (stripped != null) {
-      const pair = scored.find(
-        (row) =>
-          Math.round(row.amount * 100) === Math.round(stripped * 100) &&
-          (row.payment || row.saleTotal)
-      );
-      if (pair) best = pair;
-    }
+  const amount = lastUsableMoneyFromBottom(text);
+  if (amount == null) return null;
+  if (stripLeadingDollarFour(amount) != null) {
+    return { amount, score: 40, lock: false };
   }
-
-  if (!best) {
-    const last = lastUsableMoneyFromBottom(text);
-    if (last == null) return null;
-    const lock = stripLeadingDollarFour(last) == null;
-    return {
-      amount: last,
-      score: 20,
-      lock,
-      candidates: chipsFromAmount(last, 20),
-    };
-  }
-
-  const dollarGuess = stripLeadingDollarFour(best.amount) != null;
-  const lock =
-    !dollarGuess &&
-    (Boolean(best.payment && best.saleTotal) ||
-      Boolean(best.payment && best.score >= 40) ||
-      Boolean(best.saleTotal && payments.length === 0 && best.score >= 50));
-
-  const candidateRows = new Map<number, ReceiptAmountCandidate>();
-  for (const row of chipsFromAmount(best.amount, best.score)) {
-    candidateRows.set(Math.round(row.amount * 100), row);
-  }
-  for (const row of payments) {
-    const key = Math.round(row.amount * 100);
-    if (candidateRows.has(key)) continue;
-    if (isDollarAsFourPair(row.amount, best.amount)) continue;
-    candidateRows.set(key, { amount: row.amount, score: row.score });
-  }
-
-  return {
-    amount: best.amount,
-    score: best.score,
-    lock,
-    candidates: [...candidateRows.values()].sort(
-      (a, b) => b.score - a.score || a.amount - b.amount
-    ),
-  };
+  return { amount, score: 50, lock: true };
 }
 
 export function parseReceiptOcrText(
@@ -519,8 +450,8 @@ export function parseReceiptOcrText(
   if (!raw) return null;
 
   const known = detectMerchantFromOcr(raw, merchants);
-  const amountHit = pickAmountFromOcr(raw);
-  const amountCandidates = amountHit?.candidates || [];
+  const amountHit = detectAmountFromOcr(raw);
+  const amountCandidates = listAmountCandidates(raw);
   if (!amountHit && !amountCandidates.length && !known) return null;
 
   const alias = known ? normalizeReceiptAlias(known.alias) : "";

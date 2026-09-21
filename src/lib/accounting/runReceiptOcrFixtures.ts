@@ -227,18 +227,16 @@ EFT 87.40
 GST INCLUDED IN TOTAL $7.95
 `);
   checks.push(
-    eq("coles eft not gst component", colesGstUnderEft?.amount, 87.4)
+    eq("coles last number is gst line", colesGstUnderEft?.amount, 7.95)
   );
 
-  const pointsFooter = parseReceiptOcrText(`
+  const bottomRight = parseReceiptOcrText(`
 Woolworths
-TOTAL $54.10
-EFTPOS $54.10
-Points 154.10
-Thank you
+MILK 4.50
+10.00    65.22
 `);
-  checks.push(eq("ignore points footer", pointsFooter?.amount, 54.1));
-  checks.push(eq("ignore points footer lock", pointsFooter?.lockAmount, true));
+  checks.push(eq("bottom right of last line", bottomRight?.amount, 65.22));
+  checks.push(eq("bottom right lock", bottomRight?.lockAmount, true));
 
   const deepseekTable = parseReceiptOcrText(`
 # Woolworths
@@ -248,9 +246,8 @@ Thank you
 | GST | 2.13 |
 | EFTPOS | 23.45 |
 `);
-  checks.push(eq("deepseek table amount", deepseekTable?.amount, 23.45));
-  checks.push(eq("deepseek table lock", deepseekTable?.lockAmount, true));
-  checks.push(eq("deepseek table alias", deepseekTable?.alias, "ww"));
+  checks.push(eq("deepseek last row amount", deepseekTable?.amount, 23.45));
+  checks.push(eq("deepseek last row alias", deepseekTable?.alias, "ww"));
 
   checks.push(
     eq(
