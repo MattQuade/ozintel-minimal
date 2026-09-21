@@ -1,6 +1,6 @@
 /**
- * Use Textract shop + paid total when AnalyzeExpense produced a number.
- * Tesseract is only the fallback.
+ * Use Textract shop + paid total when AWS returned them.
+ * Tesseract is only used when Textract is not configured.
  */
 
 import type { ApprovedMerchant } from "@/lib/accounting/approvedMerchants";
@@ -66,6 +66,20 @@ export function chooseReceiptOcr(args: {
     }
     return {
       text: args.textract?.text || args.tesseractText,
+      engine: "textract",
+      suggestion,
+      tessAmount: null,
+      textractAmount,
+    };
+  }
+
+  if (args.textract?.vendor) {
+    const suggestion = parseReceiptOcrText(
+      [args.textract.vendor, args.textract.text].join("\n"),
+      args.merchants
+    );
+    return {
+      text: args.textract.text,
       engine: "textract",
       suggestion,
       tessAmount: null,

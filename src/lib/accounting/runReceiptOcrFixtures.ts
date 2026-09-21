@@ -6,7 +6,10 @@
 import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { findLastInkRow } from "@/lib/accounting/ocrReceipt";
 import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
-import { parseTextractExpense } from "@/lib/accounting/ocrTextract";
+import {
+  parseTextractExpense,
+  parseTextractQueries,
+} from "@/lib/accounting/ocrTextract";
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -306,6 +309,43 @@ TOTAL $87.40
   checks.push(eq("textract total not gst", textract.total, 87.4));
   checks.push(eq("textract vendor", textract.vendor, "Woolworths"));
   checks.push(eq("textract tax field kept aside", textract.tax, 7.95));
+
+  const queried = parseTextractQueries({
+    Blocks: [
+      {
+        Id: "q1",
+        BlockType: "QUERY",
+        Query: { Alias: "PAID_TOTAL" },
+        Relationships: [{ Type: "ANSWER", Ids: ["a1", "a2"] }],
+      },
+      {
+        Id: "a1",
+        BlockType: "QUERY_RESULT",
+        Text: "GST $7.95",
+        Confidence: 55,
+      },
+      {
+        Id: "a2",
+        BlockType: "QUERY_RESULT",
+        Text: "$87.40",
+        Confidence: 96,
+      },
+      {
+        Id: "q2",
+        BlockType: "QUERY",
+        Query: { Alias: "VENDOR" },
+        Relationships: [{ Type: "ANSWER", Ids: ["a3"] }],
+      },
+      {
+        Id: "a3",
+        BlockType: "QUERY_RESULT",
+        Text: "Woolworths",
+        Confidence: 99,
+      },
+    ],
+  });
+  checks.push(eq("query paid total not gst", queried.total, 87.4));
+  checks.push(eq("query vendor", queried.vendor, "Woolworths"));
 
   const textractWins = chooseReceiptOcr({
     tesseractText: "",

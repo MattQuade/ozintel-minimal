@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import { readReceiptImage } from "@/lib/accounting/ocrReceipt";
-import { textractConfigured } from "@/lib/accounting/ocrTextract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 20;
 
 const MAX_BYTES = 18 * 1024 * 1024;
 
@@ -54,7 +53,7 @@ export async function POST(req: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
-      const ocrMs = textractConfigured() ? 20_000 : 12_000;
+      const ocrMs = 12_000;
       const { suggestion, text } = await Promise.race([
         readReceiptImage(buffer),
         new Promise<never>((_, reject) => {
