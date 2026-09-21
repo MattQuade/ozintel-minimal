@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Restore an approved account from the home screen. Accounting, receipts, and ops then ask for a 4-digit PIN (Set PIN the first time, Enter PIN after that). Unlock lasts 30 minutes. Alerts stay on restore-by-email only.
+Open http://localhost:3000. Restore an approved account from the home screen. Accounting, receipts, and ops then ask for a 4-digit PIN (Set PIN the first time, Enter PIN after that). Unlock lasts 12 hours and refreshes while you keep using those modules. Alerts stay on restore-by-email only.
 
 ## Notes
 

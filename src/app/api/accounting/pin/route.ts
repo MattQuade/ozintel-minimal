@@ -83,10 +83,20 @@ export async function GET(req: NextRequest) {
     const access = await requirePinUser(req);
     if (!access.ok) return access.response;
     const hasPin = await hasAccountingPin(access.user.email);
+    const unlocked = unlockedFor(req, access.user.email);
+    if (unlocked) {
+      const res = NextResponse.json({
+        success: true,
+        hasPin,
+        unlocked: true,
+      });
+      setPinUnlockCookie(res, encodePinUnlock(access.user.email));
+      return res;
+    }
     return NextResponse.json({
       success: true,
       hasPin,
-      unlocked: unlockedFor(req, access.user.email),
+      unlocked: false,
     });
   } catch (error) {
     console.error(error);

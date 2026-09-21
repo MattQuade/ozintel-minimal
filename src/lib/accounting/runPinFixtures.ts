@@ -10,7 +10,7 @@ async function main() {
 
   const { hasAccountingPin, setAccountingPin, verifyAccountingPin } =
     await import("./pinStore");
-  const { encodePinUnlock, decodePinUnlock } = await import("./pinCookie");
+  const { encodePinUnlock, decodePinUnlock, PIN_COOKIE_MAX_AGE } = await import("./pinCookie");
 
   const email = "matt@example.com";
   assert.equal(await hasAccountingPin(email), false);
@@ -31,6 +31,7 @@ async function main() {
   const token = encodePinUnlock(email);
   assert.equal(decodePinUnlock(token), email);
   assert.equal(decodePinUnlock("nope"), null);
+  assert.equal(PIN_COOKIE_MAX_AGE, 60 * 60 * 12);
 
   await rm(dir, { recursive: true, force: true });
   console.log("pin fixtures ok");
