@@ -61,7 +61,10 @@ export type ReceiptOcrSuggestion = ParsedReceiptCaption & {
 function normalizeOcrNoise(text: string): string {
   return String(text || "")
     .replace(/\u00a0/g, " ")
-    .replace(/[|]/g, "I")
+    .replace(/[＄]/g, "$")
+    .replace(/[．]/g, ".")
+    .replace(/[*_#>`]+/g, " ")
+    .replace(/[|]/g, " ")
     .replace(/\r/g, "\n");
 }
 
@@ -124,12 +127,37 @@ function parseMoneyToken(whole: string, frac: string): number | null {
   return Math.round(n * 100) / 100;
 }
 
-function isTotalishLine(lower: string): boolean {
-  return (
-    /\b(purchase|sale\s*total|card\s*sales?|eftpos|\beft\b|amount|no\s*cash\s*out|cba\s*chg|\baud\b)\b/.test(
-      lower
-    ) || (/\btotal\b/.test(lower) && !/\bsubtotal\b/.test(lower))
+function isGstComponentLine(lower: string): boolean {
+  const compact = lower.replace(/\s+/g, " ");
+  if (/\bg[s5]t\s+included\s+in\s+total\b/.test(compact)) return true;
+  if (/^\s*g[s5]t\b/.test(compact) && !/includes?\s+g[s5]t/.test(compact)) {
+    return true;
+  }
+  if (
+    /\bg[s5]t\b/.test(compact) &&
+    !/\btotal\b/.test(compact) &&
+    !/includes?/.test(compact)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isPaymentLine(lower: string): boolean {
+  if (isGstComponentLine(lower)) return false;
+  return /\b(purchase|sale\s*total|card\s*sales?|eftpos|\beft\b|amount|no\s*cash\s*out|cba\s*chg|\baud\b|amount\s+due|balance\s+due)\b/.test(
+    lower
   );
+}
+
+function isSaleTotalLine(lower: string): boolean {
+  if (isGstComponentLine(lower)) return false;
+  if (/\bsubtotal\b/.test(lower)) return false;
+  return /\b(grand\s+)?total\b/.test(lower);
+}
+
+function isTotalishLine(lower: string): boolean {
+  return isPaymentLine(lower) || isSaleTotalLine(lower);
 }
 
 function maskNonMoney(line: string): string {
@@ -170,8 +198,9 @@ function moneyMatchesInLine(
   return out;
 }
 
-function isFooterJunkAmount(_line: string, amount: number): boolean {
-  return amount < 1;
+function isFooterJunkAmount(line: string, amount: number): boolean {
+  if (amount < 1) return true;
+  return isGstComponentLine(line.toLowerCase());
 }
 
 /** Last money figure in the photo. Change $0.00 is skipped. */
@@ -210,6 +239,7 @@ function chipsFromAmount(amount: number, score: number): ReceiptAmountCandidate[
 function scoreAmountLine(line: string, amount: number): number {
   const lower = line.toLowerCase().replace(/\s+/g, " ");
   let score = 0;
+  if (isGstComponentLine(lower)) return -80;
 
   if (/\bpurchase\b/.test(lower)) score += 55;
   if (/\bsale\s*total\b/.test(lower)) score += 50;
@@ -268,6 +298,8 @@ function collectScoredAmounts(
   score: number;
   count: number;
   totalish: boolean;
+  payment: boolean;
+  saleTotal: boolean;
   lastLine: number;
 }> {
   const lines = normalizeOcrNoise(text).split(/\n+/);
@@ -275,6 +307,8 @@ function collectScoredAmounts(
     amount: number;
     score: number;
     totalish: boolean;
+    payment: boolean;
+    saleTotal: boolean;
     line: number;
   }> = [];
 
@@ -283,11 +317,15 @@ function collectScoredAmounts(
     const lower = line.toLowerCase();
     const matches = moneyMatchesInLine(line);
     const prev = i > 0 ? lines[i - 1] : "";
+    const prevLower = prev.toLowerCase();
     const inheritTotal =
       matches.length > 0 &&
-      isTotalishLine(prev.toLowerCase()) &&
+      isTotalishLine(prevLower) &&
       moneyMatchesInLine(prev).length === 0;
-    const totalish = isTotalishLine(lower) || inheritTotal;
+    const payment = isPaymentLine(lower) || (inheritTotal && isPaymentLine(prevLower));
+    const saleTotal =
+      isSaleTotalLine(lower) || (inheritTotal && isSaleTotalLine(prevLower));
+    const totalish = payment || saleTotal || isTotalishLine(lower) || inheritTotal;
     if (!matches.length) continue;
     for (const { amount } of matches) {
       raw.push({
@@ -297,6 +335,8 @@ function collectScoredAmounts(
           amount
         ),
         totalish,
+        payment,
+        saleTotal,
         line: i,
       });
     }
@@ -309,6 +349,8 @@ function collectScoredAmounts(
       score: number;
       count: number;
       totalish: boolean;
+      payment: boolean;
+      saleTotal: boolean;
       lastLine: number;
     }
   >();
@@ -321,13 +363,17 @@ function collectScoredAmounts(
         score: row.score,
         count: 1,
         totalish: row.totalish,
-        lastLine: row.totalish ? row.line : -1,
+        payment: row.payment,
+        saleTotal: row.saleTotal,
+        lastLine: row.line,
       });
     } else {
       cur.count += 1;
       cur.score = Math.max(cur.score, row.score);
       cur.totalish = cur.totalish || row.totalish;
-      if (row.totalish) cur.lastLine = Math.max(cur.lastLine, row.line);
+      cur.payment = cur.payment || row.payment;
+      cur.saleTotal = cur.saleTotal || row.saleTotal;
+      cur.lastLine = Math.max(cur.lastLine, row.line);
     }
   }
   return [...byCents.values()];
@@ -379,9 +425,7 @@ export function guessAliasFromHeader(text: string): string | null {
 }
 
 export function listAmountCandidates(text: string): ReceiptAmountCandidate[] {
-  const amount = lastUsableMoneyFromBottom(text);
-  if (amount == null) return [];
-  return chipsFromAmount(amount, 50);
+  return pickAmountFromOcr(text)?.candidates || [];
 }
 
 export function detectAmountFromOcr(text: string): {
@@ -389,12 +433,82 @@ export function detectAmountFromOcr(text: string): {
   score: number;
   lock: boolean;
 } | null {
-  const amount = lastUsableMoneyFromBottom(text);
-  if (amount == null) return null;
-  if (stripLeadingDollarFour(amount) != null) {
-    return { amount, score: 40, lock: false };
+  const picked = pickAmountFromOcr(text);
+  if (!picked) return null;
+  return { amount: picked.amount, score: picked.score, lock: picked.lock };
+}
+
+function sortScored(
+  a: { score: number; count: number; lastLine: number },
+  b: { score: number; count: number; lastLine: number }
+): number {
+  return b.score - a.score || b.count - a.count || b.lastLine - a.lastLine;
+}
+
+function pickAmountFromOcr(text: string): {
+  amount: number;
+  score: number;
+  lock: boolean;
+  candidates: ReceiptAmountCandidate[];
+} | null {
+  const scored = collectScoredAmounts(text);
+  const payments = scored.filter((row) => row.payment).sort(sortScored);
+  const saleTotals = scored.filter((row) => row.saleTotal).sort(sortScored);
+  const agreed = scored
+    .filter((row) => row.payment && row.saleTotal)
+    .sort(sortScored);
+
+  let best = agreed[0] || payments[0] || saleTotals[0] || null;
+  if (best) {
+    const stripped = stripLeadingDollarFour(best.amount);
+    if (stripped != null) {
+      const pair = scored.find(
+        (row) =>
+          Math.round(row.amount * 100) === Math.round(stripped * 100) &&
+          (row.payment || row.saleTotal)
+      );
+      if (pair) best = pair;
+    }
   }
-  return { amount, score: 50, lock: true };
+
+  if (!best) {
+    const last = lastUsableMoneyFromBottom(text);
+    if (last == null) return null;
+    const lock = stripLeadingDollarFour(last) == null;
+    return {
+      amount: last,
+      score: 20,
+      lock,
+      candidates: chipsFromAmount(last, 20),
+    };
+  }
+
+  const dollarGuess = stripLeadingDollarFour(best.amount) != null;
+  const lock =
+    !dollarGuess &&
+    (Boolean(best.payment && best.saleTotal) ||
+      Boolean(best.payment && best.score >= 40) ||
+      Boolean(best.saleTotal && payments.length === 0 && best.score >= 50));
+
+  const candidateRows = new Map<number, ReceiptAmountCandidate>();
+  for (const row of chipsFromAmount(best.amount, best.score)) {
+    candidateRows.set(Math.round(row.amount * 100), row);
+  }
+  for (const row of payments) {
+    const key = Math.round(row.amount * 100);
+    if (candidateRows.has(key)) continue;
+    if (isDollarAsFourPair(row.amount, best.amount)) continue;
+    candidateRows.set(key, { amount: row.amount, score: row.score });
+  }
+
+  return {
+    amount: best.amount,
+    score: best.score,
+    lock,
+    candidates: [...candidateRows.values()].sort(
+      (a, b) => b.score - a.score || a.amount - b.amount
+    ),
+  };
 }
 
 export function parseReceiptOcrText(
@@ -405,8 +519,8 @@ export function parseReceiptOcrText(
   if (!raw) return null;
 
   const known = detectMerchantFromOcr(raw, merchants);
-  const amountHit = detectAmountFromOcr(raw);
-  const amountCandidates = listAmountCandidates(raw);
+  const amountHit = pickAmountFromOcr(raw);
+  const amountCandidates = amountHit?.candidates || [];
   if (!amountHit && !amountCandidates.length && !known) return null;
 
   const alias = known ? normalizeReceiptAlias(known.alias) : "";
