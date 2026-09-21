@@ -10,7 +10,9 @@ import { promises as fs } from "fs";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 import { readMerchants } from "@/lib/accounting/merchants";
-import { chooseReceiptOcr } from "@/lib/accounting/ocrChoose";
+import {
+  suggestionFromMerchantAndAmount,
+} from "@/lib/accounting/ocrChoose";
 import {
   hostedOcrConfigured,
   recognizeReceiptTextHosted,
@@ -122,6 +124,19 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
   }
 }
 
+export async function cropReceiptBottomBand(image: Buffer): Promise<Buffer> {
+  const upright = await sharp(image).rotate().toBuffer();
+  const meta = await sharp(upright).metadata();
+  const width = meta.width || 0;
+  const height = meta.height || 0;
+  if (width < 20 || height < 20) return upright;
+  const bandH = Math.max(Math.round(height * 0.4), Math.min(height, 360));
+  const top = Math.max(0, height - bandH);
+  return sharp(upright)
+    .extract({ left: 0, top, width, height: height - top })
+    .toBuffer();
+}
+
 async function recognizeReceiptTextSafe(image: Buffer): Promise<string> {
   try {
     return await recognizeReceiptText(image);
@@ -146,57 +161,51 @@ export async function readReceiptImage(image: Buffer): Promise<{
   engine: "tesseract" | "deepseek";
 }> {
   const merchants = await readMerchants();
-  const tesseractPromise = recognizeReceiptTextSafe(image);
+  const bottom = await cropReceiptBottomBand(image);
+
   if (hostedOcrConfigured()) {
-    const hostedText = await recognizeReceiptTextHostedSafe(image);
-    const hostedChosen = chooseReceiptOcr({
-      tesseractText: "",
-      hostedText,
+    const [amountText, merchantText] = await Promise.all([
+      recognizeReceiptTextHostedSafe(bottom),
+      recognizeReceiptTextSafe(image),
+    ]);
+    const engine: "tesseract" | "deepseek" = amountText.trim()
+      ? "deepseek"
+      : "tesseract";
+    const fallbackAmountText = amountText.trim() ? amountText : merchantText;
+    const suggestion = suggestionFromMerchantAndAmount({
+      merchantText,
+      amountText: fallbackAmountText,
       merchants,
     });
-    if (hostedChosen.hostedAmount) {
-      console.info("[ocr]", {
-        engine: hostedChosen.engine,
-        agree: hostedChosen.agree,
-        tessAmount: null,
-        hostedAmount: hostedChosen.hostedAmount,
-      });
-      return {
-        suggestion: hostedChosen.suggestion,
-        text: hostedChosen.text,
-        engine: hostedChosen.engine,
-      };
-    }
-    const tesseractText = await tesseractPromise;
-    const chosen = chooseReceiptOcr({ tesseractText, hostedText, merchants });
     console.info("[ocr]", {
-      engine: chosen.engine,
-      agree: chosen.agree,
-      tessAmount: chosen.tessAmount,
-      hostedAmount: chosen.hostedAmount,
+      engine,
+      amountFrom: amountText.trim() ? "bottom-band" : "full-page-fallback",
+      amount: suggestion?.amount || null,
+      alias: suggestion?.alias || null,
     });
     return {
-      suggestion: chosen.suggestion,
-      text: chosen.text,
-      engine: chosen.engine,
+      suggestion,
+      text: `${merchantText}\n${fallbackAmountText}`.trim(),
+      engine,
     };
   }
 
-  const tesseractText = await tesseractPromise;
-  const chosen = chooseReceiptOcr({
-    tesseractText,
-    hostedText: "",
+  const amountText = await recognizeReceiptTextSafe(bottom);
+  const merchantText = await recognizeReceiptTextSafe(image);
+  const suggestion = suggestionFromMerchantAndAmount({
+    merchantText,
+    amountText: amountText.trim() ? amountText : merchantText,
     merchants,
   });
   console.info("[ocr]", {
-    engine: chosen.engine,
-    agree: chosen.agree,
-    tessAmount: chosen.tessAmount,
-    hostedAmount: chosen.hostedAmount,
+    engine: "tesseract",
+    amountFrom: "bottom-band",
+    amount: suggestion?.amount || null,
+    alias: suggestion?.alias || null,
   });
   return {
-    suggestion: chosen.suggestion,
-    text: chosen.text,
-    engine: chosen.engine,
+    suggestion,
+    text: `${merchantText}\n${amountText}`.trim(),
+    engine: "tesseract",
   };
 }

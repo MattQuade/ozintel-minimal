@@ -169,7 +169,7 @@ function maskNonMoney(line: string): string {
 
 function moneyMatchesInLine(
   line: string,
-  opts?: { integerCents?: boolean }
+  opts?: { integerCents?: boolean; decimalsOnly?: boolean }
 ): Array<{ amount: number; index: number }> {
   const out: Array<{ amount: number; index: number }> = [];
   const masked = maskNonMoney(line);
@@ -180,6 +180,8 @@ function moneyMatchesInLine(
     if (amount != null) out.push({ amount, index: m.index });
   }
 
+  if (opts?.decimalsOnly) return out;
+
   const lower = masked.toLowerCase();
   const mostlyNumber = /^\s*\$?\s*\d{3,5}\s*$/.test(masked);
   const allowInt =
@@ -188,6 +190,7 @@ function moneyMatchesInLine(
     const whole = masked.match(/\b(\d{3,5})\b/);
     if (whole) {
       const n = Number(whole[1]);
+      if (n >= 2000 && n <= 2039) return out;
       const asCents = parseMoneyToken(
         String(Math.floor(n / 100)),
         String(n % 100).padStart(2, "0")
@@ -208,15 +211,23 @@ function lastUsableMoneyFromBottom(text: string): number | null {
     .split(/\n+/)
     .map((l) => l.trim())
     .filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const matches = moneyMatchesInLine(lines[i], { integerCents: true });
-    for (let j = matches.length - 1; j >= 0; j--) {
-      const amount = matches[j].amount;
-      if (isFooterJunkAmount(lines[i], amount)) continue;
-      return amount;
+
+  const scan = (decimalsOnly: boolean): number | null => {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const matches = moneyMatchesInLine(lines[i], {
+        integerCents: !decimalsOnly,
+        decimalsOnly,
+      });
+      for (let j = matches.length - 1; j >= 0; j--) {
+        const amount = matches[j].amount;
+        if (isFooterJunkAmount(lines[i], amount)) continue;
+        return amount;
+      }
     }
-  }
-  return null;
+    return null;
+  };
+
+  return scan(true) ?? scan(false);
 }
 
 function chipsFromAmount(amount: number, score: number): ReceiptAmountCandidate[] {

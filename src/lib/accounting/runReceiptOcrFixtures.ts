@@ -3,7 +3,7 @@
  * Run: npx tsx src/lib/accounting/runReceiptOcrFixtures.ts
  */
 
-import { chooseReceiptOcr } from "@/lib/accounting/ocrChoose";
+import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { flattenHostedOcrText } from "@/lib/accounting/ocrHosted";
 import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
 
@@ -237,6 +237,20 @@ MILK 4.50
 `);
   checks.push(eq("bottom right of last line", bottomRight?.amount, 65.22));
   checks.push(eq("bottom right lock", bottomRight?.lockAmount, true));
+
+  const preferDecimal = parseReceiptOcrText(`
+Woolworths
+TOTAL $87.40
+8799
+`);
+  checks.push(eq("prefer real dollars over later integer", preferDecimal?.amount, 87.4));
+
+  const shopFromTop = suggestionFromMerchantAndAmount({
+    merchantText: WW_SAMPLE,
+    amountText: "EFTPOS $65.22",
+  });
+  checks.push(eq("bottom band amount", shopFromTop?.amount, 65.22));
+  checks.push(eq("full page shop", shopFromTop?.alias, "ww"));
 
   const deepseekTable = parseReceiptOcrText(`
 # Woolworths
