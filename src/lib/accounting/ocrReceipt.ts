@@ -1,6 +1,7 @@
 /**
- * Server-side OCR for receipt photos. Tesseract only — photos stay on this server.
- * Time out and kill the worker so a stuck read cannot block later photos.
+ * Server-side OCR for receipt photos.
+ * Amazon Textract AnalyzeExpense for the paid total when AWS keys are set.
+ * Tesseract for shop names and as the amount fallback.
  */
 
 import path from "path";
@@ -9,10 +10,12 @@ import { promises as fs } from "fs";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 import { readMerchants } from "@/lib/accounting/merchants";
+import { chooseReceiptOcr } from "@/lib/accounting/ocrChoose";
 import {
-  parseReceiptOcrText,
-  type ReceiptOcrSuggestion,
-} from "@/lib/accounting/parseReceiptOcr";
+  recognizeReceiptTextract,
+  textractConfigured,
+} from "@/lib/accounting/ocrTextract";
+import type { ReceiptOcrSuggestion } from "@/lib/accounting/parseReceiptOcr";
 
 const OCR_STARTUP_MS = 12_000;
 const OCR_READ_MS = 8_000;
@@ -149,22 +152,59 @@ async function recognizeReceiptTextSafe(image: Buffer): Promise<string> {
   }
 }
 
+async function recognizeReceiptTextractSafe(image: Buffer) {
+  try {
+    return await recognizeReceiptTextract(image);
+  } catch (err) {
+    console.warn("[ocr] textract failed", err);
+    return { vendor: "", total: null, tax: null, text: "" };
+  }
+}
+
 export async function readReceiptImage(image: Buffer): Promise<{
   suggestion: ReceiptOcrSuggestion | null;
   text: string;
-  engine: "tesseract";
+  engine: "tesseract" | "textract";
 }> {
   const merchants = await readMerchants();
-  const text = await recognizeReceiptTextSafe(image);
-  const suggestion = parseReceiptOcrText(text, merchants);
+  const tesseractPromise = recognizeReceiptTextSafe(image);
+
+  if (textractConfigured()) {
+    const [textract, tesseractText] = await Promise.all([
+      recognizeReceiptTextractSafe(image),
+      tesseractPromise,
+    ]);
+    const chosen = chooseReceiptOcr({
+      tesseractText,
+      textract,
+      merchants,
+    });
+    console.info("[ocr]", {
+      engine: chosen.engine,
+      tessAmount: chosen.tessAmount,
+      textractAmount: chosen.textractAmount,
+      vendor: textract.vendor || null,
+    });
+    return {
+      suggestion: chosen.suggestion,
+      text: chosen.text,
+      engine: chosen.engine,
+    };
+  }
+
+  const tesseractText = await tesseractPromise;
+  const chosen = chooseReceiptOcr({
+    tesseractText,
+    textract: null,
+    merchants,
+  });
   console.info("[ocr]", {
-    engine: "tesseract",
-    amount: suggestion?.amount || null,
-    chars: text.length,
+    engine: chosen.engine,
+    tessAmount: chosen.tessAmount,
   });
   return {
-    suggestion,
-    text,
-    engine: "tesseract",
+    suggestion: chosen.suggestion,
+    text: chosen.text,
+    engine: chosen.engine,
   };
 }

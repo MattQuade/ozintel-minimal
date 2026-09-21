@@ -15,6 +15,6 @@ Open http://localhost:3000. Restore an approved account from the home screen. Ac
 
 - Invoice lines can be GST-inclusive; GST is 1/11 (`src/lib/accounting/invoiceMath.ts`).
 - `/accounting/shops` is the receipt-OCR supplier chip list, not bills.
-- Receipt reading uses Tesseract on the app server. Photos are not sent to a third-party OCR API.
+- Receipt totals use Amazon Textract AnalyzeExpense in `ap-southeast-2` (Sydney) when `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set. Tesseract still reads the shop name and is the fallback. The IAM user only needs `textract:AnalyzeExpense`.
 - Persistent data lives in `data/` locally, or `OZINTEL_DATA_DIR` on Render. Do not delete that path.
 - PIN hashes are stored in `accounting-pins.json` next to other account data, not on the user record.

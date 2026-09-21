@@ -3,9 +3,10 @@
  * Run: npx tsx src/lib/accounting/runReceiptOcrFixtures.ts
  */
 
-import { suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
+import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { findLastInkRow } from "@/lib/accounting/ocrReceipt";
 import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
+import { parseTextractExpense } from "@/lib/accounting/ocrTextract";
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -273,6 +274,59 @@ TOTAL $87.40
 `);
   checks.push(eq("markdown last row amount", markdownTable?.amount, 23.45));
   checks.push(eq("markdown last row alias", markdownTable?.alias, "ww"));
+
+  const textract = parseTextractExpense({
+    ExpenseDocuments: [
+      {
+        SummaryFields: [
+          {
+            Type: { Text: "VENDOR_NAME" },
+            ValueDetection: { Text: "Woolworths" },
+          },
+          {
+            Type: { Text: "TAX" },
+            ValueDetection: { Text: "$7.95" },
+          },
+          {
+            Type: { Text: "SUBTOTAL" },
+            ValueDetection: { Text: "$79.45" },
+          },
+          {
+            Type: { Text: "TOTAL" },
+            ValueDetection: { Text: "$87.40" },
+          },
+          {
+            Type: { Text: "AMOUNT_PAID" },
+            ValueDetection: { Text: "$87.40" },
+          },
+        ],
+      },
+    ],
+  });
+  checks.push(eq("textract total not gst", textract.total, 87.4));
+  checks.push(eq("textract vendor", textract.vendor, "Woolworths"));
+  checks.push(eq("textract tax field kept aside", textract.tax, 7.95));
+
+  const textractWins = chooseReceiptOcr({
+    tesseractText: "TOTAL 465.22\nEFTPOS 465.22",
+    textract: {
+      vendor: "ALDI",
+      total: 89.8,
+      tax: null,
+      text: "VENDOR_NAME ALDI\nTOTAL 89.80",
+    },
+  });
+  checks.push(eq("textract engine when it has a total", textractWins.engine, "textract"));
+  checks.push(eq("textract amount preferred", textractWins.suggestion?.amount, 89.8));
+  checks.push(eq("textract alias preferred", textractWins.suggestion?.alias, "aldi"));
+  checks.push(eq("textract locks total", textractWins.suggestion?.lockAmount, true));
+
+  const tessFallback = chooseReceiptOcr({
+    tesseractText: WW_SAMPLE,
+    textract: { vendor: "", total: null, tax: null, text: "" },
+  });
+  checks.push(eq("tesseract fallback engine", tessFallback.engine, "tesseract"));
+  checks.push(eq("tesseract fallback amount", tessFallback.suggestion?.amount, 231.17));
 
   return checks;
 }
