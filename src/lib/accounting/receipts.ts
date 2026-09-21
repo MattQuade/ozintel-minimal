@@ -21,6 +21,8 @@ export type ReceiptMeta = {
   caption?: string;
   captionAlias?: string;
   captionAmount?: number;
+  /** Client id so a retried POST does not create a second receipt. */
+  clientUploadId?: string;
 };
 
 type ReceiptStore = {
@@ -122,12 +124,53 @@ export function receiptPublicUrl(id: string): string {
   return `/api/ledger/receipts/${encodeURIComponent(id)}`;
 }
 
+const inflightByUploadId = new Map<string, Promise<ReceiptMeta>>();
+
 export async function createReceipt(args: {
   buffer: Buffer;
   mimeType: string;
   originalFilename: string;
   ledgerEntryIds?: string[];
   caption?: string;
+  clientUploadId?: string;
+}): Promise<ReceiptMeta> {
+  const clientUploadId = String(args.clientUploadId || "").trim();
+  if (clientUploadId) {
+    const existing = await findReceiptByClientUploadId(clientUploadId);
+    if (existing) return existing;
+    const pending = inflightByUploadId.get(clientUploadId);
+    if (pending) return pending;
+    const created = (async () => {
+      const again = await findReceiptByClientUploadId(clientUploadId);
+      if (again) return again;
+      return createReceiptOnce({ ...args, clientUploadId });
+    })();
+    inflightByUploadId.set(clientUploadId, created);
+    try {
+      return await created;
+    } finally {
+      inflightByUploadId.delete(clientUploadId);
+    }
+  }
+  return createReceiptOnce(args);
+}
+
+async function findReceiptByClientUploadId(
+  clientUploadId: string
+): Promise<ReceiptMeta | null> {
+  const store = await loadStore();
+  return (
+    store.receipts.find((r) => r.clientUploadId === clientUploadId) || null
+  );
+}
+
+async function createReceiptOnce(args: {
+  buffer: Buffer;
+  mimeType: string;
+  originalFilename: string;
+  ledgerEntryIds?: string[];
+  caption?: string;
+  clientUploadId?: string;
 }): Promise<ReceiptMeta> {
   const originalFilename = String(args.originalFilename || "receipt").trim() || "receipt";
   const mimeType = normalizeMime(args.mimeType, originalFilename);
@@ -167,6 +210,7 @@ export async function createReceipt(args: {
     uploadedAt: new Date().toISOString(),
     sizeBytes: args.buffer.length,
     ledgerEntryIds,
+    ...(args.clientUploadId ? { clientUploadId: args.clientUploadId } : {}),
     ...(parsedCaption
       ? {
           caption: parsedCaption.display,

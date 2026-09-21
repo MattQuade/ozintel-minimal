@@ -5,6 +5,7 @@ import {
   prepareReceiptFile,
   RECEIPT_MAX_BYTES,
 } from '@/lib/client/compressReceiptImage';
+import { postReceiptUpload } from '@/lib/client/postReceiptUpload';
 
 export type ReceiptInfo = {
   id: string;
@@ -59,19 +60,10 @@ export default function ReceiptAttach({
         setPhase(status === 'compressing' ? 'compressing' : 'uploading');
       });
       setPhase('uploading');
-      const form = new FormData();
-      form.append('file', prepared);
-      if (ledgerEntryId) form.append('ledgerEntryId', ledgerEntryId);
-      const res = await fetch('/api/ledger/receipts', {
-        method: 'POST',
-        body: form,
+      const { id } = await postReceiptUpload({
+        file: prepared,
+        ledgerEntryId,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Upload failed');
-      }
-      const id = String(data.receipt?.id || '');
-      if (!id) throw new Error('No receipt id returned');
       if (!receiptIds.includes(id)) {
         onChange([...receiptIds, id]);
       }

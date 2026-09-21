@@ -11,6 +11,7 @@ import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 function publicReceipt(r: ReceiptMeta) {
   const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
       const file = form.get("file") ?? form.get("receipt") ?? form.get("photo");
       const ledgerEntryId = String(form.get("ledgerEntryId") || "").trim();
       const caption = String(form.get("caption") || "").trim();
+      const clientUploadId = String(form.get("clientUploadId") || "").trim();
 
       if (!(file instanceof File)) {
         return NextResponse.json(
@@ -104,6 +106,7 @@ export async function POST(req: NextRequest) {
         originalFilename: file.name || "receipt",
         ledgerEntryIds: ledgerEntryId ? [ledgerEntryId] : [],
         caption,
+        ...(clientUploadId ? { clientUploadId } : {}),
       });
 
       return NextResponse.json({

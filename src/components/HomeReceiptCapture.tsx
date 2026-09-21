@@ -5,6 +5,7 @@ import {
   prepareReceiptFile,
   prepareReceiptFileForOcr,
 } from '@/lib/client/compressReceiptImage';
+import { postReceiptUpload } from '@/lib/client/postReceiptUpload';
 import { APPROVED_RECEIPT_MERCHANTS, type ApprovedMerchant } from '@/lib/accounting/approvedMerchants';
 import {
   normalizeReceiptAlias,
@@ -81,20 +82,47 @@ function parseTypedAmount(raw: string): number | null {
   return Math.round(n * 100) / 100;
 }
 
+async function captureVideoFrame(video: HTMLVideoElement): Promise<File> {
+  const width = video.videoWidth || 1280;
+  const height = video.videoHeight || 960;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not capture this photo');
+  ctx.drawImage(video, 0, 0, width, height);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('Could not capture this photo'))),
+      'image/jpeg',
+      0.92
+    );
+  });
+  return new File([blob], 'receipt.jpg', {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  });
+}
+
 /**
  * Camera opens from this button. Confirm stays on home: pick a preapproved
- * shop and a total (OCR only highlights). Back closes confirm, not the PWA.
+ * shop and a total (OCR only highlights). A live session stays open so the
+ * next receipt can be shot without tapping Capture Receipt again.
  */
 export default function HomeReceiptCapture() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const merchantTouchedRef = useRef(false);
   const amountTouchedRef = useRef(false);
   const ignorePopUntilRef = useRef(0);
   const releasingBackRef = useRef(false);
+  const reopenNativeRef = useRef(false);
   const savePrepRef = useRef<{ source: File; promise: Promise<File> } | null>(
     null
   );
   const [inputKey, setInputKey] = useState(0);
+  const [phase, setPhase] = useState<'idle' | 'live' | 'confirm'>('idle');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [alias, setAlias] = useState('');
@@ -105,6 +133,8 @@ export default function HomeReceiptCapture() {
   const [hint, setHint] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [snapping, setSnapping] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const [merchants, setMerchants] = useState<ApprovedMerchant[]>(
     APPROVED_RECEIPT_MERCHANTS
   );
@@ -116,6 +146,7 @@ export default function HomeReceiptCapture() {
     effectiveAlias && effectiveAmount && effectiveAmount > 0
       ? parseReceiptCaption(`${effectiveAlias} ${effectiveAmount.toFixed(2)}`)
       : null;
+
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +167,10 @@ export default function HomeReceiptCapture() {
   useEffect(() => {
     let cancelled = false;
     void loadPendingReceipt().then((pending) => {
-      if (!cancelled && pending) setFile(pending);
+      if (!cancelled && pending) {
+        setFile(pending);
+        setPhase('confirm');
+      }
     });
     return () => {
       cancelled = true;
@@ -168,6 +202,68 @@ export default function HomeReceiptCapture() {
   }, [file]);
 
   useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (phase !== 'live' || !video || !stream) return;
+    video.srcObject = stream;
+    void video.play().catch(() => undefined);
+  }, [phase]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'idle' || !reopenNativeRef.current) return;
+    reopenNativeRef.current = false;
+    const t = window.setTimeout(() => inputRef.current?.click(), 80);
+    return () => window.clearTimeout(t);
+  }, [phase, inputKey]);
+
+  const stopLive = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  const resetPhoto = () => {
+    setFile(null);
+    setAlias('');
+    setOtherAlias('');
+    setAmount(null);
+    setAmountText('');
+    setAmountChoices([]);
+    setHint('');
+    merchantTouchedRef.current = false;
+    amountTouchedRef.current = false;
+    savePrepRef.current = null;
+    clearPendingReceipt();
+    setInputKey((k) => k + 1);
+  };
+
+  const endSession = (popHistory = false) => {
+    stopLive();
+    resetPhoto();
+    setPhase('idle');
+    setSaving(false);
+    setSnapping(false);
+    reopenNativeRef.current = false;
+    if (
+      popHistory &&
+      typeof history !== 'undefined' &&
+      history.state?.ozintelReceipt === 1
+    ) {
+      releasingBackRef.current = true;
+      history.back();
+      setTimeout(() => {
+        releasingBackRef.current = false;
+      }, 400);
+    }
+  };
+
+  useEffect(() => {
     const onPop = () => {
       if (releasingBackRef.current) return;
       if (Date.now() < ignorePopUntilRef.current) {
@@ -176,11 +272,28 @@ export default function HomeReceiptCapture() {
         }
         return;
       }
-      if (file) resetConfirm(false);
+      if (phase === 'confirm') {
+        if (streamRef.current) {
+          resetPhoto();
+          setPhase('live');
+          setStatus('');
+        } else {
+          endSession(false);
+        }
+        return;
+      }
+      if (phase === 'live') {
+        const n = savedCount;
+        endSession(false);
+        setSavedCount(0);
+        setStatus(
+          n === 0 ? '' : n === 1 ? '1 receipt saved' : `${n} receipts saved`
+        );
+      }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [file]);
+  }, [phase, savedCount]);
 
   useEffect(() => {
     if (!file) return;
@@ -279,39 +392,70 @@ export default function HomeReceiptCapture() {
     };
   }, [file]);
 
-  const resetConfirm = (popHistory = false) => {
-    setFile(null);
-    setAlias('');
-    setOtherAlias('');
-    setAmount(null);
-    setAmountText('');
-    setAmountChoices([]);
-    setHint('');
-    setStatus('');
-    merchantTouchedRef.current = false;
-    amountTouchedRef.current = false;
-    savePrepRef.current = null;
-    clearPendingReceipt();
-    setInputKey((k) => k + 1);
-    if (
-      popHistory &&
-      typeof history !== 'undefined' &&
-      history.state?.ozintelReceipt === 1
-    ) {
-      releasingBackRef.current = true;
-      history.back();
-      setTimeout(() => {
-        releasingBackRef.current = false;
-      }, 400);
-    }
-  };
-
-  const onPicked = (next: File | null) => {
-    if (!next) return;
+  const acceptPhoto = (next: File) => {
     ignorePopUntilRef.current = Date.now() + 2000;
     savePrepRef.current = { source: next, promise: prepareReceiptFile(next) };
     setPendingReceipt(next);
     setFile(next);
+    setPhase('confirm');
+  };
+
+  const onPicked = (next: File | null) => {
+    if (!next) return;
+    acceptPhoto(next);
+  };
+
+  const startLive = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      inputRef.current?.click();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1920 },
+        },
+      });
+      streamRef.current = stream;
+      ignorePopUntilRef.current = Date.now() + 2000;
+      if (typeof history !== 'undefined' && history.state?.ozintelReceipt !== 1) {
+        history.pushState({ ozintelReceipt: 1 }, '');
+      }
+      setStatus('');
+      setPhase('live');
+    } catch {
+      inputRef.current?.click();
+    }
+  };
+
+  const snap = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setSnapping(true);
+    try {
+      const next = await captureVideoFrame(video);
+      acceptPhoto(next);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not capture this photo');
+    } finally {
+      setSnapping(false);
+    }
+  };
+
+  const discardPhoto = () => {
+    resetPhoto();
+    setStatus('');
+    if (streamRef.current) setPhase('live');
+    else goNextNative();
+  };
+
+  const goNextNative = () => {
+    reopenNativeRef.current = true;
+    resetPhoto();
+    setPhase('idle');
   };
 
   const save = async () => {
@@ -333,28 +477,32 @@ export default function HomeReceiptCapture() {
       } else {
         prepared = await prepareReceiptFile(file);
       }
-      const form = new FormData();
-      form.append('file', prepared);
-      form.append('caption', parsed.display);
-      const res = await fetch('/api/ledger/receipts', {
-        method: 'POST',
-        body: form,
-        credentials: 'include',
-        cache: 'no-store',
+      await postReceiptUpload({
+        file: prepared,
+        caption: parsed.display,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Save failed');
-      }
       const saved = parsed.display;
-      resetConfirm(true);
-      setStatus(`Saved ${saved}`);
+      setSavedCount((n) => n + 1);
+      setStatus(`Saved ${saved} — next receipt`);
+      resetPhoto();
+      if (streamRef.current) {
+        setPhase('live');
+      } else {
+        goNextNative();
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
   };
+
+  const doneLabel =
+    savedCount === 0
+      ? 'Done'
+      : savedCount === 1
+        ? 'Done · 1 saved'
+        : `Done · ${savedCount} saved`;
 
   return (
     <>
@@ -369,11 +517,100 @@ export default function HomeReceiptCapture() {
         style={srFileInput}
       />
 
-      {!file ? (
-        <label htmlFor="home-receipt-photo" style={homeButtonStyle}>
-          Capture Receipt
-        </label>
-      ) : (
+      {phase === 'idle' ? (
+        <div
+          style={{
+            width: '90%',
+            maxWidth: 400,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <button type="button" onClick={() => void startLive()} style={homeButtonStyle}>
+            {savedCount > 0 ? 'Next receipt' : 'Capture Receipt'}
+          </button>
+          {savedCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const n = savedCount;
+                endSession(true);
+                setSavedCount(0);
+                setStatus(n === 1 ? '1 receipt saved' : `${n} receipts saved`);
+              }}
+              style={{ ...greyBtn, width: '100%' }}
+            >
+              {doneLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {phase === 'live' ? (
+        <div
+          style={{
+            width: '90%',
+            maxWidth: 400,
+            boxSizing: 'border-box',
+          }}
+        >
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            style={{
+              width: '100%',
+              maxHeight: 320,
+              objectFit: 'cover',
+              borderRadius: 8,
+              background: '#020617',
+              border: '1px solid #334155',
+              marginBottom: 10,
+            }}
+          />
+          <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 10px' }}>
+            Line up the receipt, then snap. Confirm shop and total after each shot.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                const n = savedCount;
+                endSession(true);
+                setSavedCount(0);
+                setStatus(
+                  n === 0
+                    ? ''
+                    : n === 1
+                      ? '1 receipt saved'
+                      : `${n} receipts saved`
+                );
+              }}
+              style={greyBtn}
+            >
+              {doneLabel}
+            </button>
+            <button
+              type="button"
+              disabled={snapping}
+              onClick={() => void snap()}
+              style={{
+                ...greyBtn,
+                flex: 1.6,
+                background: '#ea580c',
+                opacity: snapping ? 0.7 : 1,
+              }}
+            >
+              {snapping ? 'Snapping…' : 'Snap'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {phase === 'confirm' && file ? (
         <div
           style={{
             width: '90%',
@@ -494,9 +731,9 @@ export default function HomeReceiptCapture() {
           />
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <label htmlFor="home-receipt-photo" style={{ ...greyBtn, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              Retake
-            </label>
+            <button type="button" onClick={discardPhoto} style={greyBtn}>
+              {streamRef.current ? 'Reshoot' : 'Retake'}
+            </button>
             <button
               type="button"
               disabled={saving || !parsed}
@@ -513,7 +750,7 @@ export default function HomeReceiptCapture() {
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {status ? (
         <p
