@@ -3,8 +3,7 @@
  * Run: npx tsx src/lib/accounting/runReceiptOcrFixtures.ts
  */
 
-import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
-import { flattenHostedOcrText } from "@/lib/accounting/ocrHosted";
+import { suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { findLastInkRow } from "@/lib/accounting/ocrReceipt";
 import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
 
@@ -264,7 +263,7 @@ TOTAL $87.40
   for (let x = 0; x < 8; x++) ink[5 * 8 + x] = 0;
   checks.push(eq("last ink ignores white padding", findLastInkRow(ink, 8, 8), 5));
 
-  const deepseekTable = parseReceiptOcrText(`
+  const markdownTable = parseReceiptOcrText(`
 # Woolworths
 | Item | Price |
 | Milk | 4.50 |
@@ -272,67 +271,8 @@ TOTAL $87.40
 | GST | 2.13 |
 | EFTPOS | 23.45 |
 `);
-  checks.push(eq("deepseek last row amount", deepseekTable?.amount, 23.45));
-  checks.push(eq("deepseek last row alias", deepseekTable?.alias, "ww"));
-
-  checks.push(
-    eq(
-      "flatten hosted markdown",
-      flattenHostedOcrText("```markdown\n<|ref|>TOTAL $89.80<|/ref|>\n```"),
-      "TOTAL $89.80"
-    )
-  );
-  checks.push(
-    eq(
-      "flatten paddle lines",
-      flattenHostedOcrText([
-        [[[0, 0], [1, 0], [1, 1], [0, 1]], ["Woolworths", 0.99]],
-        [[[0, 2], [1, 2], [1, 3], [0, 3]], ["TOTAL $23.45", 0.98]],
-      ]),
-      "Woolworths\nTOTAL $23.45"
-    )
-  );
-
-  const hostedWins = chooseReceiptOcr({
-    tesseractText: "TOTAL 465.22\nEFTPOS 465.22",
-    hostedText: ALDI_SAMPLE,
-  });
-  checks.push(eq("hosted engine when it has a total", hostedWins.engine, "paddle"));
-  checks.push(eq("hosted amount preferred", hostedWins.suggestion?.amount, 89.8));
-  checks.push(eq("hosted alias preferred", hostedWins.suggestion?.alias, "aldi"));
-  checks.push(eq("disagree does not lock", hostedWins.suggestion?.lockAmount, false));
-  checks.push(
-    eq(
-      "disagree keeps tesseract chip",
-      (hostedWins.suggestion?.amountCandidates || []).some(
-        (row) => row.amount === 465.22
-      ),
-      true
-    )
-  );
-
-  const tessFallback = chooseReceiptOcr({
-    tesseractText: WW_SAMPLE,
-    hostedText: "could not read this photo",
-  });
-  checks.push(eq("tesseract fallback engine", tessFallback.engine, "tesseract"));
-  checks.push(eq("tesseract fallback amount", tessFallback.suggestion?.amount, 231.17));
-
-  const agreeLock = chooseReceiptOcr({
-    tesseractText: ALDI_SAMPLE,
-    hostedText: ALDI_SAMPLE,
-  });
-  checks.push(eq("agree uses paddle", agreeLock.engine, "paddle"));
-  checks.push(eq("agree locks", agreeLock.suggestion?.lockAmount, true));
-  checks.push(eq("agree flag", agreeLock.agree, true));
-
-  const hostedShopOnly = chooseReceiptOcr({
-    tesseractText: "TOTAL $18.50",
-    hostedText: "Woolworths\nThank you",
-  });
-  checks.push(eq("hosted shop on tess total engine", hostedShopOnly.engine, "tesseract"));
-  checks.push(eq("hosted shop overlay", hostedShopOnly.suggestion?.alias, "ww"));
-  checks.push(eq("hosted shop keeps tess amount", hostedShopOnly.suggestion?.amount, 18.5));
+  checks.push(eq("markdown last row amount", markdownTable?.amount, 23.45));
+  checks.push(eq("markdown last row alias", markdownTable?.alias, "ww"));
 
   return checks;
 }
