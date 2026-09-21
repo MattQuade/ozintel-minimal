@@ -356,13 +356,12 @@ export default function HomeReceiptCapture() {
         if (!amountTouchedRef.current) {
           const suggestedAmount = Number(data.suggestion?.amount);
           if (Number.isFinite(suggestedAmount) && suggestedAmount > 0) {
-            if (
-              data.suggestion?.lockAmount ||
-              choices.includes(suggestedAmount)
-            ) {
-              setAmount(suggestedAmount);
-              setAmountText('');
+            if (!choices.includes(suggestedAmount)) {
+              choices.push(suggestedAmount);
+              setAmountChoices(choices);
             }
+            setAmount(suggestedAmount);
+            setAmountText('');
           }
         }
 

@@ -10,9 +10,7 @@ import { promises as fs } from "fs";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 import { readMerchants } from "@/lib/accounting/merchants";
-import {
-  suggestionFromMerchantAndAmount,
-} from "@/lib/accounting/ocrChoose";
+import { chooseReceiptOcr } from "@/lib/accounting/ocrChoose";
 import {
   hostedOcrConfigured,
   recognizeReceiptTextHosted,
@@ -145,28 +143,6 @@ export function findLastInkRow(
   return height - 1;
 }
 
-/** Last printed line of the docket, not the last 6% of a photo that is mostly padding. */
-export async function cropReceiptLastLine(image: Buffer): Promise<Buffer> {
-  const upright = await sharp(image).rotate().toBuffer();
-  const { data, info } = await sharp(upright)
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const width = info.width || 0;
-  const height = info.height || 0;
-  if (width < 20 || height < 20) return upright;
-  const contentBottom = findLastInkRow(data, width, height);
-  const lineH = Math.min(
-    Math.max(Math.round(height * 0.08), 140),
-    260,
-    contentBottom + 1
-  );
-  const top = Math.max(0, contentBottom - lineH + 1);
-  return sharp(upright)
-    .extract({ left: 0, top, width, height: contentBottom - top + 1 })
-    .toBuffer();
-}
-
 async function recognizeReceiptTextSafe(image: Buffer): Promise<string> {
   try {
     return await recognizeReceiptText(image);
@@ -191,63 +167,44 @@ export async function readReceiptImage(image: Buffer): Promise<{
   engine: "tesseract" | "deepseek";
 }> {
   const merchants = await readMerchants();
-  const bottom = await cropReceiptLastLine(image);
+  const tesseractPromise = recognizeReceiptTextSafe(image);
 
   if (hostedOcrConfigured()) {
-    const [hostedLast, merchantText] = await Promise.all([
-      recognizeReceiptTextHostedSafe(bottom),
-      recognizeReceiptTextSafe(image),
+    const [hostedText, tesseractText] = await Promise.all([
+      recognizeReceiptTextHostedSafe(image),
+      tesseractPromise,
     ]);
-    let amountText = hostedLast;
-    let engine: "tesseract" | "deepseek" = hostedLast.trim()
-      ? "deepseek"
-      : "tesseract";
-    let suggestion = suggestionFromMerchantAndAmount({
-      merchantText,
-      amountText,
+    const chosen = chooseReceiptOcr({
+      tesseractText,
+      hostedText,
       merchants,
     });
-    if (!suggestion?.amount) {
-      const tessLast = await recognizeReceiptTextSafe(bottom);
-      if (tessLast.trim()) {
-        amountText = tessLast;
-        engine = "tesseract";
-        suggestion = suggestionFromMerchantAndAmount({
-          merchantText,
-          amountText,
-          merchants,
-        });
-      }
-    }
     console.info("[ocr]", {
-      engine,
-      amountFrom: suggestion?.amount ? "last-printed-line" : "none",
-      amount: suggestion?.amount || null,
-      alias: suggestion?.alias || null,
+      engine: chosen.engine,
+      agree: chosen.agree,
+      tessAmount: chosen.tessAmount,
+      hostedAmount: chosen.hostedAmount,
     });
     return {
-      suggestion,
-      text: `${merchantText}\n${amountText}`.trim(),
-      engine,
+      suggestion: chosen.suggestion,
+      text: chosen.text,
+      engine: chosen.engine,
     };
   }
 
-  const amountText = await recognizeReceiptTextSafe(bottom);
-  const merchantText = await recognizeReceiptTextSafe(image);
-  const suggestion = suggestionFromMerchantAndAmount({
-    merchantText,
-    amountText,
+  const tesseractText = await tesseractPromise;
+  const chosen = chooseReceiptOcr({
+    tesseractText,
+    hostedText: "",
     merchants,
   });
   console.info("[ocr]", {
-    engine: "tesseract",
-    amountFrom: "last-line",
-    amount: suggestion?.amount || null,
-    alias: suggestion?.alias || null,
+    engine: chosen.engine,
+    tessAmount: chosen.tessAmount,
   });
   return {
-    suggestion,
-    text: `${merchantText}\n${amountText}`.trim(),
-    engine: "tesseract",
+    suggestion: chosen.suggestion,
+    text: chosen.text,
+    engine: chosen.engine,
   };
 }

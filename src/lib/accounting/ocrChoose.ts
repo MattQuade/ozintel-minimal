@@ -69,21 +69,10 @@ export function suggestionFromMerchantAndAmount(args: {
   merchants?: ApprovedMerchant[];
 }): ReceiptOcrSuggestion | null {
   const merchantSug = parseReceiptOcrText(args.merchantText, args.merchants);
-  const amountSug = parseReceiptOcrText(
-    keepLastReceiptLines(args.amountText, 2),
-    args.merchants
-  );
+  const amountSug = parseReceiptOcrText(args.amountText, args.merchants);
   if (!amountSug && !merchantSug) return null;
-  if (!amountSug) {
-    if (!merchantSug) return null;
-    return {
-      ...merchantSug,
-      amount: 0,
-      lockAmount: false,
-      amountCandidates: [],
-      display: "",
-      confidence: "low",
-    };
+  if (!amountSug?.amount) {
+    return merchantSug;
   }
   if (!merchantSug?.alias) return amountSug;
   return {
