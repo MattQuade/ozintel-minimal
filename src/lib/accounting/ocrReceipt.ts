@@ -1,7 +1,7 @@
 /**
  * Server-side OCR for receipt photos.
- * Amazon Textract AnalyzeExpense for the paid total when AWS keys are set.
- * Tesseract for shop names and as the amount fallback.
+ * Amazon Textract AnalyzeExpense reads shop and paid total when AWS keys are set.
+ * Tesseract is only used if Textract is missing or it did not return a total.
  */
 
 import path from "path";
@@ -167,32 +167,29 @@ export async function readReceiptImage(image: Buffer): Promise<{
   engine: "tesseract" | "textract";
 }> {
   const merchants = await readMerchants();
-  const tesseractPromise = recognizeReceiptTextSafe(image);
 
   if (textractConfigured()) {
-    const [textract, tesseractText] = await Promise.all([
-      recognizeReceiptTextractSafe(image),
-      tesseractPromise,
-    ]);
-    const chosen = chooseReceiptOcr({
-      tesseractText,
-      textract,
-      merchants,
-    });
-    console.info("[ocr]", {
-      engine: chosen.engine,
-      tessAmount: chosen.tessAmount,
-      textractAmount: chosen.textractAmount,
-      vendor: textract.vendor || null,
-    });
-    return {
-      suggestion: chosen.suggestion,
-      text: chosen.text,
-      engine: chosen.engine,
-    };
+    const textract = await recognizeReceiptTextractSafe(image);
+    if (textract.total && textract.total > 0) {
+      const chosen = chooseReceiptOcr({
+        tesseractText: "",
+        textract,
+        merchants,
+      });
+      console.info("[ocr]", {
+        engine: chosen.engine,
+        textractAmount: chosen.textractAmount,
+        vendor: textract.vendor || null,
+      });
+      return {
+        suggestion: chosen.suggestion,
+        text: chosen.text,
+        engine: chosen.engine,
+      };
+    }
   }
 
-  const tesseractText = await tesseractPromise;
+  const tesseractText = await recognizeReceiptTextSafe(image);
   const chosen = chooseReceiptOcr({
     tesseractText,
     textract: null,

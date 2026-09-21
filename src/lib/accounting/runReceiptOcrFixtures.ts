@@ -308,7 +308,7 @@ TOTAL $87.40
   checks.push(eq("textract tax field kept aside", textract.tax, 7.95));
 
   const textractWins = chooseReceiptOcr({
-    tesseractText: "TOTAL 465.22\nEFTPOS 465.22",
+    tesseractText: "",
     textract: {
       vendor: "ALDI",
       total: 89.8,

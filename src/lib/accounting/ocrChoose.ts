@@ -1,13 +1,12 @@
 /**
- * Prefer Textract's paid total when it produced a number; Tesseract for shop name
- * and as the amount fallback.
+ * Use Textract shop + paid total when AnalyzeExpense produced a number.
+ * Tesseract is only the fallback.
  */
 
 import type { ApprovedMerchant } from "@/lib/accounting/approvedMerchants";
 import type { TextractReceiptRead } from "@/lib/accounting/ocrTextract";
 import {
   parseReceiptOcrText,
-  type ReceiptAmountCandidate,
   type ReceiptOcrSuggestion,
 } from "@/lib/accounting/parseReceiptOcr";
 
@@ -18,25 +17,6 @@ export type ChosenReceiptOcr = {
   tessAmount: number | null;
   textractAmount: number | null;
 };
-
-function cents(amount: number): number {
-  return Math.round(amount * 100);
-}
-
-function mergeCandidates(
-  primary: ReceiptAmountCandidate[] | undefined,
-  extra: ReceiptAmountCandidate[] | undefined
-): ReceiptAmountCandidate[] {
-  const out: ReceiptAmountCandidate[] = [];
-  const seen = new Set<number>();
-  for (const row of [...(primary || []), ...(extra || [])]) {
-    const key = cents(row.amount);
-    if (!Number.isFinite(key) || seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
-  }
-  return out;
-}
 
 export function suggestionFromMerchantAndAmount(args: {
   merchantText: string;
@@ -74,22 +54,21 @@ export function chooseReceiptOcr(args: {
 
   if (hostAmt > 0) {
     const suggestion = suggestionFromMerchantAndAmount({
-      merchantText: [args.tesseractText, args.textract?.vendor || ""].join("\n"),
+      merchantText: [args.textract?.vendor || "", args.textract?.text || ""].join(
+        "\n"
+      ),
       amountText: `TOTAL $${hostAmt.toFixed(2)}`,
       merchants: args.merchants,
     });
     if (suggestion) {
       suggestion.lockAmount = true;
-      suggestion.amountCandidates = mergeCandidates(
-        [{ amount: hostAmt, score: 100 }],
-        tessSug?.amountCandidates
-      );
+      suggestion.amountCandidates = [{ amount: hostAmt, score: 100 }];
     }
     return {
       text: args.textract?.text || args.tesseractText,
       engine: "textract",
       suggestion,
-      tessAmount,
+      tessAmount: null,
       textractAmount,
     };
   }
