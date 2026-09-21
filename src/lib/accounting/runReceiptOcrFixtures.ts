@@ -5,6 +5,7 @@
 
 import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { flattenHostedOcrText } from "@/lib/accounting/ocrHosted";
+import { findLastInkRow } from "@/lib/accounting/ocrReceipt";
 import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
 
 type Check = { name: string; ok: boolean; detail: string };
@@ -258,6 +259,10 @@ TOTAL $87.40
   });
   checks.push(eq("last line total not gst", lastLineNotGst?.amount, 87.4));
   checks.push(eq("last line keeps coles", lastLineNotGst?.alias, "coles"));
+
+  const ink = Buffer.alloc(8 * 8, 255);
+  for (let x = 0; x < 8; x++) ink[5 * 8 + x] = 0;
+  checks.push(eq("last ink ignores white padding", findLastInkRow(ink, 8, 8), 5));
 
   const deepseekTable = parseReceiptOcrText(`
 # Woolworths

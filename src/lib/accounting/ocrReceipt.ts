@@ -124,20 +124,46 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
   }
 }
 
-/** Bottom of the photo — about one printed line, not a 40% slab that still contains GST. */
+/** Last row with enough dark pixels — ignores white padding under the docket. */
+export function findLastInkRow(
+  data: Buffer | Uint8Array,
+  width: number,
+  height: number
+): number {
+  const threshold = 210;
+  const minDark = Math.max(8, Math.round(width * 0.015));
+  for (let y = height - 1; y >= 0; y--) {
+    let dark = 0;
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      if (data[row + x] < threshold) {
+        dark += 1;
+        if (dark >= minDark) return y;
+      }
+    }
+  }
+  return height - 1;
+}
+
+/** Last printed line of the docket, not the last 6% of a photo that is mostly padding. */
 export async function cropReceiptLastLine(image: Buffer): Promise<Buffer> {
   const upright = await sharp(image).rotate().toBuffer();
-  const meta = await sharp(upright).metadata();
-  const width = meta.width || 0;
-  const height = meta.height || 0;
+  const { data, info } = await sharp(upright)
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const width = info.width || 0;
+  const height = info.height || 0;
   if (width < 20 || height < 20) return upright;
-  const bandH = Math.min(
-    Math.max(Math.round(height * 0.06), 72),
-    Math.round(height * 0.12) || height
+  const contentBottom = findLastInkRow(data, width, height);
+  const lineH = Math.min(
+    Math.max(Math.round(height * 0.08), 140),
+    260,
+    contentBottom + 1
   );
-  const top = Math.max(0, height - bandH);
+  const top = Math.max(0, contentBottom - lineH + 1);
   return sharp(upright)
-    .extract({ left: 0, top, width, height: height - top })
+    .extract({ left: 0, top, width, height: contentBottom - top + 1 })
     .toBuffer();
 }
 
@@ -168,21 +194,34 @@ export async function readReceiptImage(image: Buffer): Promise<{
   const bottom = await cropReceiptLastLine(image);
 
   if (hostedOcrConfigured()) {
-    const [amountText, merchantText] = await Promise.all([
+    const [hostedLast, merchantText] = await Promise.all([
       recognizeReceiptTextHostedSafe(bottom),
       recognizeReceiptTextSafe(image),
     ]);
-    const engine: "tesseract" | "deepseek" = amountText.trim()
+    let amountText = hostedLast;
+    let engine: "tesseract" | "deepseek" = hostedLast.trim()
       ? "deepseek"
       : "tesseract";
-    const suggestion = suggestionFromMerchantAndAmount({
+    let suggestion = suggestionFromMerchantAndAmount({
       merchantText,
       amountText,
       merchants,
     });
+    if (!suggestion?.amount) {
+      const tessLast = await recognizeReceiptTextSafe(bottom);
+      if (tessLast.trim()) {
+        amountText = tessLast;
+        engine = "tesseract";
+        suggestion = suggestionFromMerchantAndAmount({
+          merchantText,
+          amountText,
+          merchants,
+        });
+      }
+    }
     console.info("[ocr]", {
       engine,
-      amountFrom: amountText.trim() ? "last-line" : "none",
+      amountFrom: suggestion?.amount ? "last-printed-line" : "none",
       amount: suggestion?.amount || null,
       alias: suggestion?.alias || null,
     });
