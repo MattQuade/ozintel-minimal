@@ -60,7 +60,7 @@ const greyBtn: CSSProperties = {
   touchAction: 'manipulation',
 };
 
-const OCR_CLIENT_MS = 18_000;
+const OCR_CLIENT_MS = 28_000;
 
 function chipStyle(selected: boolean): CSSProperties {
   return {

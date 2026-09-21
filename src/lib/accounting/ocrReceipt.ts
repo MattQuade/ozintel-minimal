@@ -1,7 +1,7 @@
 /**
  * Server-side OCR for receipt photos.
- * Amazon Textract reads shop and paid total when AWS keys are set.
- * Tesseract is only used when those keys are missing.
+ * Amazon Textract AnalyzeExpense reads shop and paid total when AWS keys are set.
+ * Tesseract runs only if Textract returns nothing.
  */
 
 import path from "path";
@@ -170,21 +170,23 @@ export async function readReceiptImage(image: Buffer): Promise<{
 
   if (textractConfigured()) {
     const textract = await recognizeReceiptTextractSafe(image);
-    const chosen = chooseReceiptOcr({
-      tesseractText: "",
-      textract,
-      merchants,
-    });
-    console.info("[ocr]", {
-      engine: chosen.engine,
-      textractAmount: chosen.textractAmount,
-      vendor: textract.vendor || null,
-    });
-    return {
-      suggestion: chosen.suggestion,
-      text: chosen.text,
-      engine: chosen.engine,
-    };
+    if (textract.total || textract.vendor) {
+      const chosen = chooseReceiptOcr({
+        tesseractText: "",
+        textract,
+        merchants,
+      });
+      console.info("[ocr]", {
+        engine: chosen.engine,
+        textractAmount: chosen.textractAmount,
+        vendor: textract.vendor || null,
+      });
+      return {
+        suggestion: chosen.suggestion,
+        text: chosen.text,
+        engine: chosen.engine,
+      };
+    }
   }
 
   const tesseractText = await recognizeReceiptTextSafe(image);
