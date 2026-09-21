@@ -252,6 +252,13 @@ TOTAL $87.40
   checks.push(eq("bottom band amount", shopFromTop?.amount, 65.22));
   checks.push(eq("full page shop", shopFromTop?.alias, "ww"));
 
+  const lastLineNotGst = suggestionFromMerchantAndAmount({
+    merchantText: `Coles\nEFT 87.40\nGST INCLUDED IN TOTAL $7.95`,
+    amountText: `THANK YOU\nTOTAL $87.40`,
+  });
+  checks.push(eq("last line total not gst", lastLineNotGst?.amount, 87.4));
+  checks.push(eq("last line keeps coles", lastLineNotGst?.alias, "coles"));
+
   const deepseekTable = parseReceiptOcrText(`
 # Woolworths
 | Item | Price |

@@ -124,13 +124,17 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
   }
 }
 
-export async function cropReceiptBottomBand(image: Buffer): Promise<Buffer> {
+/** Bottom of the photo — about one printed line, not a 40% slab that still contains GST. */
+export async function cropReceiptLastLine(image: Buffer): Promise<Buffer> {
   const upright = await sharp(image).rotate().toBuffer();
   const meta = await sharp(upright).metadata();
   const width = meta.width || 0;
   const height = meta.height || 0;
   if (width < 20 || height < 20) return upright;
-  const bandH = Math.max(Math.round(height * 0.4), Math.min(height, 360));
+  const bandH = Math.min(
+    Math.max(Math.round(height * 0.06), 72),
+    Math.round(height * 0.12) || height
+  );
   const top = Math.max(0, height - bandH);
   return sharp(upright)
     .extract({ left: 0, top, width, height: height - top })
@@ -161,7 +165,7 @@ export async function readReceiptImage(image: Buffer): Promise<{
   engine: "tesseract" | "deepseek";
 }> {
   const merchants = await readMerchants();
-  const bottom = await cropReceiptBottomBand(image);
+  const bottom = await cropReceiptLastLine(image);
 
   if (hostedOcrConfigured()) {
     const [amountText, merchantText] = await Promise.all([
@@ -171,21 +175,20 @@ export async function readReceiptImage(image: Buffer): Promise<{
     const engine: "tesseract" | "deepseek" = amountText.trim()
       ? "deepseek"
       : "tesseract";
-    const fallbackAmountText = amountText.trim() ? amountText : merchantText;
     const suggestion = suggestionFromMerchantAndAmount({
       merchantText,
-      amountText: fallbackAmountText,
+      amountText,
       merchants,
     });
     console.info("[ocr]", {
       engine,
-      amountFrom: amountText.trim() ? "bottom-band" : "full-page-fallback",
+      amountFrom: amountText.trim() ? "last-line" : "none",
       amount: suggestion?.amount || null,
       alias: suggestion?.alias || null,
     });
     return {
       suggestion,
-      text: `${merchantText}\n${fallbackAmountText}`.trim(),
+      text: `${merchantText}\n${amountText}`.trim(),
       engine,
     };
   }
@@ -194,12 +197,12 @@ export async function readReceiptImage(image: Buffer): Promise<{
   const merchantText = await recognizeReceiptTextSafe(image);
   const suggestion = suggestionFromMerchantAndAmount({
     merchantText,
-    amountText: amountText.trim() ? amountText : merchantText,
+    amountText,
     merchants,
   });
   console.info("[ocr]", {
     engine: "tesseract",
-    amountFrom: "bottom-band",
+    amountFrom: "last-line",
     amount: suggestion?.amount || null,
     alias: suggestion?.alias || null,
   });

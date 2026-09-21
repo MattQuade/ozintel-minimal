@@ -55,15 +55,36 @@ function overlayMerchant(
   };
 }
 
+function keepLastReceiptLines(text: string, count: number): string {
+  const lines = String(text || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.slice(-Math.max(1, count)).join("\n");
+}
+
 export function suggestionFromMerchantAndAmount(args: {
   merchantText: string;
   amountText: string;
   merchants?: ApprovedMerchant[];
 }): ReceiptOcrSuggestion | null {
   const merchantSug = parseReceiptOcrText(args.merchantText, args.merchants);
-  const amountSug = parseReceiptOcrText(args.amountText, args.merchants);
+  const amountSug = parseReceiptOcrText(
+    keepLastReceiptLines(args.amountText, 2),
+    args.merchants
+  );
   if (!amountSug && !merchantSug) return null;
-  if (!amountSug) return merchantSug;
+  if (!amountSug) {
+    if (!merchantSug) return null;
+    return {
+      ...merchantSug,
+      amount: 0,
+      lockAmount: false,
+      amountCandidates: [],
+      display: "",
+      confidence: "low",
+    };
+  }
   if (!merchantSug?.alias) return amountSug;
   return {
     ...amountSug,
