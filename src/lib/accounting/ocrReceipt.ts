@@ -147,14 +147,47 @@ export async function readReceiptImage(image: Buffer): Promise<{
 }> {
   const merchants = await readMerchants();
   const tesseractPromise = recognizeReceiptTextSafe(image);
-  const hostedPromise = hostedOcrConfigured()
-    ? recognizeReceiptTextHostedSafe(image)
-    : Promise.resolve("");
-  const [tesseractText, hostedText] = await Promise.all([
-    tesseractPromise,
-    hostedPromise,
-  ]);
-  const chosen = chooseReceiptOcr({ tesseractText, hostedText, merchants });
+  if (hostedOcrConfigured()) {
+    const hostedText = await recognizeReceiptTextHostedSafe(image);
+    const hostedChosen = chooseReceiptOcr({
+      tesseractText: "",
+      hostedText,
+      merchants,
+    });
+    if (hostedChosen.hostedAmount) {
+      console.info("[ocr]", {
+        engine: hostedChosen.engine,
+        agree: hostedChosen.agree,
+        tessAmount: null,
+        hostedAmount: hostedChosen.hostedAmount,
+      });
+      return {
+        suggestion: hostedChosen.suggestion,
+        text: hostedChosen.text,
+        engine: hostedChosen.engine,
+      };
+    }
+    const tesseractText = await tesseractPromise;
+    const chosen = chooseReceiptOcr({ tesseractText, hostedText, merchants });
+    console.info("[ocr]", {
+      engine: chosen.engine,
+      agree: chosen.agree,
+      tessAmount: chosen.tessAmount,
+      hostedAmount: chosen.hostedAmount,
+    });
+    return {
+      suggestion: chosen.suggestion,
+      text: chosen.text,
+      engine: chosen.engine,
+    };
+  }
+
+  const tesseractText = await tesseractPromise;
+  const chosen = chooseReceiptOcr({
+    tesseractText,
+    hostedText: "",
+    merchants,
+  });
   console.info("[ocr]", {
     engine: chosen.engine,
     agree: chosen.agree,

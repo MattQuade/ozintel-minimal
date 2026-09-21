@@ -5,7 +5,7 @@
 
 import sharp from "sharp";
 
-const HOSTED_OCR_MS = 16_000;
+const HOSTED_OCR_MS = 50_000;
 const REPLICATE_MODEL = "lucataco/deepseek-ocr";
 
 export function hostedOcrToken(): string {
@@ -108,11 +108,11 @@ export async function recognizeReceiptTextHosted(image: Buffer): Promise<string>
       {
         method: "POST",
         signal: ac.signal,
-        headers: { Prefer: "wait=16" },
+        headers: { Prefer: "wait=50" },
         body: JSON.stringify({
           input: {
             image: dataUri,
-            task_type: "Convert to Markdown",
+            task_type: "Free OCR",
           },
         }),
       },
