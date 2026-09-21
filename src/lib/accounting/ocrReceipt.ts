@@ -1,6 +1,7 @@
 /**
- * Server-side OCR for receipt photos (tesseract.js).
- * Time out and kill the worker so a stuck read cannot block later photos.
+ * Server-side OCR for receipt photos.
+ * DeepSeek (Replicate) when a token is set; Tesseract otherwise and as fallback.
+ * Time out and kill the Tesseract worker so a stuck read cannot block later photos.
  */
 
 import path from "path";
@@ -9,10 +10,12 @@ import { promises as fs } from "fs";
 import sharp from "sharp";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 import { readMerchants } from "@/lib/accounting/merchants";
+import { chooseReceiptOcr } from "@/lib/accounting/ocrChoose";
 import {
-  parseReceiptOcrText,
-  type ReceiptOcrSuggestion,
-} from "@/lib/accounting/parseReceiptOcr";
+  hostedOcrConfigured,
+  recognizeReceiptTextHosted,
+} from "@/lib/accounting/ocrHosted";
+import type { ReceiptOcrSuggestion } from "@/lib/accounting/parseReceiptOcr";
 
 const OCR_STARTUP_MS = 12_000;
 const OCR_READ_MS = 8_000;
@@ -119,14 +122,48 @@ export async function recognizeReceiptText(image: Buffer): Promise<string> {
   }
 }
 
+async function recognizeReceiptTextSafe(image: Buffer): Promise<string> {
+  try {
+    return await recognizeReceiptText(image);
+  } catch (err) {
+    console.warn("[ocr] tesseract failed", err);
+    return "";
+  }
+}
+
+async function recognizeReceiptTextHostedSafe(image: Buffer): Promise<string> {
+  try {
+    return await recognizeReceiptTextHosted(image);
+  } catch (err) {
+    console.warn("[ocr] deepseek failed", err);
+    return "";
+  }
+}
+
 export async function readReceiptImage(image: Buffer): Promise<{
   suggestion: ReceiptOcrSuggestion | null;
   text: string;
+  engine: "tesseract" | "deepseek";
 }> {
-  const text = await recognizeReceiptText(image);
   const merchants = await readMerchants();
+  const tesseractPromise = recognizeReceiptTextSafe(image);
+  const hostedPromise = hostedOcrConfigured()
+    ? recognizeReceiptTextHostedSafe(image)
+    : Promise.resolve("");
+  const [tesseractText, hostedText] = await Promise.all([
+    tesseractPromise,
+    hostedPromise,
+  ]);
+  const chosen = chooseReceiptOcr({ tesseractText, hostedText, merchants });
+  console.info("[ocr]", {
+    engine: chosen.engine,
+    agree: chosen.agree,
+    tessAmount: chosen.tessAmount,
+    hostedAmount: chosen.hostedAmount,
+  });
   return {
-    suggestion: parseReceiptOcrText(text, merchants),
-    text,
+    suggestion: chosen.suggestion,
+    text: chosen.text,
+    engine: chosen.engine,
   };
 }

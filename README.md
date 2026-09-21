@@ -15,5 +15,6 @@ Open http://localhost:3000. Restore an approved account from the home screen. Ac
 
 - Invoice lines can be GST-inclusive; GST is 1/11 (`src/lib/accounting/invoiceMath.ts`).
 - `/accounting/shops` is the receipt-OCR supplier chip list, not bills.
+- Receipt reading uses DeepSeek-OCR (via Replicate) when `REPLICATE_API_TOKEN` is set. Tesseract stays as the fallback, and as the only engine until that token exists.
 - Persistent data lives in `data/` locally, or `OZINTEL_DATA_DIR` on Render. Do not delete that path.
 - PIN hashes are stored in `accounting-pins.json` next to other account data, not on the user record.
