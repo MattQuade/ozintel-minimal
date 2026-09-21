@@ -1,5 +1,5 @@
 /**
- * Pick DeepSeek text when it produced a total; otherwise keep Tesseract.
+ * Pick PaddleOCR text when it produced a total; otherwise keep Tesseract.
  * If the two totals disagree, both stay as chips and the amount is not locked.
  */
 
@@ -12,7 +12,7 @@ import {
 
 export type ChosenReceiptOcr = {
   text: string;
-  engine: "tesseract" | "deepseek";
+  engine: "tesseract" | "paddle";
   suggestion: ReceiptOcrSuggestion | null;
   /** null when only one engine found an amount. */
   agree: boolean | null;
@@ -116,7 +116,7 @@ export function chooseReceiptOcr(args: {
     );
     return {
       text: args.hostedText,
-      engine: "deepseek",
+      engine: "paddle",
       suggestion,
       agree,
       tessAmount,
@@ -137,7 +137,7 @@ export function chooseReceiptOcr(args: {
 
   return {
     text: args.hostedText || args.tesseractText,
-    engine: args.hostedText.trim() ? "deepseek" : "tesseract",
+    engine: args.hostedText.trim() ? "paddle" : "tesseract",
     suggestion: hostSug,
     agree,
     tessAmount,

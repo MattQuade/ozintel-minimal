@@ -282,12 +282,22 @@ TOTAL $87.40
       "TOTAL $89.80"
     )
   );
+  checks.push(
+    eq(
+      "flatten paddle lines",
+      flattenHostedOcrText([
+        [[[0, 0], [1, 0], [1, 1], [0, 1]], ["Woolworths", 0.99]],
+        [[[0, 2], [1, 2], [1, 3], [0, 3]], ["TOTAL $23.45", 0.98]],
+      ]),
+      "Woolworths\nTOTAL $23.45"
+    )
+  );
 
   const hostedWins = chooseReceiptOcr({
     tesseractText: "TOTAL 465.22\nEFTPOS 465.22",
     hostedText: ALDI_SAMPLE,
   });
-  checks.push(eq("hosted engine when it has a total", hostedWins.engine, "deepseek"));
+  checks.push(eq("hosted engine when it has a total", hostedWins.engine, "paddle"));
   checks.push(eq("hosted amount preferred", hostedWins.suggestion?.amount, 89.8));
   checks.push(eq("hosted alias preferred", hostedWins.suggestion?.alias, "aldi"));
   checks.push(eq("disagree does not lock", hostedWins.suggestion?.lockAmount, false));
@@ -312,7 +322,7 @@ TOTAL $87.40
     tesseractText: ALDI_SAMPLE,
     hostedText: ALDI_SAMPLE,
   });
-  checks.push(eq("agree uses deepseek", agreeLock.engine, "deepseek"));
+  checks.push(eq("agree uses paddle", agreeLock.engine, "paddle"));
   checks.push(eq("agree locks", agreeLock.suggestion?.lockAmount, true));
   checks.push(eq("agree flag", agreeLock.agree, true));
 

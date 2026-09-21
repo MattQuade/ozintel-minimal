@@ -1,12 +1,12 @@
 /**
- * DeepSeek-OCR via Replicate. Colour JPEG in, markdown/text out.
+ * PaddleOCR via Replicate. JPEG in, line text out.
  * Tesseract stays on as the fallback in ocrReceipt.ts.
  */
 
 import sharp from "sharp";
 
 const HOSTED_OCR_MS = 50_000;
-const REPLICATE_MODEL = "lucataco/deepseek-ocr";
+const REPLICATE_MODEL = "hexiaochun/paddleocr";
 
 export function hostedOcrToken(): string {
   return (
@@ -20,12 +20,63 @@ export function hostedOcrConfigured(): boolean {
   return Boolean(hostedOcrToken());
 }
 
+function paddleLineText(item: unknown): string {
+  if (item == null) return "";
+  if (typeof item === "string") return item.trim();
+  if (Array.isArray(item)) {
+    // Typical PaddleOCR row: [box, [text, confidence]]
+    if (item.length >= 2) {
+      const rec = item[1];
+      if (typeof rec === "string") return rec.trim();
+      if (Array.isArray(rec) && typeof rec[0] === "string") return rec[0].trim();
+    }
+    return item.map(paddleLineText).filter(Boolean).join("\n");
+  }
+  if (typeof item === "object") {
+    const row = item as Record<string, unknown>;
+    const text =
+      row.text ??
+      row.transcription ??
+      row.rec_text ??
+      row.label ??
+      (row.markdown &&
+      typeof row.markdown === "object" &&
+      "text" in (row.markdown as object)
+        ? (row.markdown as { text?: unknown }).text
+        : undefined);
+    if (typeof text === "string") return text.trim();
+  }
+  return "";
+}
+
 export function flattenHostedOcrText(raw: unknown): string {
   if (raw == null) return "";
-  const text = Array.isArray(raw)
-    ? raw.map((part) => String(part || "")).join("\n")
-    : String(raw);
-  return text
+  if (Array.isArray(raw)) {
+    return raw.map(paddleLineText).filter(Boolean).join("\n").trim();
+  }
+  if (typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    if (typeof obj.text === "string") return flattenHostedOcrText(obj.text);
+    if (Array.isArray(obj.result)) return flattenHostedOcrText(obj.result);
+    if (Array.isArray(obj.ocr_result)) return flattenHostedOcrText(obj.ocr_result);
+    if (obj.markdown && typeof obj.markdown === "object") {
+      const md = obj.markdown as { text?: unknown };
+      if (typeof md.text === "string") return flattenHostedOcrText(md.text);
+    }
+    if (Array.isArray(obj.layoutParsingResults)) {
+      return flattenHostedOcrText(obj.layoutParsingResults);
+    }
+  }
+  const text = String(raw);
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      return flattenHostedOcrText(JSON.parse(trimmed));
+    } catch {
+      // fall through and strip markdown tokens
+    }
+  }
+  return trimmed
     .replace(/<\|[^|]*\|>/g, " ")
     .replace(/```(?:markdown|md|text)?/gi, "")
     .replace(/```/g, "")
@@ -110,10 +161,7 @@ export async function recognizeReceiptTextHosted(image: Buffer): Promise<string>
         signal: ac.signal,
         headers: { Prefer: "wait=50" },
         body: JSON.stringify({
-          input: {
-            image: dataUri,
-            task_type: "Free OCR",
-          },
+          input: { image: dataUri },
         }),
       },
       token

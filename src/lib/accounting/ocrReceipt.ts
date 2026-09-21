@@ -1,6 +1,6 @@
 /**
  * Server-side OCR for receipt photos.
- * DeepSeek (Replicate) when a token is set; Tesseract otherwise and as fallback.
+ * PaddleOCR (Replicate) when a token is set; Tesseract otherwise and as fallback.
  * Time out and kill the Tesseract worker so a stuck read cannot block later photos.
  */
 
@@ -156,7 +156,7 @@ async function recognizeReceiptTextHostedSafe(image: Buffer): Promise<string> {
   try {
     return await recognizeReceiptTextHosted(image);
   } catch (err) {
-    console.warn("[ocr] deepseek failed", err);
+    console.warn("[ocr] paddle failed", err);
     return "";
   }
 }
@@ -164,7 +164,7 @@ async function recognizeReceiptTextHostedSafe(image: Buffer): Promise<string> {
 export async function readReceiptImage(image: Buffer): Promise<{
   suggestion: ReceiptOcrSuggestion | null;
   text: string;
-  engine: "tesseract" | "deepseek";
+  engine: "tesseract" | "paddle";
 }> {
   const merchants = await readMerchants();
   const tesseractPromise = recognizeReceiptTextSafe(image);
@@ -184,6 +184,7 @@ export async function readReceiptImage(image: Buffer): Promise<{
       agree: chosen.agree,
       tessAmount: chosen.tessAmount,
       hostedAmount: chosen.hostedAmount,
+      hostedChars: hostedText.length,
     });
     return {
       suggestion: chosen.suggestion,
