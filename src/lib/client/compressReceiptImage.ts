@@ -10,11 +10,11 @@ export const RECEIPT_MAX_EDGE = 1280;
 export const RECEIPT_JPEG_QUALITY = 0.1;
 
 /**
- * Higher-fidelity resize used only for OCR before Confirm.
- * Stored upload still goes through RECEIPT_* settings via prepareReceiptFile.
+ * Sharper copy used only for the Sydney Textract read before Confirm.
+ * Stored upload still goes through RECEIPT_* (JPEG 0.1) via prepareReceiptFile.
  */
 export const RECEIPT_OCR_MAX_EDGE = 2000;
-export const RECEIPT_OCR_JPEG_QUALITY = 0.92;
+export const RECEIPT_OCR_JPEG_QUALITY = 0.4;
 
 const MAX_EDGE = RECEIPT_MAX_EDGE;
 const JPEG_QUALITY = RECEIPT_JPEG_QUALITY;

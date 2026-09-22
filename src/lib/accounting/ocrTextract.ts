@@ -192,7 +192,7 @@ async function prepareReceiptJpeg(image: Buffer): Promise<Buffer> {
       fit: "inside",
       withoutEnlargement: false,
     })
-    .jpeg({ quality: 90 })
+    .jpeg({ quality: 40 })
     .toBuffer();
 }
 
