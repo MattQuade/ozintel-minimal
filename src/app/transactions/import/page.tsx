@@ -8,7 +8,7 @@ import ReceiptAttach from '@/components/ReceiptAttach';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
 import {
-  findUniqueDepositInvoiceMatch,
+  matchDepositsToInvoices,
   isDepositAmount,
   openInvoicesForManualAllocate,
   type InvoiceMatchCandidate,
@@ -109,24 +109,32 @@ export default function BankImport() {
     rows: ClassifiedImportRow[],
     invoices: OpenInvoiceOption[]
   ): ClassifiedImportRow[] => {
-    const used = new Set<string>();
-    return rows.map((row) => {
+    const alreadyUsed = new Set(
+      rows.map((row) => row.invoiceId).filter((id): id is string => Boolean(id))
+    );
+    const deposits = rows.flatMap((row, index) => {
       const amount = parseFloat(String(row.original[1] || 0));
-      if (!isDepositAmount(amount)) return row;
-      if (row.invoiceId) {
-        used.add(row.invoiceId);
-        return row;
-      }
-      const description = String(
-        row.descriptionOverride || row.original[2] || ''
-      );
-      const match = findUniqueDepositInvoiceMatch(invoices, {
-        amount,
-        description,
-        excludeInvoiceIds: used,
-      });
+      if (!isDepositAmount(amount) || row.invoiceId) return [];
+      return [
+        {
+          key: String(index),
+          amount,
+          description: String(row.descriptionOverride || row.original[2] || ''),
+          date:
+            toIsoDateInput(String(row.original[0] ?? '')) ||
+            String(row.original[0] ?? ''),
+        },
+      ];
+    });
+    const matched = matchDepositsToInvoices(
+      invoices.filter((inv) => !alreadyUsed.has(inv.id)),
+      deposits
+    );
+    return rows.map((row, index) => {
+      const amount = parseFloat(String(row.original[1] || 0));
+      if (!isDepositAmount(amount) || row.invoiceId) return row;
+      const match = matched.get(String(index));
       if (!match) return row;
-      used.add(match.id);
       return {
         ...row,
         invoiceId: match.id,
@@ -134,7 +142,6 @@ export default function BankImport() {
         invoiceStatus: match.status,
         invoiceAutoMatched: true,
         invoiceAllocated: false,
-        // Skip expense-style classification — payment journal handles AR
         type: 'Revenue',
         accountCode: '2101',
         accountName: 'Accounts Receivable (invoice allocate)',

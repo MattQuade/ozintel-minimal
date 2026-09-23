@@ -26,6 +26,7 @@ export async function GET(req: Request) {
           status: inv.status,
           amountDue: inv.amountDue,
           matchKeyword: inv.matchKeyword || "",
+          issueDate: inv.issueDate || "",
         })),
       });
     } catch (error) {

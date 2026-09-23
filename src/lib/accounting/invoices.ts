@@ -97,8 +97,9 @@ export type Invoice = {
   amountDue: number;
   notes: string;
   /**
-   * Optional bank-deposit auto-reconcile keyword (e.g. job name or reference).
-   * Case-insensitive contains match against bank description when amountDue matches.
+   * Optional bank-deposit auto-reconcile keyword (e.g. Kylie, Steven).
+   * Auto-match only when this string is in the CSV text and amountDue matches.
+   * Repeated amounts pair oldest invoice to oldest payment.
    */
   matchKeyword: string;
   ledgerEntryIds: string[];
@@ -1053,6 +1054,7 @@ function toMatchCandidate(inv: Invoice): InvoiceMatchCandidate {
     amountDue: inv.amountDue,
     matchKeyword: inv.matchKeyword,
     customerName: inv.customerName,
+    issueDate: inv.issueDate,
   };
 }
 
@@ -1190,9 +1192,8 @@ export async function tryAllocateLedgerDepositToInvoice(entry: {
 }
 
 /**
- * Auto-match one deposit to a unique open invoice (amount due plus number,
- * keyword, or customer name in the bank text).
- * Returns null when no unique match.
+ * Auto-match one deposit to an open invoice (keyword in the bank text
+ * plus matching amount due). Repeated amounts take the oldest invoice.
  */
 export async function autoMatchDepositToInvoice(opts: {
   amount: number;

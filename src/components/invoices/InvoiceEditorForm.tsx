@@ -569,10 +569,9 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
             placeholder="e.g. job name or reference"
           />
           <p className="text-xs text-slate-500 mt-1">
-            Used with bank deposits. When a deposit amount matches amount due
-            and the bank text uniquely contains this keyword, the customer
-            name, or the invoice number, the invoice is marked paid
-            automatically.
+            Used with bank deposits. Auto-reconcile only when this keyword
+            (e.g. Kylie, Steven) is in the bank CSV text and the amount due
+            matches. Repeated amounts pair oldest invoice to oldest payment.
           </p>
         </div>
 
