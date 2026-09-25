@@ -106,10 +106,23 @@ export type Invoice = {
   journalRef: string;
   voidLedgerEntryIds: string[];
   payments: InvoicePayment[];
+  /** Outbound email sends + open tracking (newest last). */
+  emailSends?: InvoiceEmailSend[];
   authorisedAt?: string;
   voidedAt?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type InvoiceEmailSend = {
+  id: string;
+  to: string;
+  sentAt: string;
+  messageId: string;
+  /** Opaque token for the open-tracking pixel. */
+  openToken: string;
+  openedAt?: string;
+  openCount: number;
 };
 
 const AR_CODE = "2101";
@@ -159,6 +172,17 @@ async function readInvoicesUnlocked(): Promise<Invoice[]> {
       notes: String(inv.notes || ""),
       pricesIncludeGst: Boolean(inv.pricesIncludeGst),
       payments: Array.isArray(inv.payments) ? inv.payments : [],
+      emailSends: Array.isArray(inv.emailSends)
+        ? inv.emailSends.map((s) => ({
+            id: String(s.id || ""),
+            to: String(s.to || ""),
+            sentAt: String(s.sentAt || ""),
+            messageId: String(s.messageId || ""),
+            openToken: String(s.openToken || ""),
+            openedAt: s.openedAt ? String(s.openedAt) : undefined,
+            openCount: Number(s.openCount) || 0,
+          }))
+        : [],
       ledgerEntryIds: Array.isArray(inv.ledgerEntryIds)
         ? inv.ledgerEntryIds
         : [],
@@ -179,6 +203,73 @@ export async function readInvoices(): Promise<Invoice[]> {
 export async function getInvoiceById(id: string): Promise<Invoice | null> {
   const invoices = await readInvoicesUnlocked();
   return invoices.find((inv) => inv.id === id) || null;
+}
+
+export async function recordInvoiceEmailSend(input: {
+  invoiceId: string;
+  to: string;
+  messageId: string;
+  openToken: string;
+}): Promise<Invoice | null> {
+  return withInvoicesLock(async () => {
+    const invoices = await readInvoicesUnlocked();
+    const idx = invoices.findIndex((inv) => inv.id === input.invoiceId);
+    if (idx < 0) return null;
+    const now = new Date().toISOString();
+    const send: InvoiceEmailSend = {
+      id: `es_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      to: String(input.to || "").trim(),
+      sentAt: now,
+      messageId: String(input.messageId || "").trim(),
+      openToken: String(input.openToken || "").trim(),
+      openCount: 0,
+    };
+    const prev = Array.isArray(invoices[idx].emailSends)
+      ? invoices[idx].emailSends!
+      : [];
+    invoices[idx] = {
+      ...invoices[idx],
+      emailSends: [...prev, send],
+      updatedAt: now,
+    };
+    await writeInvoicesUnlocked(invoices);
+    return invoices[idx];
+  });
+}
+
+/** Record an open for a tracking token. Returns true when a send was updated. */
+export async function recordInvoiceEmailOpen(
+  openToken: string
+): Promise<boolean> {
+  const token = String(openToken || "").trim();
+  if (!token) return false;
+  return withInvoicesLock(async () => {
+    const invoices = await readInvoicesUnlocked();
+    const now = new Date().toISOString();
+    let changed = false;
+    for (let i = 0; i < invoices.length; i++) {
+      const sends = Array.isArray(invoices[i].emailSends)
+        ? [...invoices[i].emailSends!]
+        : [];
+      const si = sends.findIndex((s) => s.openToken === token);
+      if (si < 0) continue;
+      const prev = sends[si];
+      sends[si] = {
+        ...prev,
+        openedAt: prev.openedAt || now,
+        openCount: (Number(prev.openCount) || 0) + 1,
+      };
+      invoices[i] = {
+        ...invoices[i],
+        emailSends: sends,
+        updatedAt: now,
+      };
+      changed = true;
+      break;
+    }
+    if (changed) await writeInvoicesUnlocked(invoices);
+    return changed;
+  });
 }
 
 /** Most recent non-void invoice for a customer — prefers authorised/paid as template. */
