@@ -1924,17 +1924,11 @@ export default function HomePage({
         {canCaptureReceipts && !isTestingOtherUser ? (
           <HomeReceiptCapture />
         ) : null}
-        <a href="/operations/pub" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#1d4ed8', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Pub Operations
-        </a>
-        <a href="/operations/forestry" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#15803d', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Forestry Operations
-        </a>
-        <a href="/operations/logistics" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#0f766e', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Logistics Operations
+        <a href="/operations" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#1d4ed8', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
+          Operations
         </a>
         <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Decision Brief
+          Analysis
         </a>
       </div>
 

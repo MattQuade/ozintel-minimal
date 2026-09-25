@@ -14,7 +14,7 @@ export default function OperationsIndexPage() {
     >
       <p style={{ margin: "0 0 16px" }}>
         <a href="/" style={{ color: "#38bdf8" }}>
-          ← Back to Alerts
+          ← Home
         </a>
       </p>
       <h1 style={{ color: "#3b82f6" }}>Operations</h1>
@@ -34,12 +34,15 @@ export default function OperationsIndexPage() {
             display: "block",
             width: "90%",
             maxWidth: 400,
-            padding: 16,
+            padding: 20,
+            fontSize: "1.3rem",
             borderRadius: 12,
             background: "#1d4ed8",
             color: "white",
             textDecoration: "none",
             fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
           }}
         >
           Pub Operations
@@ -50,12 +53,15 @@ export default function OperationsIndexPage() {
             display: "block",
             width: "90%",
             maxWidth: 400,
-            padding: 16,
+            padding: 20,
+            fontSize: "1.3rem",
             borderRadius: 12,
             background: "#15803d",
             color: "white",
             textDecoration: "none",
             fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
           }}
         >
           Forestry Operations
@@ -66,12 +72,15 @@ export default function OperationsIndexPage() {
             display: "block",
             width: "90%",
             maxWidth: 400,
-            padding: 16,
+            padding: 20,
+            fontSize: "1.3rem",
             borderRadius: 12,
             background: "#0f766e",
             color: "white",
             textDecoration: "none",
             fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
           }}
         >
           Logistics Operations

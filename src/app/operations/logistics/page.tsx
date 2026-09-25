@@ -231,8 +231,8 @@ export default function LogisticsOperationsPage() {
       }}
     >
       <p style={{ margin: "0 0 16px" }}>
-        <a href="/" style={{ color: "#38bdf8" }}>
-          ← Back to Alerts
+        <a href="/operations" style={{ color: "#38bdf8" }}>
+          ← Back to Operations
         </a>
       </p>
 
