@@ -14,7 +14,7 @@ export default function OperationsIndexPage() {
     >
       <p style={{ margin: "0 0 16px" }}>
         <a href="/" style={{ color: "#38bdf8" }}>
-          ← Back to Alerts
+          ← Home
         </a>
       </p>
       <h1 style={{ color: "#3b82f6" }}>Operations</h1>
