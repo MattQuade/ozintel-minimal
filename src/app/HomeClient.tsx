@@ -1933,6 +1933,9 @@ export default function HomePage({
         <a href="/operations/logistics" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#0f766e', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Logistics Operations
         </a>
+        <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
+          Decision Brief
+        </a>
       </div>
 
       <div style={{ marginTop: '40px', paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))', display: 'flex', justifyContent: 'center' }}>
