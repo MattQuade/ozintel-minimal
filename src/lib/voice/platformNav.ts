@@ -239,6 +239,14 @@ const RULES: NavRule[] = [
       withOpen("freight(?: operations?| ops)?").test(t),
   },
   {
+    href: "/decision-brief",
+    label: "Decision Brief",
+    test: (t) =>
+      withOpen("decision brief").test(t) ||
+      withOpen("business intel(?:ligence)?").test(t) ||
+      withOpen("energy brief").test(t),
+  },
+  {
     href: "/operations",
     label: "Operations",
     test: (t) => withOpen("operations?").test(t),

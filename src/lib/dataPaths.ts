@@ -109,6 +109,27 @@ export function getAccountingDataDir(): string {
   return path.join(getOwnerDataRoot(ownerOrThrow()), "accounting");
 }
 
+/**
+ * Decision Brief (layer-3 BI) — separate silo from accounting/ops.
+ * Pulls read-only signals from accounting; stores briefs, retailer links, scans.
+ */
+export function getDecisionBriefDataDir(): string {
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "decision-brief");
+}
+
+export function getDecisionBriefStorePath(): string {
+  return path.join(getDecisionBriefDataDir(), "store.json");
+}
+
+/** Shared retailer registry + connect codes (not per-owner). */
+export function getDecisionBriefGlobalDir(): string {
+  return path.join(getDataDir(), "decision-brief");
+}
+
+export function getDecisionBriefRetailersPath(): string {
+  return path.join(getDecisionBriefGlobalDir(), "retailers.json");
+}
+
 export function getLedgerFilePath(): string {
   return path.join(getAccountingDataDir(), "ledger.json");
 }
