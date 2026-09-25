@@ -130,6 +130,10 @@ export function getDecisionBriefRetailersPath(): string {
   return path.join(getDecisionBriefGlobalDir(), "retailers.json");
 }
 
+export function getDecisionBriefInstallersPath(): string {
+  return path.join(getDecisionBriefGlobalDir(), "installers.json");
+}
+
 export function getLedgerFilePath(): string {
   return path.join(getAccountingDataDir(), "ledger.json");
 }

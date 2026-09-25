@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import {
   getDecisionBriefDataDir,
   getDecisionBriefGlobalDir,
+  getDecisionBriefInstallersPath,
   getDecisionBriefRetailersPath,
   getDecisionBriefStorePath,
 } from "@/lib/dataPaths";
@@ -44,11 +45,23 @@ export type RetailerConnection = {
   lastPushAt?: string;
 };
 
+/** Solar / battery installer (not the power retailer). */
+export type InstallerConnection = {
+  id: string;
+  installerName: string;
+  contactEmail: string;
+  status: "pending" | "active" | "revoked";
+  apiKey: string;
+  connectedAt: string;
+  lastPushAt?: string;
+};
+
 export type DecisionBriefStore = {
   connectCode: string;
   energy: EnergyProfile | null;
   schemeUpdates: SchemeUpdate[];
   retailerConnections: RetailerConnection[];
+  installerConnections: InstallerConnection[];
   /** Retailer-pushed bill snapshots (kWh / $). */
   retailerBills: Array<{
     id: string;
@@ -58,6 +71,17 @@ export type DecisionBriefStore = {
     amountAud?: number;
     kwh?: number;
     tariffNote?: string;
+    receivedAt: string;
+  }>;
+  /** Installer-pushed quotes / proposals. */
+  installerQuotes: Array<{
+    id: string;
+    installerId: string;
+    solarKw?: number;
+    batteryKwh?: number;
+    quoteAud?: number;
+    paybackYears?: number;
+    notes?: string;
     receivedAt: string;
   }>;
   brief: {
@@ -77,6 +101,13 @@ export type GlobalRetailer = {
   createdAt: string;
 };
 
+export type GlobalInstaller = {
+  id: string;
+  name: string;
+  contactEmail: string;
+  createdAt: string;
+};
+
 const ENERGY_ACCOUNT_CODES = new Set(["1331", "1358"]); // Electricity, Gas
 const ENERGY_NAME_RE =
   /\b(electric|electricity|origin\s*energy|agl|energy\s*australia|blue\s*nrg|red\s*energy|alinta|power|kwh|gas\b|elgas|supagas)\b/i;
@@ -87,7 +118,9 @@ function emptyStore(): DecisionBriefStore {
     energy: null,
     schemeUpdates: [],
     retailerConnections: [],
+    installerConnections: [],
     retailerBills: [],
+    installerQuotes: [],
     brief: null,
   };
 }
@@ -113,8 +146,14 @@ export async function readDecisionBriefStore(): Promise<DecisionBriefStore> {
       retailerConnections: Array.isArray(parsed.retailerConnections)
         ? parsed.retailerConnections
         : [],
+      installerConnections: Array.isArray(parsed.installerConnections)
+        ? parsed.installerConnections
+        : [],
       retailerBills: Array.isArray(parsed.retailerBills)
         ? parsed.retailerBills
+        : [],
+      installerQuotes: Array.isArray(parsed.installerQuotes)
+        ? parsed.installerQuotes
         : [],
       brief: parsed.brief || null,
       energy: parsed.energy || null,
@@ -209,29 +248,36 @@ export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
   const avg = energy?.averageMonthlyAud ?? 0;
   const band = energy?.band || "unknown";
 
-  let verdict = "Not enough power data yet — connect a retailer or import bills.";
+  let verdict =
+    "Not enough power data yet — connect a retailer/installer or import bills.";
   let next =
-    "Share your Decision Brief connect code with your energy retailer, or import bank CSV so electricity posts to the ledger.";
+    "Share your Decision Brief code with your energy retailer and a solar/battery installer, or import bank CSV so electricity posts to the ledger.";
   if (band === "low") {
     verdict =
       "At this spend level, solar + battery under current small-business settings is often marginal — check tariff and roof first.";
-    next = "Get one firm quote sized to daytime load; compare to your last 12 months average.";
+    next =
+      "Get one firm installer quote sized to daytime load; compare to your last 12 months average.";
   } else if (band === "medium") {
     verdict =
       "Medium usage: solar is often worth modelling; battery depends on peak tariff and rebate band.";
-    next = "Ask your retailer for 12 months kWh export + peak share, then request 3 quotes.";
+    next =
+      "Ask your retailer for 12 months kWh + peak share, then request installer quotes.";
   } else if (band === "high") {
     verdict =
       "High power spend: solar + battery is more likely to pay back under the current scheme — model urgently.";
-    next = "Connect your retailer feed this week and lock a quote before scheme settings move.";
+    next =
+      "Connect retailer usage and an installer quote this week before scheme settings move.";
   }
+
+  const activeInstallers = store.installerConnections.filter(
+    (c) => c.status === "active"
+  ).length;
+  const latestQuote = store.installerQuotes[0];
 
   const figures: Array<{ label: string; value: string }> = [
     {
       label: "Avg monthly power (ledger)",
-      value: energy
-        ? `$${energy.averageMonthlyAud.toFixed(2)}`
-        : "—",
+      value: energy ? `$${energy.averageMonthlyAud.toFixed(2)}` : "—",
     },
     {
       label: "Months of data",
@@ -247,7 +293,18 @@ export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
         store.retailerConnections.filter((c) => c.status === "active").length
       ),
     },
+    {
+      label: "Installer links",
+      value: String(activeInstallers),
+    },
   ];
+
+  if (latestQuote?.quoteAud != null) {
+    figures.push({
+      label: "Latest installer quote",
+      value: `$${Number(latestQuote.quoteAud).toFixed(0)}`,
+    });
+  }
 
   if (energy && energy.totalSpendAud > 0) {
     figures.push({
@@ -263,6 +320,13 @@ export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
       energy?.retailersSeen?.length
         ? `Seen on ledger: ${energy.retailersSeen.slice(0, 3).join(", ")}`
         : "No named retailers on the ledger yet.",
+      activeInstallers
+        ? `${activeInstallers} installer${activeInstallers === 1 ? "" : "s"} connected${
+            latestQuote?.solarKw
+              ? ` · latest ${latestQuote.solarKw} kW solar`
+              : ""
+          }`
+        : "No solar/battery installer connected yet.",
       latestUpdate
         ? `Latest scan: ${latestUpdate.title}`
         : "Scheme scan has not run yet.",
@@ -458,6 +522,143 @@ export async function pushRetailerBill(input: {
     store.retailerConnections = store.retailerConnections.map((c) =>
       c.id === found.connection.id
         ? { ...c, lastPushAt: bill.receivedAt }
+        : c
+    );
+    store.brief = buildEnergyBrief(store);
+    await writeDecisionBriefStore(store);
+  });
+}
+
+async function readGlobalInstallers(): Promise<GlobalInstaller[]> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(getDecisionBriefInstallersPath(), "utf8");
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeGlobalInstallers(list: GlobalInstaller[]): Promise<void> {
+  await ensureDirs();
+  await fs.writeFile(
+    getDecisionBriefInstallersPath(),
+    JSON.stringify(list, null, 2),
+    "utf8"
+  );
+}
+
+export async function acceptInstallerConnect(input: {
+  connectCode: string;
+  installerName: string;
+  contactEmail: string;
+}): Promise<{ ownerEmail: string; connection: InstallerConnection }> {
+  const ownerEmail = await lookupOwnerByConnectCode(input.connectCode);
+  if (!ownerEmail) {
+    throw new Error("Invalid connect code — ask the business for a fresh code");
+  }
+  const { runWithDataOwnerAsync } = await import("@/lib/dataOwnerContext");
+  return runWithDataOwnerAsync(ownerEmail, async () => {
+    const store = await readDecisionBriefStore();
+    if (
+      store.connectCode.toUpperCase() !==
+      String(input.connectCode || "").trim().toUpperCase()
+    ) {
+      throw new Error("Connect code expired — ask for a new one");
+    }
+    const connection: InstallerConnection = {
+      id: `ic_${Date.now().toString(36)}`,
+      installerName: String(input.installerName || "").trim(),
+      contactEmail: String(input.contactEmail || "").trim().toLowerCase(),
+      status: "active",
+      apiKey: `dbi_${randomBytes(18).toString("hex")}`,
+      connectedAt: new Date().toISOString(),
+    };
+    store.installerConnections = [
+      ...store.installerConnections.filter(
+        (c) =>
+          !(
+            c.contactEmail === connection.contactEmail &&
+            c.installerName.toLowerCase() ===
+              connection.installerName.toLowerCase()
+          )
+      ),
+      connection,
+    ];
+    store.brief = buildEnergyBrief(store);
+    await writeDecisionBriefStore(store);
+
+    const installers = await readGlobalInstallers();
+    if (
+      !installers.some((r) => r.contactEmail === connection.contactEmail)
+    ) {
+      installers.push({
+        id: connection.id,
+        name: connection.installerName,
+        contactEmail: connection.contactEmail,
+        createdAt: connection.connectedAt,
+      });
+      await writeGlobalInstallers(installers);
+    }
+
+    return { ownerEmail, connection };
+  });
+}
+
+export async function findInstallerByApiKey(
+  apiKey: string
+): Promise<{ ownerEmail: string; connection: InstallerConnection } | null> {
+  const key = String(apiKey || "").trim();
+  if (!key) return null;
+  let index: Record<string, string> = {};
+  try {
+    index = JSON.parse(await fs.readFile(connectIndexPath(), "utf8"));
+  } catch {
+    return null;
+  }
+  const owners = [...new Set(Object.values(index))];
+  const { runWithDataOwnerAsync } = await import("@/lib/dataOwnerContext");
+  for (const ownerEmail of owners) {
+    const hit = await runWithDataOwnerAsync(ownerEmail, async () => {
+      const store = await readDecisionBriefStore();
+      const connection = store.installerConnections.find(
+        (c) => c.apiKey === key && c.status === "active"
+      );
+      return connection || null;
+    });
+    if (hit) return { ownerEmail, connection: hit };
+  }
+  return null;
+}
+
+export async function pushInstallerQuote(input: {
+  apiKey: string;
+  solarKw?: number;
+  batteryKwh?: number;
+  quoteAud?: number;
+  paybackYears?: number;
+  notes?: string;
+}): Promise<void> {
+  const found = await findInstallerByApiKey(input.apiKey);
+  if (!found) throw new Error("Invalid installer API key");
+  const { runWithDataOwnerAsync } = await import("@/lib/dataOwnerContext");
+  await runWithDataOwnerAsync(found.ownerEmail, async () => {
+    const store = await readDecisionBriefStore();
+    const quote = {
+      id: `iq_${Date.now().toString(36)}`,
+      installerId: found.connection.id,
+      solarKw: input.solarKw,
+      batteryKwh: input.batteryKwh,
+      quoteAud: input.quoteAud,
+      paybackYears: input.paybackYears,
+      notes: input.notes,
+      receivedAt: new Date().toISOString(),
+    };
+    store.installerQuotes = [quote, ...store.installerQuotes].slice(0, 100);
+    store.installerConnections = store.installerConnections.map((c) =>
+      c.id === found.connection.id
+        ? { ...c, lastPushAt: quote.receivedAt }
         : c
     );
     store.brief = buildEnergyBrief(store);
