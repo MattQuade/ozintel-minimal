@@ -31,12 +31,28 @@ type Store = {
     connectedAt: string;
     lastPushAt?: string;
   }>;
+  installerConnections: Array<{
+    id: string;
+    installerName: string;
+    contactEmail: string;
+    status: string;
+    apiKey: string;
+    connectedAt: string;
+    lastPushAt?: string;
+  }>;
   retailerBills: Array<{
     id: string;
     amountAud?: number;
     kwh?: number;
     receivedAt: string;
     tariffNote?: string;
+  }>;
+  installerQuotes: Array<{
+    id: string;
+    solarKw?: number;
+    batteryKwh?: number;
+    quoteAud?: number;
+    receivedAt: string;
   }>;
   brief: {
     headline: string;
@@ -238,10 +254,10 @@ function DecisionBriefClient() {
       </div>
 
       <section style={card}>
-        <h3 style={{ marginTop: 0, color: '#a78bfa' }}>Retailer connect</h3>
+        <h3 style={{ marginTop: 0, color: '#a78bfa' }}>Partner connect code</h3>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-          Give this code to your energy retailer. They open the link, enter the
-          code, and can push real bill data into this brief.
+          One code for both power retailers and solar/battery installers. They
+          use different links below.
         </p>
         <div
           style={{
@@ -253,12 +269,6 @@ function DecisionBriefClient() {
         >
           {store?.connectCode || '······'}
         </div>
-        <p style={{ fontSize: '0.85rem', color: '#94a3b8', wordBreak: 'break-all' }}>
-          Retailer link:{' '}
-          <a href="/decision-brief/retailer" style={{ color: '#38bdf8' }}>
-            {origin}/decision-brief/retailer
-          </a>
-        </p>
         <button
           type="button"
           disabled={busy}
@@ -267,9 +277,21 @@ function DecisionBriefClient() {
         >
           Rotate code
         </button>
+      </section>
 
+      <section style={{ ...card, marginTop: 16 }}>
+        <h3 style={{ marginTop: 0, color: '#38bdf8' }}>Power retailer</h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+          Bill / usage data from the energy retailer.
+        </p>
+        <p style={{ fontSize: '0.85rem', color: '#94a3b8', wordBreak: 'break-all' }}>
+          Link:{' '}
+          <a href="/decision-brief/retailer" style={{ color: '#38bdf8' }}>
+            {origin}/decision-brief/retailer
+          </a>
+        </p>
         {(store?.retailerConnections?.length || 0) > 0 ? (
-          <ul style={{ marginTop: 16, paddingLeft: 18 }}>
+          <ul style={{ marginTop: 12, paddingLeft: 18 }}>
             {store!.retailerConnections.map((c) => (
               <li key={c.id} style={{ marginBottom: 8, color: '#e2e8f0' }}>
                 <strong>{c.retailerName}</strong> ({c.contactEmail}) — {c.status}
@@ -284,6 +306,52 @@ function DecisionBriefClient() {
             No retailers connected yet.
           </p>
         )}
+      </section>
+
+      <section style={{ ...card, marginTop: 16 }}>
+        <h3 style={{ marginTop: 0, color: '#fbbf24' }}>
+          Solar / battery installer
+        </h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+          Quotes and system sizes from installers (not the power company).
+        </p>
+        <p style={{ fontSize: '0.85rem', color: '#94a3b8', wordBreak: 'break-all' }}>
+          Link:{' '}
+          <a href="/decision-brief/installer" style={{ color: '#38bdf8' }}>
+            {origin}/decision-brief/installer
+          </a>
+        </p>
+        {(store?.installerConnections?.length || 0) > 0 ? (
+          <ul style={{ marginTop: 12, paddingLeft: 18 }}>
+            {store!.installerConnections.map((c) => (
+              <li key={c.id} style={{ marginBottom: 8, color: '#e2e8f0' }}>
+                <strong>{c.installerName}</strong> ({c.contactEmail}) —{' '}
+                {c.status}
+                {c.lastPushAt
+                  ? ` · last quote ${c.lastPushAt.slice(0, 10)}`
+                  : ''}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+            No installers connected yet.
+          </p>
+        )}
+        {(store?.installerQuotes?.length || 0) > 0 ? (
+          <p style={{ color: '#cbd5e1', fontSize: '0.9rem', marginTop: 12 }}>
+            Latest quote:{' '}
+            {store!.installerQuotes[0].solarKw
+              ? `${store!.installerQuotes[0].solarKw} kW`
+              : '—'}
+            {store!.installerQuotes[0].batteryKwh
+              ? ` / ${store!.installerQuotes[0].batteryKwh} kWh battery`
+              : ''}
+            {store!.installerQuotes[0].quoteAud != null
+              ? ` · $${Number(store!.installerQuotes[0].quoteAud).toFixed(0)}`
+              : ''}
+          </p>
+        ) : null}
       </section>
 
       {(store?.schemeUpdates?.length || 0) > 0 ? (
