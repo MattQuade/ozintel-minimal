@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: Params) {
         invoiceNumber: invoice.number,
         invoiceId: invoice.id,
         href: `/invoices/${invoice.id}`,
-        label: `Sent ${invoice.number} to ${sent.to}`,
+        label: `Sent ${invoice.number} to ${sent.to} (copy BCC to admin mailbox)`,
       });
     } catch (error) {
       console.error("Invoice email error:", error);

@@ -56,6 +56,15 @@ type Invoice = {
   ledgerEntryIds: string[];
   journalRef: string;
   payments: InvoicePayment[];
+  emailSends?: Array<{
+    id: string;
+    to: string;
+    sentAt: string;
+    messageId: string;
+    openToken: string;
+    openedAt?: string;
+    openCount: number;
+  }>;
   authorisedAt?: string;
   voidedAt?: string;
 };
@@ -174,6 +183,7 @@ export default function InvoiceDetailPage() {
         throw new Error(data.error || 'Email failed');
       }
       setEmailStatus(data.label || `Sent to ${preview.to}`);
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Email failed');
     } finally {
@@ -593,11 +603,68 @@ export default function InvoiceDetailPage() {
           </div>
 
           {invoice.notes && (
-            <p className="mt-4 text-sm text-slate-600 border-t border-slate-100 pt-4">
+            <p className="mt-4 text-sm text-slate-600 border-t border-slate-100 pt-4 whitespace-pre-wrap">
               {invoice.notes}
             </p>
           )}
         </div>
+        )}
+
+        {(invoice.emailSends?.length || 0) > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+            <h2 className="font-semibold text-slate-900 mb-3">Email activity</h2>
+            <ul className="space-y-3 text-sm">
+              {[...(invoice.emailSends || [])]
+                .slice()
+                .reverse()
+                .map((send) => {
+                  const sentLabel = new Date(send.sentAt).toLocaleString(
+                    "en-AU",
+                    { timeZone: "Australia/Sydney" }
+                  );
+                  const openedLabel = send.openedAt
+                    ? new Date(send.openedAt).toLocaleString("en-AU", {
+                        timeZone: "Australia/Sydney",
+                      })
+                    : null;
+                  return (
+                    <li
+                      key={send.id}
+                      className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-2 last:border-0"
+                    >
+                      <div>
+                        <div className="text-slate-800">
+                          Sent to <span className="font-medium">{send.to}</span>
+                        </div>
+                        <div className="text-xs text-slate-500">{sentLabel}</div>
+                      </div>
+                      <div className="text-right">
+                        {openedLabel ? (
+                          <>
+                            <div className="font-medium text-green-700">
+                              Opened
+                              {send.openCount > 1
+                                ? ` (${send.openCount}×)`
+                                : ""}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {openedLabel}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-slate-500">Not opened yet</div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+            </ul>
+            <p className="text-xs text-slate-400 mt-3">
+              Open tracking needs the customer&apos;s email app to load images.
+              A BCC copy also goes to the admin mailbox (SMTP does not write
+              Sent by itself).
+            </p>
+          </div>
         )}
 
         {invoice.status !== 'void' && (
