@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
   ensureConnectCodePublished,
+  pruneFailedSchemeUpdates,
   readDecisionBriefStore,
   refreshEnergyFromAccounting,
   rotateConnectCode,
   writeDecisionBriefStore,
   buildEnergyBrief,
 } from "@/lib/decisionBrief/store";
+import {
+  SCHEME_CATALOGUE,
+  stackingAnswerForPubQuote,
+} from "@/lib/decisionBrief/schemes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +23,17 @@ export async function GET(req: Request) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
-      const store = await readDecisionBriefStore();
+      // Drop sticky unreachable scan rows so Analysis does not keep
+      // advertising "unreachable" every open after a blocked fetch.
+      await pruneFailedSchemeUpdates();
       await ensureConnectCodePublished();
-      return NextResponse.json({ success: true, store });
+      const store = await readDecisionBriefStore();
+      return NextResponse.json({
+        success: true,
+        store,
+        schemes: SCHEME_CATALOGUE,
+        stackingAnswer: stackingAnswerForPubQuote(),
+      });
     } catch (err) {
       console.error(err);
       return NextResponse.json(
