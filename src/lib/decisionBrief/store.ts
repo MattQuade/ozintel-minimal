@@ -28,11 +28,15 @@ export type EnergyProfile = {
 
 export type SchemeUpdate = {
   id: string;
+  /** Stable source key (e.g. energy-gov-cheaper-home-batteries). */
+  sourceId?: string;
   source: string;
   title: string;
   url: string;
   snippet: string;
   fetchedAt: string;
+  /** ok = page fetched; error = unreachable / HTTP failure (do not sticky-headline). */
+  status?: "ok" | "error";
 };
 
 export type RetailerConnection = {
@@ -239,11 +243,22 @@ export async function refreshEnergyFromAccounting(): Promise<EnergyProfile> {
   return profile;
 }
 
+function latestUsefulSchemeUpdate(
+  updates: SchemeUpdate[]
+): SchemeUpdate | undefined {
+  return updates.find(
+    (u) =>
+      u.status === "ok" ||
+      (!u.status &&
+        !/unreachable|fetch failed|unteachable/i.test(String(u.title || "")))
+  );
+}
+
 export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
   DecisionBriefStore["brief"]
 > {
   const energy = store.energy;
-  const latestUpdate = store.schemeUpdates[0];
+  const latestUpdate = latestUsefulSchemeUpdate(store.schemeUpdates);
   const asOf = new Date().toISOString().slice(0, 10);
   const avg = energy?.averageMonthlyAud ?? 0;
   const band = energy?.band || "unknown";
@@ -666,14 +681,68 @@ export async function pushInstallerQuote(input: {
   });
 }
 
+function schemeKey(u: SchemeUpdate): string {
+  return String(u.sourceId || u.url || u.source || u.id).toLowerCase();
+}
+
+/**
+ * Upsert scans by source. A successful fetch replaces a prior unreachable
+ * sticky entry for the same page — that was causing "unreachable" to show
+ * every time Analysis opened.
+ */
 export async function appendSchemeUpdates(
   updates: SchemeUpdate[]
 ): Promise<DecisionBriefStore> {
   const store = await readDecisionBriefStore();
-  const seen = new Set(store.schemeUpdates.map((u) => u.url || u.title));
-  const fresh = updates.filter((u) => !seen.has(u.url || u.title));
-  store.schemeUpdates = [...fresh, ...store.schemeUpdates].slice(0, 40);
+  const byKey = new Map<string, SchemeUpdate>();
+
+  for (const existing of store.schemeUpdates) {
+    byKey.set(schemeKey(existing), existing);
+  }
+
+  for (const incoming of updates) {
+    const key = schemeKey(incoming);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, incoming);
+      continue;
+    }
+    const prevFailed =
+      prev.status === "error" ||
+      /unreachable|fetch failed|unteachable/i.test(String(prev.title || ""));
+    const incomingOk = incoming.status === "ok";
+    // Prefer success over failure; otherwise take the newer fetch.
+    if (incomingOk || prevFailed || incoming.fetchedAt >= prev.fetchedAt) {
+      byKey.set(key, incoming);
+    }
+  }
+
+  const merged = [...byKey.values()].sort((a, b) => {
+    const aOk = a.status !== "error" ? 0 : 1;
+    const bOk = b.status !== "error" ? 0 : 1;
+    if (aOk !== bOk) return aOk - bOk;
+    return String(b.fetchedAt).localeCompare(String(a.fetchedAt));
+  });
+
+  store.schemeUpdates = merged.slice(0, 40);
   store.brief = buildEnergyBrief(store);
   await writeDecisionBriefStore(store);
+  return store;
+}
+
+/** Drop sticky unreachable rows so the brief stops advertising them. */
+export async function pruneFailedSchemeUpdates(): Promise<DecisionBriefStore> {
+  const store = await readDecisionBriefStore();
+  const before = store.schemeUpdates.length;
+  store.schemeUpdates = store.schemeUpdates.filter(
+    (u) =>
+      u.status === "ok" ||
+      (!u.status &&
+        !/unreachable|fetch failed|unteachable/i.test(String(u.title || "")))
+  );
+  if (store.schemeUpdates.length !== before) {
+    store.brief = buildEnergyBrief(store);
+    await writeDecisionBriefStore(store);
+  }
   return store;
 }

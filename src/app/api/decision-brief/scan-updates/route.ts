@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
   appendSchemeUpdates,
-  readDecisionBriefStore,
+  pruneFailedSchemeUpdates,
 } from "@/lib/decisionBrief/store";
 import { scanSchemeSources } from "@/lib/decisionBrief/scanUpdates";
 import {
@@ -50,11 +50,17 @@ export async function POST(req: Request) {
     const access = await requireAccountingAccess(req);
     if (!access.ok) return access.response;
     return access.run(async () => {
+      // Clear sticky unreachable rows before merging this scan.
+      await pruneFailedSchemeUpdates();
       const updates = await scanSchemeSources();
       const store = await appendSchemeUpdates(updates);
+      const ok = updates.filter((u) => u.status === "ok").length;
+      const failed = updates.length - ok;
       return NextResponse.json({
         success: true,
         scanned: updates.length,
+        ok,
+        failed,
         store,
       });
     });
@@ -66,13 +72,17 @@ export async function POST(req: Request) {
     let updatedOwners = 0;
     for (const owner of owners) {
       await runWithDataOwnerAsync(owner, async () => {
+        await pruneFailedSchemeUpdates();
         await appendSchemeUpdates(updates);
         updatedOwners += 1;
       });
     }
+    const ok = updates.filter((u) => u.status === "ok").length;
     return NextResponse.json({
       success: true,
       scanned: updates.length,
+      ok,
+      failed: updates.length - ok,
       updatedOwners,
     });
   } catch (err) {
