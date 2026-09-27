@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDate } from '@/lib/decisionBrief/formatDate';
 
 type SchemeEntry = {
   id: string;
@@ -385,7 +386,7 @@ function DecisionBriefClient() {
               <li key={c.id} style={{ marginBottom: 8, color: '#e2e8f0' }}>
                 <strong>{c.retailerName}</strong> ({c.contactEmail}) — {c.status}
                 {c.lastPushAt
-                  ? ` · last push ${c.lastPushAt.slice(0, 10)}`
+                  ? ` · last push ${formatAuDate(c.lastPushAt)}`
                   : ''}
               </li>
             ))}
@@ -417,7 +418,7 @@ function DecisionBriefClient() {
                 <strong>{c.installerName}</strong> ({c.contactEmail}) —{' '}
                 {c.status}
                 {c.lastPushAt
-                  ? ` · latest quote ${c.lastPushAt.slice(0, 10)}`
+                  ? ` · latest quote ${formatAuDate(c.lastPushAt)}`
                   : ''}
               </li>
             ))}
@@ -453,7 +454,7 @@ function DecisionBriefClient() {
                   {u.title}
                 </a>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                  {u.source} · {u.fetchedAt.slice(0, 10)}
+                  {u.source} · {formatAuDate(u.fetchedAt)}
                 </div>
               </li>
             ))}
