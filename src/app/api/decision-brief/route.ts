@@ -28,6 +28,9 @@ export async function GET(req: Request) {
       await pruneFailedSchemeUpdates();
       await ensureConnectCodePublished();
       const store = await readDecisionBriefStore();
+      // Rebuild so stored briefs pick up AU date formatting (dd/mm/yyyy).
+      store.brief = buildEnergyBrief(store);
+      await writeDecisionBriefStore(store);
       return NextResponse.json({
         success: true,
         store,

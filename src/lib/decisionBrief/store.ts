@@ -13,6 +13,7 @@ import {
 } from "@/lib/dataPaths";
 import { getDataOwnerEmail } from "@/lib/dataOwnerContext";
 import { readLedger, type LedgerEntry } from "@/lib/accounting/store";
+import { formatAuDate } from "@/lib/decisionBrief/formatDate";
 
 export type EnergyBand = "low" | "medium" | "high" | "unknown";
 
@@ -259,7 +260,7 @@ export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
 > {
   const energy = store.energy;
   const latestUpdate = latestUsefulSchemeUpdate(store.schemeUpdates);
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = formatAuDate(new Date().toISOString());
   const avg = energy?.averageMonthlyAud ?? 0;
   const band = energy?.band || "unknown";
 
@@ -348,7 +349,7 @@ export function buildEnergyBrief(store: DecisionBriefStore): NonNullable<
     ],
     figures,
     whatChanged: latestUpdate
-      ? `${latestUpdate.title} (${latestUpdate.source}, ${latestUpdate.fetchedAt.slice(0, 10)})`
+      ? `${latestUpdate.title} (${latestUpdate.source}, ${formatAuDate(latestUpdate.fetchedAt)})`
       : "No scheme updates scanned yet — the update agent will fill this.",
     nextAction: next,
     asOf,
