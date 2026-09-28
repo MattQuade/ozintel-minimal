@@ -90,8 +90,8 @@ function subjectValue(raw: string): string {
 
 /** Label column sized to longest label; values sit tight to the left. */
 const META_COLS = 'max-content 1fr';
-/** Qty | description | unit incl. GST | line total — totals share this last column */
-const LINE_COLS = '2.5rem minmax(0,1fr) 8.5rem 5.75rem';
+/** Qty | description | unit amount | (incl. GST) | line total — totals share this last column */
+const LINE_COLS = '2.5rem minmax(0,1fr) 5.75rem max-content 5.75rem';
 
 type Props = {
   invoice: InvoiceTaxData;
@@ -181,7 +181,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         </div>
       </section>
 
-      {/* Line items + totals share one 4-column grid so amounts sit on the far right */}
+      {/* Line items + totals share one grid so far-right amounts stay aligned */}
       <div
         className="mb-8 font-bold grid gap-x-5 gap-y-0.5 items-baseline"
         style={{ gridTemplateColumns: LINE_COLS }}
@@ -195,7 +195,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           if (isFreightLine(line)) {
             return (
               <div key={line.id} className="contents">
-                <div className="col-span-3 py-0.5">
+                <div className="col-span-4 py-0.5">
                   Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)} (incl. GST)
                 </div>
                 <div className="text-right tabular-nums py-0.5">
@@ -208,7 +208,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           if (!desc) {
             return (
               <div key={line.id} className="contents">
-                <div className="col-span-3 py-0.5" />
+                <div className="col-span-4 py-0.5" />
                 <div className="text-right tabular-nums py-0.5">
                   {fmtAmount(t.incl)}
                 </div>
@@ -220,9 +220,11 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
             <div key={line.id} className="contents">
               <div className="tabular-nums py-0.5">{qty}</div>
               <div className="min-w-0 pr-2 py-0.5">{desc}</div>
-              <div className="tabular-nums whitespace-nowrap py-0.5">
+              <div className="text-right tabular-nums whitespace-nowrap py-0.5">
                 {fmtAmount(unitIncl)}
-                <span className="font-normal"> (incl. GST)</span>
+              </div>
+              <div className="font-normal whitespace-nowrap py-0.5">
+                (incl. GST)
               </div>
               <div className="text-right tabular-nums py-0.5">
                 {fmtAmount(t.incl)}
@@ -231,7 +233,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           );
         })}
 
-        <div className="col-span-3 mt-6">Subtotal:</div>
+        <div className="col-span-4 mt-6">Subtotal:</div>
         <div className="text-right tabular-nums mt-6">
           {fmtAmount(printTotals.subtotalIncl)}
         </div>
@@ -240,7 +242,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           const t = computeLineTotals(line);
           return (
             <div key={line.id} className="contents">
-              <div className="col-span-3 mt-2">{lessLabel(line.description)}</div>
+              <div className="col-span-4 mt-2">{lessLabel(line.description)}</div>
               <div className="text-right tabular-nums mt-2">
                 {fmtAmount(t.incl)}
               </div>
@@ -248,7 +250,7 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
           );
         })}
 
-        <div className="col-span-3 mt-4">Total (incl. GST):</div>
+        <div className="col-span-4 mt-4">Total (incl. GST):</div>
         <div className="text-right tabular-nums mt-4">
           {fmtAmount(printTotals.totalIncl)}
         </div>

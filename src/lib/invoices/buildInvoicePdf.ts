@@ -51,6 +51,8 @@ export async function buildInvoicePdf(invoice: Invoice): Promise<Buffer> {
   const pageH = A4[1];
   const contentW = pageW - MARGIN * 2;
   const right = pageW - MARGIN;
+  const unitAmountRight =
+    right - 175 + regular.widthOfTextAtSize("000.00", 11);
 
   let page: PDFPage = doc.addPage(A4);
   let y = pageH - MARGIN;
@@ -197,11 +199,19 @@ export async function buildInvoicePdf(invoice: Invoice): Promise<Buffer> {
         font: regular,
         color: BLACK,
       });
-      const unit = `${fmtMoney(unitIncl)} (incl. GST)`;
+      const unitAmount = fmtMoney(unitIncl);
+      const unitAmountW = regular.widthOfTextAtSize(unitAmount, 11);
       y = rowTop;
       drawText(desc, MARGIN + 40, 11, regular, contentW - 220);
-      page.drawText(unit, {
-        x: right - 175,
+      page.drawText(unitAmount, {
+        x: unitAmountRight - unitAmountW,
+        y: rowTop - 11,
+        size: 11,
+        font: regular,
+        color: BLACK,
+      });
+      page.drawText(" (incl. GST)", {
+        x: unitAmountRight,
         y: rowTop - 11,
         size: 11,
         font: regular,

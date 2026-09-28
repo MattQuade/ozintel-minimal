@@ -65,7 +65,7 @@ export function buildInvoiceEmail(
         );
       } else {
         productRows.push(
-          `<tr><td>${qty}</td><td>${esc(desc)}</td><td>${fmtMoney(unitIncl)} (incl. GST)</td><td style="text-align:right">${fmtMoney(t.incl)}</td></tr>`
+          `<tr><td>${qty}</td><td>${esc(desc)}</td><td style="white-space:nowrap"><span style="display:inline-block;min-width:5.75em;text-align:right;font-variant-numeric:tabular-nums">${fmtMoney(unitIncl)}</span> (incl. GST)</td><td style="text-align:right">${fmtMoney(t.incl)}</td></tr>`
         );
         productText.push(
           `${qty}  ${desc}  ${fmtMoney(unitIncl)} (incl. GST)  ${fmtMoney(t.incl)}`
