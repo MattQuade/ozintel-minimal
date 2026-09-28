@@ -669,11 +669,6 @@ export default function InvoiceDetailPage() {
 
         {invoice.status !== 'void' && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-          {invoice.status === 'draft' && invoice.notes ? (
-            <p className="mb-4 text-sm text-slate-600 border-b border-slate-100 pb-4">
-              {invoice.notes}
-            </p>
-          ) : null}
           <div className="space-y-4">
               <div>
                 <label className="block text-sm text-slate-600 mb-1">

@@ -26,9 +26,12 @@ export const INVOICE_BRAND = {
   defaultSubject: envText("NEXT_PUBLIC_OZINTEL_INVOICE_SUBJECT", "Draught"),
 };
 
-/** Print/display number — drop legacy INV-; the row already says Invoice No. */
+/** Print/display number — drop legacy INV- and a padded leading 0 (0246 → 246). */
 export function displayInvoiceNumber(number: string): string {
-  return String(number || "").trim().replace(/^INV-/i, "");
+  return String(number || "")
+    .trim()
+    .replace(/^INV-/i, "")
+    .replace(/^0+(\d)/, "$1");
 }
 
 /**

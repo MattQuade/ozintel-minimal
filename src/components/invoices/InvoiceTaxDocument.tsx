@@ -31,6 +31,7 @@ export type InvoiceTaxData = {
   lines: InvoiceTaxLine[];
   total: number;
   matchKeyword?: string;
+  notes?: string;
   pricesIncludeGst?: boolean;
 };
 
@@ -89,9 +90,8 @@ function subjectValue(raw: string): string {
 
 /** Label column sized to longest label; values sit tight to the left. */
 const META_COLS = 'max-content 1fr';
-/** Qty | description | unit incl. GST | line total */
+/** Qty | description | unit incl. GST | line total — totals share this last column */
 const LINE_COLS = '2.5rem minmax(0,1fr) 8.5rem 5.75rem';
-const TOTAL_COLS = '1fr 5.75rem';
 
 type Props = {
   invoice: InvoiceTaxData;
@@ -181,8 +181,11 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         </div>
       </section>
 
-      {/* Line items — four clear columns, not clustered */}
-      <div className="mb-1 font-bold">
+      {/* Line items + totals share one 4-column grid so amounts sit on the far right */}
+      <div
+        className="mb-8 font-bold grid gap-x-5 gap-y-0.5 items-baseline"
+        style={{ gridTemplateColumns: LINE_COLS }}
+      >
         {rows.product.map((line) => {
           const t = computeLineTotals(line);
           const unitIncl = unitPriceInclGst(line);
@@ -191,80 +194,62 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
 
           if (isFreightLine(line)) {
             return (
-              <div
-                key={line.id}
-                className="grid gap-x-4 py-0.5 items-baseline"
-                style={{ gridTemplateColumns: TOTAL_COLS }}
-              >
-                <div>
+              <div key={line.id} className="contents">
+                <div className="col-span-3 py-0.5">
                   Freight: {Math.abs(qty)} x ${fmtAmount(unitIncl)} (incl. GST)
                 </div>
-                <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
+                <div className="text-right tabular-nums py-0.5">
+                  {fmtAmount(t.incl)}
+                </div>
               </div>
             );
           }
 
           if (!desc) {
             return (
-              <div
-                key={line.id}
-                className="grid gap-x-4 py-0.5 items-baseline"
-                style={{ gridTemplateColumns: TOTAL_COLS }}
-              >
-                <div />
-                <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
+              <div key={line.id} className="contents">
+                <div className="col-span-3 py-0.5" />
+                <div className="text-right tabular-nums py-0.5">
+                  {fmtAmount(t.incl)}
+                </div>
               </div>
             );
           }
 
           return (
-            <div
-              key={line.id}
-              className="grid gap-x-5 py-0.5 items-baseline"
-              style={{ gridTemplateColumns: LINE_COLS }}
-            >
-              <div className="tabular-nums">{qty}</div>
-              <div className="min-w-0 pr-2">{desc}</div>
-              <div className="tabular-nums whitespace-nowrap">
+            <div key={line.id} className="contents">
+              <div className="tabular-nums py-0.5">{qty}</div>
+              <div className="min-w-0 pr-2 py-0.5">{desc}</div>
+              <div className="tabular-nums whitespace-nowrap py-0.5">
                 {fmtAmount(unitIncl)}
                 <span className="font-normal"> (incl. GST)</span>
               </div>
-              <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
+              <div className="text-right tabular-nums py-0.5">
+                {fmtAmount(t.incl)}
+              </div>
             </div>
           );
         })}
-      </div>
 
-      <div
-        className="mt-6 grid gap-x-4 font-bold items-baseline"
-        style={{ gridTemplateColumns: TOTAL_COLS }}
-      >
-        <div>Subtotal:</div>
-        <div className="text-right tabular-nums">
+        <div className="col-span-3 mt-6">Subtotal:</div>
+        <div className="text-right tabular-nums mt-6">
           {fmtAmount(printTotals.subtotalIncl)}
         </div>
-      </div>
 
-      {rows.discount.map((line) => {
-        const t = computeLineTotals(line);
-        return (
-          <div
-            key={line.id}
-            className="mt-2 grid gap-x-4 font-bold items-baseline"
-            style={{ gridTemplateColumns: TOTAL_COLS }}
-          >
-            <div>{lessLabel(line.description)}</div>
-            <div className="text-right tabular-nums">{fmtAmount(t.incl)}</div>
-          </div>
-        );
-      })}
+        {rows.discount.map((line) => {
+          const t = computeLineTotals(line);
+          return (
+            <div key={line.id} className="contents">
+              <div className="col-span-3 mt-2">{lessLabel(line.description)}</div>
+              <div className="text-right tabular-nums mt-2">
+                {fmtAmount(t.incl)}
+              </div>
+            </div>
+          );
+        })}
 
-      <div
-        className="mt-4 mb-8 grid gap-x-4 font-bold items-baseline"
-        style={{ gridTemplateColumns: TOTAL_COLS }}
-      >
-        <div>Total (incl. GST):</div>
-        <div className="text-right tabular-nums">
+        <div className="col-span-3 mt-4">Total (incl. GST):</div>
+        <div className="text-right tabular-nums mt-4">
           {fmtAmount(printTotals.totalIncl)}
         </div>
       </div>
@@ -283,7 +268,12 @@ export default function InvoiceTaxDocument({ invoice, className = '' }: Props) {
         <div>{BANK_ACCOUNT}</div>
       </section>
 
-      <footer className="text-[11px] font-normal text-black space-y-0.5 print:mt-2">
+      <footer className="text-[15px] font-normal leading-[1.4] text-black space-y-0.5 print:mt-2">
+        {String(invoice.notes || '').trim() ? (
+          <div className="whitespace-pre-line">
+            Notes: {String(invoice.notes).trim()}
+          </div>
+        ) : null}
         {invoice.matchKeyword ? (
           <div>Payment Reference: {invoice.matchKeyword}</div>
         ) : null}
