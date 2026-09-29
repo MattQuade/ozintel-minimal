@@ -71,6 +71,8 @@ const ACCOUNTING_SOURCES = new Set([
   "invoice-payment",
   "payroll",
   "journal",
+  "depreciation",
+  "asset-disposal",
 ]);
 
 const NT_CODES = new Set([

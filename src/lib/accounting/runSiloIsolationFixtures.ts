@@ -9,6 +9,7 @@ import path from "path";
 import { runWithDataOwnerAsync } from "../dataOwnerContext";
 import {
   getAccountingDataDir,
+  getAssetsFilePath,
   getBankAccountsFilePath,
   getLedgerFilePath,
 } from "../dataPaths";
@@ -20,6 +21,7 @@ import {
   readRules,
   writeLedger,
 } from "./store";
+import { readAssets } from "./assets";
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -68,6 +70,11 @@ async function main() {
   const bBankPath = await runWithDataOwnerAsync(ownerB, async () =>
     getBankAccountsFilePath()
   );
+  const aAssets = await runWithDataOwnerAsync(ownerA, () => readAssets());
+  const bAssets = await runWithDataOwnerAsync(ownerB, () => readAssets());
+  const bAssetsPath = await runWithDataOwnerAsync(ownerB, async () =>
+    getAssetsFilePath()
+  );
 
   checks.push(eq("A still has own ledger row", aLedger.length, 1));
   checks.push(
@@ -99,6 +106,15 @@ async function main() {
       "B ledger has none of A's ids",
       bLedger.some((row) => row.id === "LE-MATT-ONLY"),
       false
+    )
+  );
+  checks.push(eq("A assets start empty", aAssets.length, 0));
+  checks.push(eq("B assets start empty (not hotel register)", bAssets.length, 0));
+  checks.push(
+    eq(
+      "B assets path is owner silo",
+      bAssetsPath.toLowerCase().includes("new-user@example.com"),
+      true
     )
   );
 

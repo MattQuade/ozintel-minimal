@@ -217,6 +217,22 @@ const RULES: NavRule[] = [
     test: (t) => withOpen("bas").test(t) || withOpen("b a s").test(t),
   },
   {
+    href: "/assets",
+    label: "Fixed assets",
+    test: (t) =>
+      withOpen("assets?").test(t) ||
+      withOpen("fixed assets?").test(t) ||
+      withOpen("depreciation").test(t) ||
+      withOpen("asset register").test(t),
+  },
+  {
+    href: "/reports/assets",
+    label: "Asset reports",
+    test: (t) =>
+      withOpen("asset reports?").test(t) ||
+      withOpen("depreciation schedule").test(t),
+  },
+  {
     href: "/operations/pub",
     label: "Pub Operations",
     test: (t) =>

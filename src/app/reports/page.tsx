@@ -98,6 +98,16 @@ export default function ReportsPage() {
               runs. Lock the quarter before you copy figures into ATO Online.
             </p>
           </Link>
+          <Link
+            href="/reports/assets"
+            className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
+          >
+            <h2 className="text-2xl font-semibold mb-2">Fixed assets</h2>
+            <p className="text-gray-500">
+              Register at a date and EOFY depreciation schedule for this
+              account. Book figures to reconcile with your accountant.
+            </p>
+          </Link>
         </div>
         </>
       )}

@@ -166,6 +166,11 @@ export function getPayRunsFilePath(): string {
   return path.join(getAccountingDataDir(), "payruns.json");
 }
 
+/** Per-owner fixed-asset register + depreciation run history (never a shared seed). */
+export function getAssetsFilePath(): string {
+  return path.join(getAccountingDataDir(), "assets.json");
+}
+
 export function getAccountingSettingsFilePath(): string {
   return path.join(getAccountingDataDir(), "settings.json");
 }

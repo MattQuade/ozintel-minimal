@@ -8,6 +8,7 @@ import {
   getInvoicesFilePath,
   getLedgerFilePath,
   getPayRunsFilePath,
+  getAssetsFilePath,
   getReceiptFilesDir,
   getReceiptsDir,
   getReceiptsMetaFilePath,
@@ -125,8 +126,8 @@ async function seedCoaIfMissing() {
 
 /**
  * First-run files for one owner's accounting silo.
- * Live books (ledger, banks, rules, receipts, customers, invoices, payroll)
- * start empty. COA is a shared product template, not another user's data.
+ * Live books (ledger, banks, rules, receipts, customers, invoices, payroll,
+ * assets) start empty. COA is a shared product template, not another user's data.
  */
 export async function ensureOwnerAccountingSilo(ownerEmail: string): Promise<void> {
   await runWithDataOwnerAsync(ownerEmail, async () => {
@@ -143,6 +144,10 @@ export async function ensureOwnerAccountingSilo(ownerEmail: string): Promise<voi
     await ensureJsonIfMissing(getInvoicesFilePath(), "[]");
     await ensureJsonIfMissing(getEmployeesFilePath(), "[]");
     await ensureJsonIfMissing(getPayRunsFilePath(), "[]");
+    await ensureJsonIfMissing(
+      getAssetsFilePath(),
+      JSON.stringify({ assets: [], runs: [] }, null, 2)
+    );
     await ensureJsonIfMissing(
       getReceiptsMetaFilePath(),
       JSON.stringify({ receipts: [] }, null, 2)
