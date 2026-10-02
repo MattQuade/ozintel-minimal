@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import { readReceiptImage } from "@/lib/accounting/ocrReceipt";
+import { publicReceiptDocket } from "@/lib/accounting/receiptDocket";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const ocrMs = 22_000;
-      const { suggestion, text } = await Promise.race([
+      const { suggestion, text, docket, engine } = await Promise.race([
         readReceiptImage(buffer),
         new Promise<never>((_, reject) => {
           setTimeout(
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
           success: true,
           suggestion: null,
           amountCandidates: [],
+          docket: publicReceiptDocket(docket),
+          engine,
           message: "Could not read merchant and total — pick from the list",
           textPreview: text.slice(0, 200),
         });
@@ -90,6 +93,8 @@ export async function POST(req: NextRequest) {
           lockAmount: Boolean(suggestion.lockAmount),
         },
         amountCandidates: suggestion.amountCandidates || [],
+        docket: publicReceiptDocket(docket),
+        engine,
       });
     } catch (err) {
       console.error(err);

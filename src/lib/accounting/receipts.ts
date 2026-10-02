@@ -6,8 +6,18 @@ import {
   getReceiptsDir,
   getReceiptsMetaFilePath,
 } from "@/lib/dataPaths";
-import { readLedger, updateLedgerEntry, type LedgerEntry } from "@/lib/accounting/store";
+import {
+  readLedger,
+  updateLedgerEntry,
+  type LedgerEntry,
+} from "@/lib/accounting/store";
 import { parseReceiptCaption } from "@/lib/accounting/receiptCaption";
+import {
+  docketHasDetail,
+  normalizeReceiptDocket,
+  publicReceiptDocket,
+  type ReceiptDocket,
+} from "@/lib/accounting/receiptDocket";
 
 export type ReceiptMeta = {
   id: string;
@@ -23,6 +33,11 @@ export type ReceiptMeta = {
   captionAmount?: number;
   /** Client id so a retried POST does not create a second receipt. */
   clientUploadId?: string;
+  /**
+   * Hubdoc-style Textract breakdown kept with the photo in OzIntel books
+   * (vendor, date, GST, line items, payment — not a Xero push).
+   */
+  docket?: ReceiptDocket;
 };
 
 type ReceiptStore = {
@@ -133,6 +148,7 @@ export async function createReceipt(args: {
   ledgerEntryIds?: string[];
   caption?: string;
   clientUploadId?: string;
+  docket?: unknown;
 }): Promise<ReceiptMeta> {
   const clientUploadId = String(args.clientUploadId || "").trim();
   if (clientUploadId) {
@@ -171,6 +187,7 @@ async function createReceiptOnce(args: {
   ledgerEntryIds?: string[];
   caption?: string;
   clientUploadId?: string;
+  docket?: unknown;
 }): Promise<ReceiptMeta> {
   const originalFilename = String(args.originalFilename || "receipt").trim() || "receipt";
   const mimeType = normalizeMime(args.mimeType, originalFilename);
@@ -189,6 +206,25 @@ async function createReceiptOnce(args: {
   const caption = String(args.caption || "").trim();
   if (caption && !parsedCaption) {
     throw new Error('Caption must look like "ww 79.13" (merchant + amount).');
+  }
+
+  let docket = normalizeReceiptDocket(args.docket);
+  // If capture didn't send a breakdown, read the image once with Textract.
+  if (
+    !docketHasDetail(docket) &&
+    mimeType.startsWith("image/")
+  ) {
+    try {
+      const { textractConfigured, recognizeReceiptTextract } = await import(
+        "@/lib/accounting/ocrTextract"
+      );
+      if (textractConfigured()) {
+        const read = await recognizeReceiptTextract(args.buffer);
+        if (docketHasDetail(read.docket)) docket = read.docket;
+      }
+    } catch (err) {
+      console.warn("[receipts] docket extract on upload failed", err);
+    }
   }
 
   const store = await loadStore();
@@ -218,6 +254,7 @@ async function createReceiptOnce(args: {
           captionAmount: parsedCaption.amount,
         }
       : {}),
+    ...(docketHasDetail(docket) ? { docket: docket! } : {}),
   };
 
   store.receipts.unshift(meta);
@@ -225,10 +262,61 @@ async function createReceiptOnce(args: {
 
   for (const entryId of ledgerEntryIds) {
     await addReceiptIdToLedgerEntry(id, entryId);
+    await enrichLedgerEntryFromDocket(entryId, meta.docket);
   }
 
   return meta;
 }
+
+/**
+ * When a docket is linked onto a bank line, stamp Hubdoc-like GST / supplier
+ * detail onto the ledger entry without changing the bank amount.
+ */
+export async function enrichLedgerEntryFromDocket(
+  ledgerEntryId: string,
+  docket: ReceiptDocket | null | undefined
+): Promise<void> {
+  if (!docketHasDetail(docket) || !docket) return;
+  const entryId = String(ledgerEntryId || "").trim();
+  if (!entryId) return;
+
+  const ledger = await readLedger();
+  const entry = ledger.find((e) => e.id === entryId);
+  if (!entry) return;
+
+  const patch: Partial<LedgerEntry> & { id: string } = { id: entryId };
+  let changed = false;
+
+  if (
+    docket.tax != null &&
+    docket.tax > 0 &&
+    (entry.gstAmount == null || !Number.isFinite(Number(entry.gstAmount)))
+  ) {
+    patch.gstAmount = docket.tax;
+    patch.hasGST = true;
+    patch.noGST = false;
+    if (!entry.taxCode || entry.taxCode === "N-T") patch.taxCode = "GST";
+    patch.amountIncludesGst = true;
+    changed = true;
+  }
+
+  const desc = String(entry.description || "").trim();
+  if (
+    docket.vendor &&
+    (!desc ||
+      /^(purchase|payment|withdrawal|eftpos|pos\b)/i.test(desc) ||
+      desc.length < 4)
+  ) {
+    patch.description = docket.invoiceReceiptId
+      ? `${docket.vendor} #${docket.invoiceReceiptId}`
+      : docket.vendor;
+    changed = true;
+  }
+
+  if (changed) await updateLedgerEntry(patch);
+}
+
+export { publicReceiptDocket, docketHasDetail };
 
 /** Update receipt metadata so it knows about a ledger entry (does not touch ledger.json). */
 export async function registerLedgerEntryOnReceipts(
@@ -379,6 +467,7 @@ export async function attachReceiptToEntry(
   await addReceiptIdToLedgerEntry(receiptId, ledgerEntryId);
   const meta = await getReceiptMeta(receiptId);
   if (!meta) throw new Error("Receipt not found");
+  await enrichLedgerEntryFromDocket(ledgerEntryId, meta.docket);
   return meta;
 }
 

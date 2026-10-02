@@ -16,6 +16,10 @@ import {
   textractConfigured,
 } from "@/lib/accounting/ocrTextract";
 import type { ReceiptOcrSuggestion } from "@/lib/accounting/parseReceiptOcr";
+import {
+  emptyReceiptDocket,
+  type ReceiptDocket,
+} from "@/lib/accounting/receiptDocket";
 
 const OCR_STARTUP_MS = 12_000;
 const OCR_READ_MS = 8_000;
@@ -157,7 +161,13 @@ async function recognizeReceiptTextractSafe(image: Buffer) {
     return await recognizeReceiptTextract(image);
   } catch (err) {
     console.warn("[ocr] textract failed", err);
-    return { vendor: "", total: null, tax: null, text: "" };
+    return {
+      vendor: "",
+      total: null,
+      tax: null,
+      text: "",
+      docket: emptyReceiptDocket("none"),
+    };
   }
 }
 
@@ -165,12 +175,13 @@ export async function readReceiptImage(image: Buffer): Promise<{
   suggestion: ReceiptOcrSuggestion | null;
   text: string;
   engine: "tesseract" | "textract";
+  docket: ReceiptDocket;
 }> {
   const merchants = await readMerchants();
 
   if (textractConfigured()) {
     const textract = await recognizeReceiptTextractSafe(image);
-    if (textract.total || textract.vendor) {
+    if (textract.total || textract.vendor || textract.docket.lineItems.length) {
       const chosen = chooseReceiptOcr({
         tesseractText: "",
         textract,
@@ -180,11 +191,13 @@ export async function readReceiptImage(image: Buffer): Promise<{
         engine: chosen.engine,
         textractAmount: chosen.textractAmount,
         vendor: textract.vendor || null,
+        lineItems: textract.docket.lineItems.length,
       });
       return {
         suggestion: chosen.suggestion,
         text: chosen.text,
         engine: chosen.engine,
+        docket: textract.docket,
       };
     }
   }
@@ -199,9 +212,18 @@ export async function readReceiptImage(image: Buffer): Promise<{
     engine: chosen.engine,
     tessAmount: chosen.tessAmount,
   });
+  const docket = emptyReceiptDocket(
+    chosen.suggestion ? "tesseract" : "none"
+  );
+  if (chosen.suggestion) {
+    docket.vendor = chosen.suggestion.merchantLabel || "";
+    docket.total = chosen.suggestion.amount;
+    docket.amountPaid = chosen.suggestion.amount;
+  }
   return {
     suggestion: chosen.suggestion,
     text: chosen.text,
     engine: chosen.engine,
+    docket,
   };
 }
