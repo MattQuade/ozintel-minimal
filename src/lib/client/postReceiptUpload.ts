@@ -9,6 +9,7 @@ type ReceiptPayload = {
   id?: string;
   caption?: string;
   url?: string;
+  docket?: unknown;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -41,6 +42,8 @@ export async function postReceiptUpload(args: {
   caption?: string;
   ledgerEntryId?: string;
   clientUploadId?: string;
+  /** Hubdoc-style Textract breakdown from the read step. */
+  docket?: unknown;
 }): Promise<{ id: string; receipt: ReceiptPayload }> {
   const clientUploadId = args.clientUploadId || newUploadId();
   let lastError = "Save failed";
@@ -51,6 +54,13 @@ export async function postReceiptUpload(args: {
     form.append(CLIENT_UPLOAD_ID_FIELD, clientUploadId);
     if (args.caption) form.append("caption", args.caption);
     if (args.ledgerEntryId) form.append("ledgerEntryId", args.ledgerEntryId);
+    if (args.docket) {
+      try {
+        form.append("docket", JSON.stringify(args.docket));
+      } catch {
+        // Ignore non-serialisable docket; server may re-read the image.
+      }
+    }
 
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);

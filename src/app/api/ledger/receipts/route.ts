@@ -4,6 +4,7 @@ import {
   listAllReceipts,
   listInboxReceipts,
   listReceiptsByLedgerEntry,
+  publicReceiptDocket,
   receiptPublicUrl,
   type ReceiptMeta,
 } from "@/lib/accounting/receipts";
@@ -27,6 +28,7 @@ function publicReceipt(r: ReceiptMeta) {
     ledgerEntryIds: linked,
     linked: linked.length > 0,
     url: receiptPublicUrl(r.id),
+    docket: publicReceiptDocket(r.docket),
   };
 }
 
@@ -91,6 +93,18 @@ export async function POST(req: NextRequest) {
       const ledgerEntryId = String(form.get("ledgerEntryId") || "").trim();
       const caption = String(form.get("caption") || "").trim();
       const clientUploadId = String(form.get("clientUploadId") || "").trim();
+      const docketRaw = String(form.get("docket") || "").trim();
+      let docket: unknown;
+      if (docketRaw) {
+        try {
+          docket = JSON.parse(docketRaw);
+        } catch {
+          return NextResponse.json(
+            { success: false, error: "Invalid docket JSON" },
+            { status: 400 }
+          );
+        }
+      }
 
       if (!(file instanceof File)) {
         return NextResponse.json(
@@ -107,6 +121,7 @@ export async function POST(req: NextRequest) {
         ledgerEntryIds: ledgerEntryId ? [ledgerEntryId] : [],
         caption,
         ...(clientUploadId ? { clientUploadId } : {}),
+        ...(docket ? { docket } : {}),
       });
 
       return NextResponse.json({

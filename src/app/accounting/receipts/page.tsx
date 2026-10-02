@@ -10,6 +10,24 @@ import {
 } from '@/lib/client/cropImage';
 import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
 
+type ReceiptDocketView = {
+  vendor?: string;
+  date?: string;
+  invoiceReceiptId?: string;
+  abn?: string;
+  subtotal?: number | null;
+  tax?: number | null;
+  total?: number | null;
+  amountPaid?: number | null;
+  paymentMethod?: string;
+  lineItems?: Array<{
+    description: string;
+    quantity?: number | null;
+    unitPrice?: number | null;
+    amount?: number | null;
+  }>;
+};
+
 type ReceiptRow = {
   id: string;
   caption?: string;
@@ -21,6 +39,7 @@ type ReceiptRow = {
   linked: boolean;
   ledgerEntryIds: string[];
   url: string;
+  docket?: ReceiptDocketView | null;
 };
 
 function formatWhen(iso: string) {
@@ -310,6 +329,90 @@ function ReceiptsLedger() {
                       </span>
                     )}
                   </p>
+                  {r.docket ? (
+                    <details className="mt-2 text-sm text-slate-700">
+                      <summary className="cursor-pointer font-medium text-slate-800">
+                        Docket breakdown
+                        {r.docket.lineItems?.length
+                          ? ` · ${r.docket.lineItems.length} lines`
+                          : ''}
+                      </summary>
+                      <div className="mt-2 space-y-1 pl-1">
+                        {r.docket.vendor ? (
+                          <p>
+                            <span className="text-slate-500">Supplier:</span>{' '}
+                            {r.docket.vendor}
+                          </p>
+                        ) : null}
+                        {r.docket.date ? (
+                          <p>
+                            <span className="text-slate-500">Date:</span>{' '}
+                            {r.docket.date}
+                          </p>
+                        ) : null}
+                        {r.docket.invoiceReceiptId ? (
+                          <p>
+                            <span className="text-slate-500">Receipt #:</span>{' '}
+                            {r.docket.invoiceReceiptId}
+                          </p>
+                        ) : null}
+                        {r.docket.abn ? (
+                          <p>
+                            <span className="text-slate-500">ABN:</span>{' '}
+                            {r.docket.abn}
+                          </p>
+                        ) : null}
+                        {r.docket.subtotal != null ? (
+                          <p>
+                            <span className="text-slate-500">Subtotal:</span>{' '}
+                            {formatAmount(r.docket.subtotal)}
+                          </p>
+                        ) : null}
+                        {r.docket.tax != null ? (
+                          <p>
+                            <span className="text-slate-500">GST:</span>{' '}
+                            {formatAmount(r.docket.tax)}
+                          </p>
+                        ) : null}
+                        {(r.docket.amountPaid ?? r.docket.total) != null ? (
+                          <p>
+                            <span className="text-slate-500">Total:</span>{' '}
+                            {formatAmount(
+                              r.docket.amountPaid ?? r.docket.total ?? undefined
+                            )}
+                          </p>
+                        ) : null}
+                        {r.docket.paymentMethod ? (
+                          <p>
+                            <span className="text-slate-500">Paid:</span>{' '}
+                            {r.docket.paymentMethod}
+                          </p>
+                        ) : null}
+                        {(r.docket.lineItems || []).length > 0 ? (
+                          <ul className="mt-2 border-t border-slate-200 pt-2 space-y-1">
+                            {r.docket.lineItems!.map((line, i) => (
+                              <li
+                                key={`${line.description}-${i}`}
+                                className="flex justify-between gap-3"
+                              >
+                                <span className="min-w-0">
+                                  {line.description}
+                                  {line.quantity != null
+                                    ? ` × ${line.quantity}`
+                                    : ''}
+                                </span>
+                                <span className="shrink-0 tabular-nums">
+                                  {line.amount != null
+                                    ? formatAmount(line.amount)
+                                    : '—'}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               </li>
             );

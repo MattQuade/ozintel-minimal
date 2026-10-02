@@ -354,6 +354,27 @@ TOTAL $87.40
       total: 89.8,
       tax: null,
       text: "VENDOR_NAME ALDI\nTOTAL 89.80",
+      docket: {
+        vendor: "ALDI",
+        vendorAddress: "",
+        date: "",
+        dueDate: "",
+        invoiceReceiptId: "",
+        abn: "",
+        currency: "AUD",
+        subtotal: null,
+        tax: null,
+        total: 89.8,
+        amountPaid: 89.8,
+        tip: null,
+        discount: null,
+        paymentMethod: "",
+        cardLastFour: "",
+        lineItems: [],
+        summaryFields: [],
+        engine: "textract",
+        extractedAt: "2026-10-02T00:00:00.000Z",
+      },
     },
   });
   checks.push(eq("textract engine when it has a total", textractWins.engine, "textract"));
@@ -363,10 +384,123 @@ TOTAL $87.40
 
   const tessFallback = chooseReceiptOcr({
     tesseractText: WW_SAMPLE,
-    textract: { vendor: "", total: null, tax: null, text: "" },
+    textract: {
+      vendor: "",
+      total: null,
+      tax: null,
+      text: "",
+      docket: {
+        vendor: "",
+        vendorAddress: "",
+        date: "",
+        dueDate: "",
+        invoiceReceiptId: "",
+        abn: "",
+        currency: "",
+        subtotal: null,
+        tax: null,
+        total: null,
+        amountPaid: null,
+        tip: null,
+        discount: null,
+        paymentMethod: "",
+        cardLastFour: "",
+        lineItems: [],
+        summaryFields: [],
+        engine: "none",
+        extractedAt: "2026-10-02T00:00:00.000Z",
+      },
+    },
   });
   checks.push(eq("tesseract fallback engine", tessFallback.engine, "tesseract"));
   checks.push(eq("tesseract fallback amount", tessFallback.suggestion?.amount, 231.17));
+
+  const withLines = parseTextractExpense({
+    ExpenseDocuments: [
+      {
+        SummaryFields: [
+          {
+            Type: { Text: "VENDOR_NAME" },
+            ValueDetection: { Text: "Woolworths" },
+          },
+          {
+            Type: { Text: "INVOICE_RECEIPT_DATE" },
+            ValueDetection: { Text: "02/10/2026" },
+          },
+          {
+            Type: { Text: "INVOICE_RECEIPT_ID" },
+            ValueDetection: { Text: "R-9912" },
+          },
+          {
+            Type: { Text: "TAX" },
+            ValueDetection: { Text: "$0.80" },
+          },
+          {
+            Type: { Text: "SUBTOTAL" },
+            ValueDetection: { Text: "$8.00" },
+          },
+          {
+            Type: { Text: "TOTAL" },
+            ValueDetection: { Text: "$8.80" },
+          },
+          {
+            Type: { Text: "AMOUNT_PAID" },
+            ValueDetection: { Text: "$8.80" },
+          },
+          {
+            Type: { Text: "PAYMENT_TYPE" },
+            ValueDetection: { Text: "EFTPOS" },
+          },
+        ],
+        LineItemGroups: [
+          {
+            LineItems: [
+              {
+                LineItemExpenseFields: [
+                  {
+                    Type: { Text: "ITEM" },
+                    ValueDetection: { Text: "Full cream milk 2L" },
+                  },
+                  {
+                    Type: { Text: "QUANTITY" },
+                    ValueDetection: { Text: "1" },
+                  },
+                  {
+                    Type: { Text: "PRICE" },
+                    ValueDetection: { Text: "$4.50" },
+                  },
+                ],
+              },
+              {
+                LineItemExpenseFields: [
+                  {
+                    Type: { Text: "ITEM" },
+                    ValueDetection: { Text: "Wholemeal bread" },
+                  },
+                  {
+                    Type: { Text: "PRICE" },
+                    ValueDetection: { Text: "$3.50" },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  checks.push(eq("docket vendor", withLines.docket.vendor, "Woolworths"));
+  checks.push(eq("docket date", withLines.docket.date, "02/10/2026"));
+  checks.push(eq("docket receipt id", withLines.docket.invoiceReceiptId, "R-9912"));
+  checks.push(eq("docket tax", withLines.docket.tax, 0.8));
+  checks.push(eq("docket subtotal", withLines.docket.subtotal, 8));
+  checks.push(eq("docket total", withLines.docket.total, 8.8));
+  checks.push(eq("docket payment", withLines.docket.paymentMethod, "EFTPOS"));
+  checks.push(eq("docket line count", withLines.docket.lineItems.length, 2));
+  checks.push(
+    eq("docket line 1", withLines.docket.lineItems[0]?.description, "Full cream milk 2L")
+  );
+  checks.push(eq("docket line 1 amount", withLines.docket.lineItems[0]?.amount, 4.5));
 
   return checks;
 }

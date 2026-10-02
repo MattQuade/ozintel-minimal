@@ -121,6 +121,7 @@ export default function HomeReceiptCapture() {
   const savePrepRef = useRef<{ source: File; promise: Promise<File> } | null>(
     null
   );
+  const docketRef = useRef<unknown>(null);
   const [inputKey, setInputKey] = useState(0);
   const [phase, setPhase] = useState<'idle' | 'live' | 'confirm'>('idle');
   const [file, setFile] = useState<File | null>(null);
@@ -239,6 +240,7 @@ export default function HomeReceiptCapture() {
     merchantTouchedRef.current = false;
     amountTouchedRef.current = false;
     savePrepRef.current = null;
+    docketRef.current = null;
     clearPendingReceipt();
     setInputKey((k) => k + 1);
   };
@@ -299,6 +301,7 @@ export default function HomeReceiptCapture() {
     if (!file) return;
     merchantTouchedRef.current = false;
     amountTouchedRef.current = false;
+    docketRef.current = null;
     setAlias('');
     setOtherAlias('');
     setAmount(null);
@@ -326,6 +329,8 @@ export default function HomeReceiptCapture() {
         });
         const data = await res.json().catch(() => ({}));
         if (ac.signal.aborted) return;
+
+        if (data.docket) docketRef.current = data.docket;
 
         if (res.status === 401 || res.status === 403) {
           setHint(
@@ -479,6 +484,7 @@ export default function HomeReceiptCapture() {
       await postReceiptUpload({
         file: prepared,
         caption: parsed.display,
+        docket: docketRef.current || undefined,
       });
       const saved = parsed.display;
       setSavedCount((n) => n + 1);
