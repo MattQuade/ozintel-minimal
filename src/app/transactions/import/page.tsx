@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
 import ReceiptAttach from '@/components/ReceiptAttach';
-import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
+import { formatAuDate, formatAuDateRange, toIsoDateInput } from '@/lib/accounting/dates';
+import { isoDateInRange } from '@/lib/accounting/journalPeriods';
 import { normalizeBankImportRows } from '@/lib/accounting/bankImport';
 import {
   matchDepositsToInvoices,
@@ -52,7 +54,13 @@ function money(n: number) {
   }).format(n || 0);
 }
 
-export default function BankImport() {
+function BankImport() {
+  const searchParams = useSearchParams();
+  const quarterParam = String(searchParams.get('quarter') || '').trim();
+  const fromParam = String(searchParams.get('from') || '').trim();
+  const toParam = String(searchParams.get('to') || '').trim();
+  const windowFrom = /^\d{4}-\d{2}-\d{2}$/.test(fromParam) ? fromParam : '';
+  const windowTo = /^\d{4}-\d{2}-\d{2}$/.test(toParam) ? toParam : '';
   const [bankAccounts, setBankAccounts] = useState<BankAccountOption[]>([]);
   const [coa, setCoa] = useState<CoaOption[]>([]);
   const [openInvoices, setOpenInvoices] = useState<OpenInvoiceOption[]>([]);
@@ -65,7 +73,7 @@ export default function BankImport() {
   const [savedCount, setSavedCount] = useState(0);
   const [ledgerSaved, setLedgerSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [quarter, setQuarter] = useState('Q4 FY25/26');
+  const quarter = quarterParam || 'Q4 FY25/26';
   const [allocatingIndex, setAllocatingIndex] = useState<number | null>(null);
 
   const loadOpenInvoices = () =>
@@ -168,12 +176,27 @@ export default function BankImport() {
       complete: (result) => {
         const raw = result.data as unknown[][];
         const data = normalizeBankImportRows(raw);
-        setPreview(data);
+        const inWindow =
+          windowFrom && windowTo
+            ? data.filter((row) =>
+                isoDateInRange(toIsoDateInput(row[0]), windowFrom, windowTo)
+              )
+            : data;
+        const outside = data.length - inWindow.length;
+        setPreview(inWindow);
         const skipped = raw.length - data.length;
+        const parts = [
+          `✅ Parsed ${inWindow.length} transactions`,
+          skipped > 0 ? `${skipped} header/blank rows skipped` : '',
+          outside > 0
+            ? `${outside} outside ${formatAuDateRange(windowFrom, windowTo)} left out`
+            : '',
+          quarter ? `tagged ${quarter}` : '',
+        ].filter(Boolean);
         setStatus(
-          skipped > 0
-            ? `✅ Parsed ${data.length} transactions (${skipped} header/blank rows skipped)`
-            : `✅ Parsed ${data.length} transactions`
+          inWindow.length === 0 && outside > 0
+            ? `No rows dated ${formatAuDateRange(windowFrom, windowTo)}. ${outside} row(s) were outside this quarter.`
+            : parts.join(' · ')
         );
       },
       error: (err) => setStatus('❌ Parse error: ' + err.message),
@@ -572,6 +595,12 @@ export default function BankImport() {
           Upload → Classify (auto-saves matched rows + invoice keyword matches) →
           Attach receipts / allocate deposits to invoices → save updates
         </p>
+        {windowFrom && windowTo && (
+          <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-950">
+            CSV window {formatAuDateRange(windowFrom, windowTo)}. Rows saved
+            from this upload are tagged <span className="font-semibold">{quarter}</span>.
+          </div>
+        )}
 
         <div className="bg-white rounded-3xl shadow-xl p-10">
           <div className="mb-8">
@@ -834,5 +863,13 @@ export default function BankImport() {
         </div>
       </div>
     </AccountingGate>
+  );
+}
+
+export default function BankImportPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-gray-500">Loading import…</div>}>
+      <BankImport />
+    </Suspense>
   );
 }

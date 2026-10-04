@@ -4,14 +4,26 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
-import { formatAuDate, parseFlexibleDate, toIsoDateInput } from '@/lib/accounting/dates';
+import { formatAuDate, formatAuDateRange, parseFlexibleDate, toIsoDateInput } from '@/lib/accounting/dates';
+import { FY2627_Q1, fy2627Q1ImportHref } from '@/lib/accounting/journalPeriods';
 
-const periods = [
+const periods: Array<{
+  label: string;
+  value: string;
+  from?: string;
+  to?: string;
+}> = [
   { label: 'Full Year FY25/26', value: 'full' },
-  { label: 'Q1 Jul-Sep 2025', value: 'q1' },
-  { label: 'Q2 Oct-Dec 2025', value: 'q2' },
-  { label: 'Q3 Jan-Mar 2026', value: 'q3' },
-  { label: 'Q4 Apr-Jun 2026', value: 'q4' },
+  { label: 'Q1 Jul-Sep 2025', value: 'q1', from: '2025-07-01', to: '2025-09-30' },
+  { label: 'Q2 Oct-Dec 2025', value: 'q2', from: '2025-10-01', to: '2025-12-31' },
+  { label: 'Q3 Jan-Mar 2026', value: 'q3', from: '2026-01-01', to: '2026-03-31' },
+  { label: 'Q4 Apr-Jun 2026', value: 'q4', from: '2026-04-01', to: '2026-06-30' },
+  {
+    label: FY2627_Q1.label,
+    value: FY2627_Q1.id,
+    from: FY2627_Q1.from,
+    to: FY2627_Q1.to,
+  },
 ];
 
 type CoaOption = { code: string; name: string; type: string };
@@ -63,16 +75,11 @@ export default function JournalPage() {
         .includes(searchTerm.toLowerCase());
       if (reconFilter === 'open' && tx.reconciled) return false;
       if (reconFilter === 'done' && !tx.reconciled) return false;
-      if (activePeriod === 'full') return matchesSearch;
-
-      const d = parseFlexibleDate(tx.date);
-      if (!d) return matchesSearch;
-      const m = d.getMonth() + 1;
-      if (activePeriod === 'q1') return m >= 7 && m <= 9 && matchesSearch;
-      if (activePeriod === 'q2') return m >= 10 && m <= 12 && matchesSearch;
-      if (activePeriod === 'q3') return m >= 1 && m <= 3 && matchesSearch;
-      if (activePeriod === 'q4') return m >= 4 && m <= 6 && matchesSearch;
-      return matchesSearch;
+      const period = periods.find((p) => p.value === activePeriod);
+      if (!period?.from || !period.to) return matchesSearch;
+      const iso = toIsoDateInput(tx.date);
+      if (!iso) return false;
+      return iso >= period.from && iso <= period.to && matchesSearch;
     })
     .sort((a, b) => {
       const da = parseFlexibleDate(a.date)?.getTime() || 0;
@@ -273,7 +280,7 @@ export default function JournalPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 mb-8 overflow-x-auto pb-3">
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-3">
           {periods.map((p) => (
             <button
               key={p.value}
@@ -288,6 +295,21 @@ export default function JournalPage() {
             </button>
           ))}
         </div>
+
+        {activePeriod === FY2627_Q1.id && (
+          <div className="mb-8">
+            <Link
+              href={fy2627Q1ImportHref()}
+              className="inline-flex bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700 text-sm font-medium"
+            >
+              Upload CSV for FY 2026/2027 Q1
+            </Link>
+            <p className="text-sm text-gray-500 mt-2">
+              {formatAuDateRange(FY2627_Q1.from, FY2627_Q1.to)}. Saved rows are
+              tagged {FY2627_Q1.csvTag}.
+            </p>
+          </div>
+        )}
 
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
           <div className="p-6 border-b bg-gray-50">

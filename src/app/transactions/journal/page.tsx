@@ -1,6 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
+import { formatAuDateRange } from '@/lib/accounting/dates';
+import { FY2627_Q1, fy2627Q1ImportHref } from '@/lib/accounting/journalPeriods';
 
 export default function GeneralJournal() {
   return (
@@ -33,17 +36,27 @@ export default function GeneralJournal() {
               'Q2 Oct-Dec 2025',
               'Q3 Jan-Mar 2026',
               'Q4 Apr-Jun 2026',
-            ].map((period, i) => (
+            ].map((period) => (
               <button
-                key={i}
-                className={`px-6 py-3 rounded-2xl text-sm font-medium transition-all ${
-                  i === 4 ? 'bg-blue-600 text-white' : 'bg-white border hover:bg-gray-50'
-                }`}
+                key={period}
+                type="button"
+                className="px-6 py-3 rounded-2xl text-sm font-medium transition-all bg-white border hover:bg-gray-50"
               >
                 {period}
               </button>
             ))}
+            <Link
+              href={fy2627Q1ImportHref()}
+              className="px-6 py-3 rounded-2xl text-sm font-medium transition-all bg-blue-600 text-white hover:bg-blue-700"
+            >
+              {FY2627_Q1.label}
+            </Link>
           </div>
+          <p className="text-sm text-gray-500 mt-3">
+            {FY2627_Q1.label} opens the CSV upload for{' '}
+            {formatAuDateRange(FY2627_Q1.from, FY2627_Q1.to)}. Saved rows are
+            tagged {FY2627_Q1.csvTag}.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
