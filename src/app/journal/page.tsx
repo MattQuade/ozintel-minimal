@@ -62,6 +62,7 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [clearingQuarter, setClearingQuarter] = useState(false);
   const [notice, setNotice] = useState('');
 
   const loadTransactions = async () => {
@@ -223,6 +224,51 @@ export default function JournalPage() {
     }
   };
 
+  const selectedPeriod = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
+  const entriesInPeriod = transactions.filter((tx) => {
+    if (!selectedPeriod) return false;
+    const iso = toIsoDateInput(tx.date);
+    return Boolean(iso) && iso >= selectedPeriod.from && iso <= selectedPeriod.to;
+  });
+
+  const handleClearQuarter = async () => {
+    if (!selectedPeriod || entriesInPeriod.length === 0) {
+      alert('There are no ledger entries in this period.');
+      return;
+    }
+    const range = formatAuDateRange(selectedPeriod.from, selectedPeriod.to);
+    if (
+      !confirm(
+        `Delete all ${entriesInPeriod.length} ledger entries from ${range} (${selectedPeriod.label})? The quarter will be empty so you can reload the CSVs. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setClearingQuarter(true);
+    try {
+      const ids = entriesInPeriod.map((tx) => tx.id);
+      const res = await fetch('/api/ledger/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete this period');
+      }
+      const deletedIds = new Set(ids);
+      setTransactions((prev) => prev.filter((tx) => !deletedIds.has(tx.id)));
+      setEditingTx(null);
+      setNotice(
+        `Deleted ${data.deletedCount ?? ids.length} entries for ${selectedPeriod.label}. Reload the CSVs when you are ready.`
+      );
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete this period');
+    } finally {
+      setClearingQuarter(false);
+    }
+  };
+
   const openCount = transactions.filter((t) => !t.reconciled).length;
   const doneCount = transactions.length - openCount;
 
@@ -334,21 +380,36 @@ export default function JournalPage() {
               </button>
             ))}
           </div>
-          {activePeriod === FY2627_Q1.id && (
-            <div className="mt-4">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleClearQuarter}
+              disabled={
+                clearingQuarter || loading || !selectedPeriod || entriesInPeriod.length === 0
+              }
+              className="border border-red-300 text-red-700 px-5 py-2.5 rounded-full text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {clearingQuarter
+                ? 'Deleting…'
+                : `Delete all ${selectedPeriod?.label || 'period'} entries (${entriesInPeriod.length})`}
+            </button>
+            {activePeriod === FY2627_Q1.id && (
               <Link
                 href={fy2627Q1ImportHref()}
                 className="inline-flex bg-blue-600 text-white px-5 py-2.5 rounded-full hover:bg-blue-700 text-sm font-medium"
               >
                 Upload CSV for FY 2026/2027 Q1
               </Link>
-              <p className="text-sm text-gray-500 mt-2">
-                {formatAuDateRange(FY2627_Q1.from, FY2627_Q1.to)}. Saved rows are
-                tagged {FY2627_Q1.csvTag}. GST on 0500 Other Income stays on that
-                one line for these totals.
-              </p>
-            </div>
-          )}
+            )}
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            {selectedPeriod
+              ? `${formatAuDateRange(selectedPeriod.from, selectedPeriod.to)}. Delete removes every ledger line in this period.`
+              : null}{' '}
+            {activePeriod === FY2627_Q1.id
+              ? `Saved CSV rows are tagged ${FY2627_Q1.csvTag}.`
+              : null}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
