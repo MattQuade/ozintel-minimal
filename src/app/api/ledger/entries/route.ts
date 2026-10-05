@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { readLedger } from "@/lib/accounting/store";
+import { readLedger, writeLedger } from "@/lib/accounting/store";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
+import { repairJournalEntries } from "@/lib/accounting/journalRepair";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,9 @@ export async function GET(req: Request) {
   return access.run(async () => {
     try {
       const entries = await readLedger();
-      return NextResponse.json(entries);
+      const repaired = repairJournalEntries(entries);
+      if (repaired.changed) await writeLedger(repaired.entries);
+      return NextResponse.json(repaired.changed ? repaired.entries : entries);
     } catch (err) {
       console.error("Entries API Error:", err);
       return NextResponse.json([]);

@@ -510,7 +510,12 @@ export async function readRules(): Promise<BankRule[]> {
     : Array.isArray(parsed.rules)
       ? parsed.rules
       : [];
-  return existing;
+  const { withJournalRuleFixes } = await import(
+    "@/lib/accounting/journalRuleFixes"
+  );
+  const fixed = withJournalRuleFixes(existing);
+  if (fixed.changed) await writeRules(fixed.rules);
+  return fixed.rules;
 }
 
 export async function writeRules(rules: BankRule[]) {

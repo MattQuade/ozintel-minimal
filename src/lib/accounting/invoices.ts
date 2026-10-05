@@ -6,7 +6,6 @@ import {
 import { getDataOwnerEmail } from "@/lib/dataOwnerContext";
 import {
   appendLedgerEntries,
-  deleteLedgerEntry,
   readBankAccounts,
   readCoa,
   replaceLedgerEntries,
@@ -1014,6 +1013,13 @@ export async function recordInvoicePayment(
     reconciled?: boolean;
     /** Idempotency key — skip if a payment already has this note fingerprint */
     bankImportKey?: string;
+    /**
+     * Bank CSV rows stay as one journal line. Matching an invoice only
+     * marks it paid — it does not post a second Dr bank / Cr AR pair.
+     */
+    postJournal?: boolean;
+    /** Existing bank-import ledger id, kept on the payment record. */
+    bankLedgerEntryId?: string;
   }
 ): Promise<Invoice> {
   return withInvoicesLock(async () => {
@@ -1063,7 +1069,9 @@ export async function recordInvoicePayment(
     const reconciled = Boolean(input.reconciled);
     const note = String(input.note || "").trim();
 
-    const entries: Partial<LedgerEntry>[] = [
+    const postJournal = input.postJournal !== false;
+    const entries: Partial<LedgerEntry>[] = postJournal
+      ? [
       {
         id: stampId("pay-bank", 0),
         date: payDate,
@@ -1104,16 +1112,22 @@ export async function recordInvoicePayment(
         journalRef,
         timestamp: ts,
       },
-    ];
+    ]
+      : [];
 
-    const result = await appendLedgerEntries(entries);
+    const result = postJournal ? await appendLedgerEntries(entries) : null;
+    const linkedIds = result
+      ? result.savedEntries.map((e) => e.id)
+      : input.bankLedgerEntryId
+        ? [String(input.bankLedgerEntryId)]
+        : [];
     const payment: InvoicePayment = {
       id: `PAY-${Date.now()}`,
       date: payDate,
       amount,
       bankAccountId: bank.id,
       bankAccountName: bank.name,
-      ledgerEntryIds: result.savedEntries.map((e) => e.id),
+      ledgerEntryIds: linkedIds,
       note,
       createdAt: ts,
     };
@@ -1200,10 +1214,6 @@ export async function allocateBankDepositToInvoice(input: {
     desc.slice(0, 80),
   ].join("|");
 
-  if (input.replaceLedgerEntryId) {
-    await deleteLedgerEntry(String(input.replaceLedgerEntryId));
-  }
-
   const noteParts = [
     input.autoMatched
       ? "Auto-allocated from bank deposit"
@@ -1219,6 +1229,8 @@ export async function allocateBankDepositToInvoice(input: {
     note: noteParts.join(" · "),
     reconciled: true,
     bankImportKey,
+    postJournal: false,
+    bankLedgerEntryId: input.replaceLedgerEntryId,
   });
 }
 
@@ -1229,9 +1241,8 @@ const INVOICE_LEDGER_SOURCES = new Set([
 ]);
 
 /**
- * If a bank deposit uniquely matches an open invoice, post the payment
- * journal (Dr bank / Cr AR) and mark the invoice paid. Replaces the
- * original ledger row so the deposit is not counted twice.
+ * If a bank deposit uniquely matches an open invoice, mark the invoice
+ * paid and leave the bank row as the single journal line.
  */
 export async function tryAllocateLedgerDepositToInvoice(entry: {
   id?: string;
@@ -1270,7 +1281,6 @@ export async function tryAllocateLedgerDepositToInvoice(entry: {
       date: String(entry.date || ""),
       bankAccountId,
       description: String(entry.description || ""),
-      replaceLedgerEntryId: id,
       autoMatched: true,
     });
   } catch (error) {

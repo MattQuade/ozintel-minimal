@@ -150,11 +150,7 @@ function BankImport() {
         invoiceStatus: match.status,
         invoiceAutoMatched: true,
         invoiceAllocated: false,
-        type: 'Revenue',
-        accountCode: '2101',
-        accountName: 'Accounts Receivable (invoice allocate)',
-        noGST: true,
-        rule: 'Invoice auto-match',
+        rule: row.rule || 'Invoice auto-match',
       };
     });
   };
@@ -286,12 +282,6 @@ function BankImport() {
           invoiceId: result.invoice.id,
           invoiceNumber: result.invoice.number,
           invoiceStatus: result.invoice.status,
-          // Payment posts its own ledger lines — clear import ledger id if replaced
-          ledgerEntryId: undefined,
-          type: 'Revenue',
-          accountCode: '2101',
-          accountName: 'Accounts Receivable (invoice allocate)',
-          noGST: true,
         };
       } else {
         allocateErrors += 1;
@@ -304,9 +294,7 @@ function BankImport() {
       .map((item, index) => ({ item, index }))
       .filter(
         ({ item }) =>
-          item.type !== 'Uncategorized' &&
-          !item.invoiceId &&
-          !item.invoiceAllocated
+          item.type !== 'Uncategorized' && !item.ledgerEntryId
       );
 
     const toSave = saveable.map(({ item }) => {

@@ -5,26 +5,24 @@ import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import ReceiptAttach, { ReceiptBadge } from '@/components/ReceiptAttach';
 import { formatAuDate, formatAuDateRange, parseFlexibleDate, toIsoDateInput } from '@/lib/accounting/dates';
-import { FY2627_Q1, fy2627Q1ImportHref } from '@/lib/accounting/journalPeriods';
+import {
+  FY2627_Q1,
+  JOURNAL_PERIODS,
+  fy2627Q1ImportHref,
+} from '@/lib/accounting/journalPeriods';
 
-const periods: Array<{
-  label: string;
-  value: string;
-  from?: string;
-  to?: string;
-}> = [
-  { label: 'Full Year FY25/26', value: 'full' },
-  { label: 'Q1 Jul-Sep 2025', value: 'q1', from: '2025-07-01', to: '2025-09-30' },
-  { label: 'Q2 Oct-Dec 2025', value: 'q2', from: '2025-10-01', to: '2025-12-31' },
-  { label: 'Q3 Jan-Mar 2026', value: 'q3', from: '2026-01-01', to: '2026-03-31' },
-  { label: 'Q4 Apr-Jun 2026', value: 'q4', from: '2026-04-01', to: '2026-06-30' },
-  {
-    label: FY2627_Q1.label,
-    value: FY2627_Q1.id,
-    from: FY2627_Q1.from,
-    to: FY2627_Q1.to,
-  },
-];
+const INVOICE_JOURNAL_SOURCES = new Set([
+  'invoice',
+  'invoice-payment',
+  'invoice-void',
+]);
+
+function money(n: number) {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+  }).format(n || 0);
+}
 
 type CoaOption = { code: string; name: string; type: string };
 
@@ -39,10 +37,24 @@ type Transaction = {
   accountName?: string;
   reconciled?: boolean;
   receiptIds?: string[];
+  source?: string;
+};
+
+type AtoTotals = {
+  gstCollected: number;
+  gstPaid: number;
+  netGst: number;
+  payg: number;
 };
 
 export default function JournalPage() {
-  const [activePeriod, setActivePeriod] = useState('full');
+  const [activePeriod, setActivePeriod] = useState(FY2627_Q1.id);
+  const [ato, setAto] = useState<AtoTotals>({
+    gstCollected: 0,
+    gstPaid: 0,
+    netGst: 0,
+    payg: 0,
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [reconFilter, setReconFilter] = useState<'all' | 'open' | 'done'>('all');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -68,15 +80,37 @@ export default function JournalPage() {
     loadTransactions();
   }, []);
 
+  useEffect(() => {
+    const period = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
+    if (!period) return;
+    let cancel = false;
+    fetch(`/api/reports/bas?from=${period.from}&to=${period.to}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancel || !data) return;
+        setAto({
+          gstCollected: Number(data.gstCollected) || 0,
+          gstPaid: Number(data.gstPaid) || 0,
+          netGst: Number(data.netGst) || 0,
+          payg: Number(data.paygWithheld) || 0,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  }, [activePeriod, transactions]);
+
   const filtered = transactions
     .filter((tx) => {
       const matchesSearch = (tx.description || '')
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
+      if (INVOICE_JOURNAL_SOURCES.has(String(tx.source || ''))) return false;
       if (reconFilter === 'open' && tx.reconciled) return false;
       if (reconFilter === 'done' && !tx.reconciled) return false;
-      const period = periods.find((p) => p.value === activePeriod);
-      if (!period?.from || !period.to) return matchesSearch;
+      const period = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
+      if (!period) return matchesSearch;
       const iso = toIsoDateInput(tx.date);
       if (!iso) return false;
       return iso >= period.from && iso <= period.to && matchesSearch;
@@ -280,36 +314,77 @@ export default function JournalPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-3">
-          {periods.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setActivePeriod(p.value)}
-              className={`px-6 py-3 rounded-2xl text-sm font-medium whitespace-nowrap transition-all ${
-                activePeriod === p.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border hover:border-gray-400'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="mb-8">
+          <p className="text-sm font-medium text-gray-500 mb-3">
+            PERIOD (AUS FINANCIAL YEAR)
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {JOURNAL_PERIODS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setActivePeriod(p.id)}
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
+                  activePeriod === p.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {activePeriod === FY2627_Q1.id && (
+            <div className="mt-4">
+              <Link
+                href={fy2627Q1ImportHref()}
+                className="inline-flex bg-blue-600 text-white px-5 py-2.5 rounded-full hover:bg-blue-700 text-sm font-medium"
+              >
+                Upload CSV for FY 2026/2027 Q1
+              </Link>
+              <p className="text-sm text-gray-500 mt-2">
+                {formatAuDateRange(FY2627_Q1.from, FY2627_Q1.to)}. Saved rows are
+                tagged {FY2627_Q1.csvTag}. GST on 0500 Other Income stays on that
+                one line for these totals.
+              </p>
+            </div>
+          )}
         </div>
 
-        {activePeriod === FY2627_Q1.id && (
-          <div className="mb-8">
-            <Link
-              href={fy2627Q1ImportHref()}
-              className="inline-flex bg-blue-600 text-white px-6 py-3 rounded-2xl hover:bg-blue-700 text-sm font-medium"
-            >
-              Upload CSV for FY 2026/2027 Q1
-            </Link>
-            <p className="text-sm text-gray-500 mt-2">
-              {formatAuDateRange(FY2627_Q1.from, FY2627_Q1.to)}. Saved rows are
-              tagged {FY2627_Q1.csvTag}.
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white rounded-3xl p-8 shadow border border-gray-100">
+            <p className="text-sm text-gray-500">GST Collected</p>
+            <p className="text-4xl font-bold text-red-600 mt-3">
+              {money(ato.gstCollected)}
             </p>
           </div>
-        )}
+          <div className="bg-white rounded-3xl p-8 shadow border border-gray-100">
+            <p className="text-sm text-gray-500">GST Paid (claimable)</p>
+            <p className="text-4xl font-bold text-green-600 mt-3">
+              {money(ato.gstPaid)}
+            </p>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow border border-gray-100">
+            <p className="text-sm text-gray-500">Net GST Owing</p>
+            <p className="text-4xl font-bold text-amber-600 mt-3">
+              {money(ato.netGst)}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white rounded-3xl p-8 shadow border border-gray-100">
+            <p className="text-sm text-gray-500">PAYG Withholding Owing</p>
+            <p className="text-4xl font-bold text-purple-600 mt-3">
+              {money(ato.payg)}
+            </p>
+          </div>
+          <div className="bg-red-50 rounded-3xl p-8 shadow border border-red-100">
+            <p className="text-sm text-red-600">Total ATO Obligations</p>
+            <p className="text-4xl font-bold text-red-600 mt-3">
+              {money(ato.netGst + ato.payg)}
+            </p>
+          </div>
+        </div>
 
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
           <div className="p-6 border-b bg-gray-50">

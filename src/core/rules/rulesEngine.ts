@@ -102,6 +102,18 @@ function extractSearchText(tx: unknown): string {
   return "";
 }
 
+/**
+ * "contains" must not match inside a longer word.
+ * MOBIL was hitting MOBILE, ATO was hitting CATON, BAS was hitting BASE44.
+ */
+export function containsAsPhrase(haystack: string, needle: string): boolean {
+  const text = haystack.toLowerCase();
+  const want = needle.toLowerCase().trim();
+  if (!text || !want) return false;
+  const escaped = want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, "i").test(text);
+}
+
 function matchTextValues(
   haystack: string,
   values: string[],
@@ -114,7 +126,7 @@ function matchTextValues(
   if (mode === "startsWith") {
     return values.some((v) => haystack.startsWith(v));
   }
-  return values.some((v) => haystack.includes(v));
+  return values.some((v) => containsAsPhrase(haystack, v));
 }
 
 function ruleMatches(rule: BankRule, text: string, amount: number): boolean {

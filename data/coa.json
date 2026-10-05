@@ -78,6 +78,7 @@
   {"code":"2101","name":"Accounts Receivable","type":"Asset","noGST":true},
   {"code":"2200","name":"Stock on Hand - Hotel","type":"Asset","noGST":true},
   {"code":"2475","name":"Suspense","type":"Asset","noGST":true},
+  {"code":"2480","name":"Bank Transfer","type":"Asset","noGST":true},
   {"code":"2831","name":"Furniture & Fittings","type":"Asset","isCapital":true,"noGST":false},
   {"code":"2834","name":"Less Accumulated Depreciation - Furniture & Fittings","type":"Asset","noGST":false},
   {"code":"2840","name":"Property Improvements","type":"Asset","isCapital":true,"noGST":false},
