@@ -48,7 +48,7 @@ type AtoTotals = {
 };
 
 export default function JournalPage() {
-  const [activePeriod, setActivePeriod] = useState(FY2627_Q1.id);
+  const [activePeriod, setActivePeriod] = useState<string>(FY2627_Q1.id);
   const [ato, setAto] = useState<AtoTotals>({
     gstCollected: 0,
     gstPaid: 0,
