@@ -92,6 +92,102 @@ function run(): Check[] {
   );
   checks.push(eq("skip already attached receipt", alreadyLinked.length, 0));
 
+  checks.push(
+    eq(
+      "deanos alias matches apostrophe on the statement",
+      captionMerchantMatches("deanos", {
+        description: "DEANO'S MOBILE MECHANIC WAGGA WAGGA",
+      }),
+      true
+    )
+  );
+  checks.push(
+    eq(
+      "full shop alias matches DEANO'S MOBILE MECHANIC",
+      captionMerchantMatches("deanomobilemechanic", {
+        description: "VISA DEBIT PURCHASE DEANO'S MOBILE MECHANIC WAGGA",
+      }),
+      true
+    )
+  );
+
+  const deanos = pickUniqueCaptionMatches(
+    [
+      {
+        id: "r-deanos",
+        caption: "deanomobilemechanic 285.00",
+        vendor: "Deanos Mobile Mechanic",
+        receiptDate: "27/8/26",
+      },
+    ],
+    [
+      {
+        id: "e-other",
+        description: "SOME OTHER SUPPLIER",
+        amount: -285,
+        date: "2026-08-28",
+      },
+      {
+        id: "e-deanos",
+        description: "DEANO'S MOBILE MECHANIC WAGGA WAGGA",
+        amount: -285,
+        date: "2026-08-28",
+      },
+    ]
+  );
+  checks.push(eq("deanos $285 next-day bank line", deanos[0]?.entryId, "e-deanos"));
+
+  const deanosDated = pickUniqueCaptionMatches(
+    [
+      {
+        id: "r-deanos-date",
+        caption: "deanos 285.00",
+        vendor: "Deanos Mobile Mechanic",
+        receiptDate: "2026-08-27",
+      },
+    ],
+    [
+      {
+        id: "june",
+        description: "DEANOS MOBILE MECHANIC",
+        amount: -285,
+        date: "2026-06-01",
+      },
+      {
+        id: "aug",
+        description: "DEANOS MOBILE MECHANIC",
+        amount: -285,
+        date: "2026-08-28",
+      },
+    ]
+  );
+  checks.push(eq("receipt 27 Aug attaches to bank 28 Aug", deanosDated[0]?.entryId, "aug"));
+
+  const bothClose = pickUniqueCaptionMatches(
+    [
+      {
+        id: "r-both",
+        caption: "deanos 285.00",
+        receiptDate: "2026-08-27",
+      },
+    ],
+    [
+      {
+        id: "same-day",
+        description: "DEANOS MOBILE MECHANIC",
+        amount: -285,
+        date: "2026-08-27",
+      },
+      {
+        id: "next-day",
+        description: "DEANOS MOBILE MECHANIC",
+        amount: -285,
+        date: "2026-08-28",
+      },
+    ]
+  );
+  checks.push(eq("two Deanos lines a day apart stay unmatched", bothClose.length, 0));
+
   return checks;
 }
 

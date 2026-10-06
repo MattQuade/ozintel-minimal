@@ -484,7 +484,10 @@ export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
     const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
     if (linked.length > 0) return false;
     if (r.captionAlias && Number(r.captionAmount) > 0) return true;
-    return Boolean(parseReceiptCaption(String(r.caption || "")));
+    if (parseReceiptCaption(String(r.caption || ""))) return true;
+    const vendor = String(r.docket?.vendor || "").trim();
+    const docketAmount = Number(r.docket?.amountPaid ?? r.docket?.total);
+    return Boolean(vendor) && Number.isFinite(docketAmount) && docketAmount > 0;
   });
 }
 

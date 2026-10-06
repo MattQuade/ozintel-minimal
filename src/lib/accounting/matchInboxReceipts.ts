@@ -24,7 +24,24 @@ export async function attachInboxReceiptsToBankImportEntries(
 
   const merchants = await readMerchants();
   const matches = pickUniqueCaptionMatches(
-    inbox,
+    inbox.map((r) => {
+      const docketAmount = Number(r.docket?.amountPaid ?? r.docket?.total);
+      const captionAmount =
+        Number(r.captionAmount) > 0
+          ? Number(r.captionAmount)
+          : Number.isFinite(docketAmount) && docketAmount > 0
+            ? docketAmount
+            : undefined;
+      return {
+        id: r.id,
+        caption: r.caption,
+        captionAlias: r.captionAlias,
+        captionAmount,
+        vendor: r.docket?.vendor,
+        receiptDate: r.docket?.date,
+        ledgerEntryIds: r.ledgerEntryIds,
+      };
+    }),
     importEntries,
     approvedAliasBankTermsFrom(merchants)
   );
