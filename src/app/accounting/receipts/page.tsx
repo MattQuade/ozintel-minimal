@@ -9,6 +9,7 @@ import {
   type CropRectNorm,
 } from '@/lib/client/cropImage';
 import { prepareReceiptFile } from '@/lib/client/compressReceiptImage';
+import { receiptMatchesSearch } from '@/lib/client/receiptSearch';
 
 type ReceiptDocketView = {
   vendor?: string;
@@ -69,6 +70,7 @@ function ReceiptsLedger() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'inbox' | 'linked'>('all');
+  const [query, setQuery] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cropTarget, setCropTarget] = useState<ReceiptRow | null>(null);
   const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
@@ -189,10 +191,11 @@ function ReceiptsLedger() {
     }
   };
 
+  const queryActive = query.trim().length > 0;
   const visible = receipts.filter((r) => {
-    if (filter === 'inbox') return !r.linked;
-    if (filter === 'linked') return r.linked;
-    return true;
+    if (filter === 'inbox' && r.linked) return false;
+    if (filter === 'linked' && !r.linked) return false;
+    return receiptMatchesSearch(r, query);
   });
 
   return (
@@ -204,6 +207,15 @@ function ReceiptsLedger() {
           <strong>Recrop</strong> on desktop to trim wasted space.
         </p>
       </div>
+
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Supplier and amount, e.g. Woolworths 79.13"
+        aria-label="Search receipts by supplier and amount"
+        className="w-full mb-4 bg-white border border-slate-300 rounded-2xl px-5 py-3 text-slate-900"
+      />
 
       <div className="flex flex-wrap items-center gap-2 mb-6">
         {(
@@ -241,10 +253,17 @@ function ReceiptsLedger() {
         <p className="text-red-600 mb-4">{error}</p>
       ) : null}
 
+      {!loading && !error && queryActive && visible.length > 0 ? (
+        <p className="text-sm text-slate-500 mb-3">
+          {visible.length} receipt{visible.length === 1 ? '' : 's'}
+        </p>
+      ) : null}
+
       {!loading && !error && visible.length === 0 ? (
         <p className="text-slate-500">
-          No receipts yet. Capture one from the Alerts home page, then refresh
-          here.
+          {queryActive
+            ? 'No receipts match that supplier and amount.'
+            : 'No receipts yet. Capture one from the Alerts home page, then refresh here.'}
         </p>
       ) : null}
 
