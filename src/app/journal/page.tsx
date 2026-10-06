@@ -538,7 +538,7 @@ export default function JournalPage() {
 
         {editingTx && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-white rounded-3xl p-8 w-full max-w-lg">
+            <div className="bg-white rounded-3xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <h2 className="text-2xl font-bold mb-6">Edit Transaction</h2>
 
               <input
@@ -631,10 +631,17 @@ export default function JournalPage() {
                   receiptIds={
                     Array.isArray(editingTx.receiptIds) ? editingTx.receiptIds : []
                   }
-                  onChange={(ids) =>
-                    setEditingTx({ ...editingTx, receiptIds: ids })
-                  }
+                  onChange={(ids) => {
+                    setEditingTx({ ...editingTx, receiptIds: ids });
+                    setTransactions((prev) =>
+                      prev.map((t) =>
+                        t.id === editingTx.id ? { ...t, receiptIds: ids } : t
+                      )
+                    );
+                  }}
                   ledgerEntryId={editingTx.id}
+                  suggestAmount={Math.abs(Number(editingTx.amount) || 0)}
+                  suggestDate={editingTx.date}
                   label="Receipt evidence (ATO)"
                 />
               </div>

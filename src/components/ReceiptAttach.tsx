@@ -6,6 +6,8 @@ import {
   RECEIPT_MAX_BYTES,
 } from '@/lib/client/compressReceiptImage';
 import { postReceiptUpload } from '@/lib/client/postReceiptUpload';
+import { receiptMatchesSearch } from '@/lib/client/receiptSearch';
+import { parseLooseIsoDate } from '@/lib/accounting/receiptCaption';
 
 export type ReceiptInfo = {
   id: string;
@@ -20,6 +22,10 @@ type Props = {
   onChange: (ids: string[]) => void;
   /** When set, upload links the receipt to this ledger entry immediately. */
   ledgerEntryId?: string;
+  /** Journal amount, so the receipts list can lead with the same dollars. */
+  suggestAmount?: number;
+  /** Journal date, so a docket from the day before sorts next to this line. */
+  suggestDate?: string;
   /** Compact layout for table rows / edit modals. */
   compact?: boolean;
   className?: string;
@@ -37,10 +43,61 @@ async function deleteReceiptOnServer(id: string) {
   });
 }
 
+type SiloReceipt = {
+  id: string;
+  caption?: string;
+  captionAlias?: string;
+  captionAmount?: number;
+  uploadedAt?: string;
+  originalFilename?: string;
+  url: string;
+  docket?: {
+    vendor?: string;
+    date?: string;
+    invoiceReceiptId?: string;
+    subtotal?: number | null;
+    total?: number | null;
+    amountPaid?: number | null;
+    lineItems?: Array<{ description?: string; amount?: number | null }>;
+  } | null;
+};
+
+function receiptMoney(amount?: number | null) {
+  if (amount == null || !Number.isFinite(amount)) return '';
+  return amount.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
+}
+
+function siloAmount(r: SiloReceipt): number | null {
+  const n = r.captionAmount ?? r.docket?.amountPaid ?? r.docket?.total;
+  return n != null && Number.isFinite(Number(n)) ? Math.abs(Number(n)) : null;
+}
+
+function amountsClose(a: number, b: number) {
+  return Math.abs(Math.round(a * 100) - Math.round(Math.abs(b) * 100)) <= 1;
+}
+
+function siloLabel(r: SiloReceipt) {
+  const vendor = String(r.docket?.vendor || '').trim();
+  if (vendor) return vendor;
+  if (r.caption?.trim()) return r.caption.trim();
+  if (r.captionAlias && r.captionAmount != null) {
+    return `${r.captionAlias} ${r.captionAmount}`;
+  }
+  return r.originalFilename || 'Receipt';
+}
+
+function amountQuery(n: number) {
+  const abs = Math.abs(n);
+  const fixed = abs.toFixed(2);
+  return fixed.endsWith('.00') ? String(Math.round(abs)) : fixed;
+}
+
 export default function ReceiptAttach({
   receiptIds,
   onChange,
   ledgerEntryId,
+  suggestAmount,
+  suggestDate,
   compact = false,
   className = '',
   label = 'Receipt',
@@ -50,7 +107,95 @@ export default function ReceiptAttach({
     'idle'
   );
   const [error, setError] = useState('');
+  const [siloOpen, setSiloOpen] = useState(false);
+  const [siloLoading, setSiloLoading] = useState(false);
+  const [siloReceipts, setSiloReceipts] = useState<SiloReceipt[]>([]);
+  const [siloQuery, setSiloQuery] = useState('');
+  const [linkingId, setLinkingId] = useState('');
   const busy = phase !== 'idle';
+
+  const openSilo = async () => {
+    const next = !siloOpen;
+    setSiloOpen(next);
+    setError('');
+    if (!next) return;
+    if (!siloQuery && suggestAmount != null && Math.abs(suggestAmount) > 0) {
+      setSiloQuery(amountQuery(suggestAmount));
+    }
+    setSiloLoading(true);
+    try {
+      const res = await fetch('/api/ledger/receipts?inbox=1', {
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not load receipts');
+      }
+      setSiloReceipts(Array.isArray(data.receipts) ? data.receipts : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load receipts');
+      setSiloReceipts([]);
+    } finally {
+      setSiloLoading(false);
+    }
+  };
+
+  const attachFromSilo = async (receipt: SiloReceipt) => {
+    if (!ledgerEntryId || linkingId) return;
+    setLinkingId(receipt.id);
+    setError('');
+    try {
+      const res = await fetch('/api/ledger/receipts/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiptId: receipt.id,
+          ledgerEntryId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not attach receipt');
+      }
+      if (!receiptIds.includes(receipt.id)) {
+        onChange([...receiptIds, receipt.id]);
+      }
+      setSiloReceipts((prev) => prev.filter((r) => r.id !== receipt.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not attach receipt');
+    } finally {
+      setLinkingId('');
+    }
+  };
+
+  const visibleSilo = siloReceipts
+    .filter((r) => !receiptIds.includes(r.id))
+    .filter((r) => receiptMatchesSearch(r, siloQuery))
+    .slice()
+    .sort((a, b) => {
+      const aAmt = siloAmount(a);
+      const bAmt = siloAmount(b);
+      const aSame =
+        suggestAmount != null && aAmt != null && amountsClose(aAmt, suggestAmount)
+          ? 0
+          : 1;
+      const bSame =
+        suggestAmount != null && bAmt != null && amountsClose(bAmt, suggestAmount)
+          ? 0
+          : 1;
+      if (aSame !== bSame) return aSame - bSame;
+      const journalDay = parseLooseIsoDate(suggestDate);
+      const gap = (r: SiloReceipt) => {
+        const day = parseLooseIsoDate(r.docket?.date);
+        if (!day || !journalDay) return 9999;
+        const ms =
+          Date.parse(`${journalDay}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`);
+        return Math.abs(Math.round(ms / 86400000));
+      };
+      const dateGap = gap(a) - gap(b);
+      if (dateGap !== 0) return dateGap;
+      return Date.parse(b.uploadedAt || '') - Date.parse(a.uploadedAt || '');
+    });
 
   const uploadFile = async (file: File) => {
     setPhase('compressing');
@@ -133,6 +278,19 @@ export default function ReceiptAttach({
                 : 'Attach receipt'
               : '📷 Attach / capture receipt'}
         </button>
+        {ledgerEntryId && (
+          <button
+            type="button"
+            onClick={() => void openSilo()}
+            className={
+              compact
+                ? 'text-sm text-blue-600 hover:text-blue-800 font-medium min-h-[36px]'
+                : 'border border-gray-300 rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-50'
+            }
+          >
+            {siloOpen ? 'Hide receipts' : 'From receipts'}
+          </button>
+        )}
         {receiptIds.length > 0 && (
           <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
             Receipt attached
@@ -186,6 +344,79 @@ export default function ReceiptAttach({
             );
           })}
         </ul>
+      )}
+
+      {siloOpen && ledgerEntryId && (
+        <div className={`border border-gray-200 rounded-xl bg-white ${compact ? 'mt-2' : 'mt-3'}`}>
+          <div className="p-3 border-b border-gray-100">
+            <input
+              type="search"
+              value={siloQuery}
+              onChange={(e) => setSiloQuery(e.target.value)}
+              placeholder="Supplier and amount, e.g. Deanos 285"
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          {siloLoading ? (
+            <p className="p-3 text-sm text-gray-500">Loading receipts…</p>
+          ) : visibleSilo.length === 0 ? (
+            <p className="p-3 text-sm text-gray-500">
+              {siloReceipts.length === 0
+                ? 'No photos are waiting in Receipts.'
+                : 'No receipts match that supplier and amount.'}
+            </p>
+          ) : (
+            <ul className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+              {visibleSilo.map((receipt) => {
+                const amount = siloAmount(receipt);
+                const same =
+                  suggestAmount != null &&
+                  amount != null &&
+                  amountsClose(amount, suggestAmount);
+                return (
+                  <li key={receipt.id} className="flex items-center gap-3 p-3">
+                    <a
+                      href={receipt.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0"
+                      title="View receipt"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={receipt.url}
+                        alt=""
+                        className="h-14 w-14 object-cover rounded-lg bg-gray-50"
+                      />
+                    </a>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {siloLabel(receipt)}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {amount != null ? receiptMoney(amount) : 'Amount unknown'}
+                        {receipt.docket?.date ? ` · ${receipt.docket.date}` : ''}
+                      </p>
+                      {same && (
+                        <p className="text-xs font-medium text-emerald-700">
+                          Same amount as this journal line
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={linkingId === receipt.id}
+                      onClick={() => void attachFromSilo(receipt)}
+                      className="shrink-0 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg px-3 py-2"
+                    >
+                      {linkingId === receipt.id ? 'Attaching…' : 'Attach'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       )}
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
