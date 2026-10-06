@@ -104,6 +104,35 @@ const repaired = repairJournalEntries([
     journalRef: "INV-AUTH-12",
   },
 ]);
+eq(
+  "hammond stays other income",
+  accountFixForDescription("Hammond Cristofarocorey", "1348")?.accountName,
+  "Other Income"
+);
+eq(
+  "katarina stays other income",
+  accountFixForDescription("TRANSFER FROM KATARINA NAMANA TALLIMBA REPAYMENT", "0500")
+    ?.accountName,
+  undefined
+);
+
+const hotels = withJournalRuleFixes([]);
+function coded(description: string, amount: string) {
+  return classifyTransaction(["2026-09-12", amount, description], hotels.rules);
+}
+eq("mangoplah draught", coded("PAYMENT FROM MANGOPLAH HOTEL", "800").accountName, "Draught Wholesale");
+eq("tallimba draught", coded("TALLIMBA HOTEL", "640").accountName, "Draught Wholesale");
+eq(
+  "katarina not tallimba hotel",
+  coded("TRANSFER FROM KATARINA NAMANA TALLIMBA REPAYMENT", "111.11").accountName,
+  "Other Income"
+);
+eq("grong draught", coded("ROYAL HOTEL GRONG GRONG", "791.19").accountName, "Draught Wholesale");
+eq("lockhart draught", coded("RAILWAY HOTEL LOCKHART", "900").accountName, "Draught Wholesale");
+eq("white tank draught", coded("WHITE TANK HOTEL", "2000").accountName, "Draught Wholesale");
+eq("lockhart cafe not draught", coded("SQ *THE LOCKHART CAFE RESLockhart", "-42.63").accountCode, "9999");
+eq("tallimba p and c not draught", coded("TALLIMBA P AND C TALLIMBA", "-40").accountCode, "9999");
+
 eq("collapsed count", repaired.entries.length, 1);
 eq("kept bank line", repaired.entries[0]?.id, "bank");
 
@@ -139,5 +168,7 @@ const split = repairJournalEntries([
 eq("split collapsed", split.entries.length, 1);
 eq("split kept gross", split.entries[0]?.id, "gross");
 eq("split is 0500", split.entries[0]?.accountCode, "0500");
+eq("split is draught wholesale", split.entries[0]?.accountName, "Draught Wholesale");
+eq("bank line renamed", repaired.entries[0]?.accountName, "Draught Wholesale");
 
 console.log("journal repair fixtures ok");

@@ -7,6 +7,7 @@ import { round2 } from "@/lib/accounting/invoiceMath";
 import {
   BANK_TRANSFER_CODE,
   BANK_TRANSFER_NAME,
+  DRAUGHT_WHOLESALE_NAME,
   OTHER_INCOME_CODE,
   OTHER_INCOME_NAME,
   PERSONAL_LOAN_CODE,
@@ -72,6 +73,7 @@ function applyAccount(entry: RepairEntry, fix: AccountFix): RepairEntry {
 function sameAccount(entry: RepairEntry, fix: AccountFix): boolean {
   return (
     String(entry.accountCode || "") === fix.accountCode &&
+    String(entry.accountName || "") === fix.accountName &&
     String(entry.type || "") === fix.type &&
     Boolean(entry.noGST) === fix.noGST
   );
@@ -117,13 +119,8 @@ export function accountFixForDescription(
       noGST: false,
     };
   }
-  if (/white tank/.test(text) || /railway hotel/.test(text)) {
-    return {
-      accountCode: OTHER_INCOME_CODE,
-      accountName: OTHER_INCOME_NAME,
-      type: "Revenue",
-      noGST: false,
-    };
+  if (isDraughtWholesale(description)) {
+    return incomeAccount(description);
   }
   if (/base44/.test(text)) {
     return {
@@ -149,10 +146,26 @@ export function accountFixForDescription(
   return null;
 }
 
+function isDraughtWholesale(description: string): boolean {
+  const text = description.toLowerCase();
+  if (/katarina|cristofaro|cafe|p and c|p&c/.test(text)) return false;
+  return /mangoplah|tallimba|grong|white tank|railway hotel|lockhart/.test(text);
+}
+
+function incomeAccount(description: string): AccountFix {
+  return {
+    accountCode: OTHER_INCOME_CODE,
+    accountName: isDraughtWholesale(description)
+      ? DRAUGHT_WHOLESALE_NAME
+      : OTHER_INCOME_NAME,
+    type: "Revenue",
+    noGST: false,
+  };
+}
+
 function isOtherIncomeCustomer(description: string): boolean {
-  return /white tank|railway hotel|katarina|cristofaro/.test(
-    description.toLowerCase()
-  );
+  const text = description.toLowerCase();
+  return isDraughtWholesale(description) || /katarina|cristofaro/.test(text);
 }
 
 function absAmount(entry: RepairEntry): number {
@@ -192,15 +205,7 @@ function collapseSameDaySplits<T extends RepairEntry>(entries: T[]): {
     if (Math.abs(sum - gross) > 0.02) continue;
     const keep = group.find((line) => absAmount(line) === gross);
     if (!keep) continue;
-    converted.set(
-      keep.id,
-      applyAccount(keep, {
-        accountCode: OTHER_INCOME_CODE,
-        accountName: OTHER_INCOME_NAME,
-        type: "Revenue",
-        noGST: false,
-      }) as T
-    );
+    converted.set(keep.id, applyAccount(keep, incomeAccount(text)) as T);
     group.forEach((line) => {
       if (line.id !== keep.id) drop.add(line.id);
     });
@@ -292,12 +297,7 @@ export function repairJournalEntries<T extends RepairEntry>(entries: T[]): {
           positive.id,
           applyAccount(
             { ...positive, source: "bank-import", description: desc },
-            {
-              accountCode: OTHER_INCOME_CODE,
-              accountName: OTHER_INCOME_NAME,
-              type: "Revenue",
-              noGST: false,
-            }
+            incomeAccount(desc)
           ) as T
         );
         group.forEach((line) => {
@@ -329,12 +329,7 @@ export function repairJournalEntries<T extends RepairEntry>(entries: T[]): {
               source: "bank-import",
               description: desc.replace(/^Invoice\s+\S+\s+—\s+/i, "") || desc,
             },
-            {
-              accountCode: OTHER_INCOME_CODE,
-              accountName: OTHER_INCOME_NAME,
-              type: "Revenue",
-              noGST: false,
-            }
+            incomeAccount(desc)
           ) as T
         );
         group.forEach((line) => {

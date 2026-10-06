@@ -7,7 +7,7 @@
   {"code":"0109","name":"Bottle Shop","type":"Revenue","noGST":false},
   {"code":"0112","name":"Sales - Accommodation","type":"Revenue","noGST":false},
   {"code":"0115","name":"Rental Income","type":"Revenue","noGST":false},
-  {"code":"0500","name":"Other Income","type":"Revenue","noGST":false},
+  {"code":"0500","name":"Draught Wholesale","type":"Revenue","noGST":false},
   {"code":"0510","name":"Employee FBT Contribution","type":"Revenue","noGST":false},
   {"code":"0550","name":"Insurance Recoveries","type":"Revenue","noGST":true},
   {"code":"0700","name":"ATO Cash Flow Boost","type":"Revenue","noGST":true},

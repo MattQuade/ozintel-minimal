@@ -24,6 +24,7 @@ export const BANK_TRANSFER_CODE = "2480";
 export const BANK_TRANSFER_NAME = "Bank Transfer";
 export const OTHER_INCOME_CODE = "0500";
 export const OTHER_INCOME_NAME = "Other Income";
+export const DRAUGHT_WHOLESALE_NAME = "Draught Wholesale";
 export const PERSONAL_LOAN_CODE = "3565/04";
 export const PERSONAL_LOAN_NAME = "Matt Quade – Personal Loan";
 export const SOFTWARE_CODE = "1577";
@@ -92,8 +93,35 @@ export const JOURNAL_PRIORITY_RULES: RuleLike[] = [
   },
   {
     id: 9105,
-    name: "White Tank Hotel other income",
+    name: "White Tank Hotel draught wholesale",
     matchValue: "WHITE TANK",
+    matchValues: ["WHITE TANK HOTEL"],
+    matchField: "description",
+    matchType: "contains",
+    accountCode: OTHER_INCOME_CODE,
+    accountName: DRAUGHT_WHOLESALE_NAME,
+    type: "Revenue",
+    noGST: false,
+    direction: "receive",
+  },
+  {
+    id: 9106,
+    name: "Railway Hotel Lockhart draught wholesale",
+    matchValue: "RAILWAY HOTEL",
+    matchValues: ["RAILWAY HOTEL LOCKHART", "RAILWAY HOTEL – LOCKHART", "LOCKHART"],
+    matchField: "description",
+    matchType: "contains",
+    accountCode: OTHER_INCOME_CODE,
+    accountName: DRAUGHT_WHOLESALE_NAME,
+    type: "Revenue",
+    noGST: false,
+    direction: "receive",
+  },
+  {
+    id: 9108,
+    name: "Katarina Namana other income",
+    matchValue: "KATARINA NAMANA",
+    matchValues: ["KATARINA"],
     matchField: "description",
     matchType: "contains",
     accountCode: OTHER_INCOME_CODE,
@@ -103,14 +131,40 @@ export const JOURNAL_PRIORITY_RULES: RuleLike[] = [
     direction: "receive",
   },
   {
-    id: 9106,
-    name: "Railway Hotel Lockhart other income",
-    matchValue: "RAILWAY HOTEL",
-    matchValues: ["RAILWAY HOTEL LOCKHART", "RAILWAY HOTEL – LOCKHART"],
+    id: 9109,
+    name: "Mangoplah Hotel draught wholesale",
+    matchValue: "MANGOPLAH",
+    matchValues: ["MANGOPLAH HOTEL"],
     matchField: "description",
     matchType: "contains",
     accountCode: OTHER_INCOME_CODE,
-    accountName: OTHER_INCOME_NAME,
+    accountName: DRAUGHT_WHOLESALE_NAME,
+    type: "Revenue",
+    noGST: false,
+    direction: "receive",
+  },
+  {
+    id: 9110,
+    name: "Tallimba draught wholesale",
+    matchValue: "TALLIMBA",
+    matchValues: ["TALLIMBA HOTEL"],
+    matchField: "description",
+    matchType: "contains",
+    accountCode: OTHER_INCOME_CODE,
+    accountName: DRAUGHT_WHOLESALE_NAME,
+    type: "Revenue",
+    noGST: false,
+    direction: "receive",
+  },
+  {
+    id: 9111,
+    name: "Grong Grong draught wholesale",
+    matchValue: "GRONG",
+    matchValues: ["GRONG GRONG", "ROYAL HOTEL GRONG"],
+    matchField: "description",
+    matchType: "contains",
+    accountCode: OTHER_INCOME_CODE,
+    accountName: DRAUGHT_WHOLESALE_NAME,
     type: "Revenue",
     noGST: false,
     direction: "receive",
@@ -136,11 +190,40 @@ function isCardRepayment(rule: RuleLike): boolean {
   return blob.includes("CC RPYMNT") || blob.includes("CC PYMNTS");
 }
 
+function listKey(values?: string[]): string {
+  return (values || []).join("\n");
+}
+
+function samePriorityRule(rule: RuleLike, want: RuleLike): boolean {
+  return (
+    rule.name === want.name &&
+    rule.matchValue === want.matchValue &&
+    listKey(rule.matchValues) === listKey(want.matchValues) &&
+    (rule.matchField || "description") === (want.matchField || "description") &&
+    (rule.matchType || "contains") === (want.matchType || "contains") &&
+    (rule.direction || "any") === (want.direction || "any") &&
+    rule.accountCode === want.accountCode &&
+    rule.accountName === want.accountName &&
+    rule.type === want.type &&
+    Boolean(rule.noGST) === Boolean(want.noGST) &&
+    !rule.bankAccountId
+  );
+}
+
 export function withJournalRuleFixes<T extends RuleLike>(
   rules: T[]
 ): { rules: T[]; changed: boolean } {
   let changed = false;
+  const canonical = new Map(JOURNAL_PRIORITY_RULES.map((rule) => [rule.id, rule]));
   const patched = rules.map((rule) => {
+    const want = canonical.get(rule.id);
+    if (want) {
+      if (samePriorityRule(rule, want)) return rule;
+      changed = true;
+      const next = { ...rule, ...want } as T;
+      delete (next as { bankAccountId?: string }).bankAccountId;
+      return next;
+    }
     if (!isCardRepayment(rule)) return rule;
     if (
       rule.accountCode === BANK_TRANSFER_CODE &&

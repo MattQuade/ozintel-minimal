@@ -452,12 +452,24 @@ export async function readCoa(): Promise<CoaAccount[]> {
     }
   }
 
+  let renamed = 0;
+  const wholesale = byCode.get("0500");
+  if (wholesale && wholesale.name === "Other Income") {
+    byCode.set("0500", { ...wholesale, name: "Draught Wholesale" });
+    renamed += 1;
+  }
+
   const merged = [...byCode.values()].sort((a, b) =>
     String(a.code).localeCompare(String(b.code), undefined, { numeric: true })
   );
-  if (added > 0) {
+  if (added > 0 || renamed > 0) {
     await writeCoa(merged);
-    console.log(`[accounting] Merged ${added} missing COA accounts from seed`);
+    if (added > 0) {
+      console.log(`[accounting] Merged ${added} missing COA accounts from seed`);
+    }
+    if (renamed > 0) {
+      console.log("[accounting] Renamed 0500 to Draught Wholesale");
+    }
   }
   return merged;
 }
