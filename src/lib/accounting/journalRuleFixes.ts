@@ -119,13 +119,13 @@ export const JOURNAL_PRIORITY_RULES: RuleLike[] = [
   },
   {
     id: 9108,
-    name: "Katarina Namana other income",
+    name: "Katarina Namana Tallimba Inn draught wholesale",
     matchValue: "KATARINA NAMANA",
     matchValues: ["KATARINA"],
     matchField: "description",
     matchType: "contains",
     accountCode: OTHER_INCOME_CODE,
-    accountName: OTHER_INCOME_NAME,
+    accountName: DRAUGHT_WHOLESALE_NAME,
     type: "Revenue",
     noGST: false,
     direction: "receive",
@@ -183,6 +183,13 @@ export const JOURNAL_PRIORITY_RULES: RuleLike[] = [
   },
 ];
 
+function isKatarinaIncome(rule: RuleLike): boolean {
+  const blob = [rule.name, rule.matchValue, ...(rule.matchValues || [])]
+    .join(" ")
+    .toUpperCase();
+  return blob.includes("KATARINA");
+}
+
 function isCardRepayment(rule: RuleLike): boolean {
   const blob = [rule.matchValue, ...(rule.matchValues || [])]
     .join(" ")
@@ -223,6 +230,16 @@ export function withJournalRuleFixes<T extends RuleLike>(
       const next = { ...rule, ...want } as T;
       delete (next as { bankAccountId?: string }).bankAccountId;
       return next;
+    }
+    if (isKatarinaIncome(rule) && rule.accountName !== DRAUGHT_WHOLESALE_NAME) {
+      changed = true;
+      return {
+        ...rule,
+        accountCode: OTHER_INCOME_CODE,
+        accountName: DRAUGHT_WHOLESALE_NAME,
+        type: "Revenue",
+        noGST: false,
+      };
     }
     if (!isCardRepayment(rule)) return rule;
     if (

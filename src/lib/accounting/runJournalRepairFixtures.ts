@@ -110,10 +110,10 @@ eq(
   "Other Income"
 );
 eq(
-  "katarina stays other income",
+  "katarina is draught wholesale",
   accountFixForDescription("TRANSFER FROM KATARINA NAMANA TALLIMBA REPAYMENT", "0500")
     ?.accountName,
-  undefined
+  "Draught Wholesale"
 );
 
 const hotels = withJournalRuleFixes([]);
@@ -123,9 +123,9 @@ function coded(description: string, amount: string) {
 eq("mangoplah draught", coded("PAYMENT FROM MANGOPLAH HOTEL", "800").accountName, "Draught Wholesale");
 eq("tallimba draught", coded("TALLIMBA HOTEL", "640").accountName, "Draught Wholesale");
 eq(
-  "katarina not tallimba hotel",
+  "katarina tallimba inn",
   coded("TRANSFER FROM KATARINA NAMANA TALLIMBA REPAYMENT", "111.11").accountName,
-  "Other Income"
+  "Draught Wholesale"
 );
 eq("grong draught", coded("ROYAL HOTEL GRONG GRONG", "791.19").accountName, "Draught Wholesale");
 eq("lockhart draught", coded("RAILWAY HOTEL LOCKHART", "900").accountName, "Draught Wholesale");

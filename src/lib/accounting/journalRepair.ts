@@ -148,8 +148,10 @@ export function accountFixForDescription(
 
 function isDraughtWholesale(description: string): boolean {
   const text = description.toLowerCase();
-  if (/katarina|cristofaro|cafe|p and c|p&c/.test(text)) return false;
-  return /mangoplah|tallimba|grong|white tank|railway hotel|lockhart/.test(text);
+  if (/cristofaro|cafe|p and c|p&c/.test(text)) return false;
+  return /katarina|mangoplah|tallimba|grong|white tank|railway hotel|lockhart/.test(
+    text
+  );
 }
 
 function incomeAccount(description: string): AccountFix {
