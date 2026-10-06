@@ -3,6 +3,7 @@ import {
   deleteLedgerEntry,
   deleteLedgerEntries,
 } from "@/lib/accounting/store";
+import { releaseReceiptsFromLedgerEntries } from "@/lib/accounting/receipts";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
             { status: 404 }
           );
         }
+        await releaseReceiptsFromLedgerEntries(ids);
         return NextResponse.json({ success: true, deletedCount });
       }
 
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
       if (!deleted) {
         return NextResponse.json({ error: "Entry not found" }, { status: 404 });
       }
+      await releaseReceiptsFromLedgerEntries([id]);
       return NextResponse.json({ success: true });
     } catch (err) {
       console.error(err);

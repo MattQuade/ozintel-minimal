@@ -432,6 +432,7 @@ export async function listReceiptsByLedgerEntry(
 
 /** Newest-first list of every stored receipt (inbox + linked). */
 export async function listAllReceipts(): Promise<ReceiptMeta[]> {
+  await releaseReceiptsLinkedOnlyToMissingEntries();
   const store = await loadStore();
   return [...store.receipts].sort((a, b) => {
     const ta = Date.parse(a.uploadedAt || "") || 0;
@@ -440,8 +441,44 @@ export async function listAllReceipts(): Promise<ReceiptMeta[]> {
   });
 }
 
+/**
+ * Drop ledger ids from receipts. Used when those journal lines are deleted
+ * so the photos return to the inbox and can match a re-uploaded CSV.
+ */
+export async function releaseReceiptsFromLedgerEntries(
+  entryIds: string[]
+): Promise<number> {
+  const drop = new Set(
+    entryIds.map((id) => String(id || "").trim()).filter(Boolean)
+  );
+  if (drop.size === 0) return 0;
+  const store = await loadStore();
+  let released = 0;
+  for (let i = 0; i < store.receipts.length; i++) {
+    const linked = store.receipts[i].ledgerEntryIds || [];
+    const next = linked.filter((id) => !drop.has(id));
+    if (next.length === linked.length) continue;
+    store.receipts[i] = { ...store.receipts[i], ledgerEntryIds: next };
+    released += 1;
+  }
+  if (released > 0) await saveStore(store);
+  return released;
+}
+
+/** Receipts that only point at deleted journal lines go back to the inbox. */
+export async function releaseReceiptsLinkedOnlyToMissingEntries(): Promise<number> {
+  const ledger = await readLedger();
+  const live = new Set(ledger.map((entry) => entry.id));
+  const store = await loadStore();
+  const orphanIds = store.receipts.flatMap((receipt) =>
+    (receipt.ledgerEntryIds || []).filter((id) => !live.has(id))
+  );
+  return releaseReceiptsFromLedgerEntries(orphanIds);
+}
+
 /** In-app photos waiting for a bank CSV line (captioned, not yet linked). */
 export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
+  await releaseReceiptsLinkedOnlyToMissingEntries();
   const store = await loadStore();
   return store.receipts.filter((r) => {
     const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
@@ -452,6 +489,7 @@ export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
 }
 
 export async function listInboxReceipts(): Promise<ReceiptMeta[]> {
+  await releaseReceiptsLinkedOnlyToMissingEntries();
   const store = await loadStore();
   return store.receipts.filter((r) => {
     const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
