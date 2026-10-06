@@ -150,6 +150,11 @@ export function getBankAccountsFilePath(): string {
   return path.join(getAccountingDataDir(), "bank-accounts.json");
 }
 
+/** Statement closing balances typed on the reconciliation screen. */
+export function getReconciliationsFilePath(): string {
+  return path.join(getAccountingDataDir(), "reconciliations.json");
+}
+
 export function getCustomersFilePath(): string {
   return path.join(getAccountingDataDir(), "customers.json");
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import AccountingGate from '@/components/AccountingGate';
 import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 
@@ -106,6 +107,9 @@ export default function BankAccountsPage() {
             <p className="text-gray-600">
               Set opening balances (DD/MM/YYYY as-at). Current = opening + imported movements.
             </p>
+            <Link href="/bank/reconcile" className="text-blue-600 hover:text-blue-800 font-medium">
+              Reconcile to statement
+            </Link>
           </div>
           <div className="flex gap-3">
             <button

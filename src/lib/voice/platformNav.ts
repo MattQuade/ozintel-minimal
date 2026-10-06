@@ -159,6 +159,13 @@ const RULES: NavRule[] = [
       withOpen("pay runs?").test(t),
   },
   {
+    href: "/bank/reconcile",
+    label: "Reconcile",
+    test: (t) =>
+      withOpen("reconcil(?:e|iation)").test(t) ||
+      withOpen("bank reconcil(?:e|iation)").test(t),
+  },
+  {
     href: "/bank/accounts",
     label: "Bank",
     test: (t) =>

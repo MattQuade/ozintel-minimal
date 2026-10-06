@@ -14,6 +14,7 @@ const navItems = [
   },
   { label: 'Bank', href: '/bank/accounts', submenu: [
       { label: 'Bank Accounts', href: '/bank/accounts' },
+      { label: 'Reconcile', href: '/bank/reconcile' },
       { label: 'Import CSV', href: '/transactions/import' },
     ] 
   },

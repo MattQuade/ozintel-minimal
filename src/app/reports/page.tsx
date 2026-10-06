@@ -89,6 +89,15 @@ export default function ReportsPage() {
             </p>
           </Link>
           <Link
+            href="/bank/reconcile"
+            className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
+          >
+            <h2 className="text-2xl font-semibold mb-2">Bank reconciliation</h2>
+            <p className="text-gray-500">
+              Compare each account&apos;s books balance to the closing balance on the statement.
+            </p>
+          </Link>
+          <Link
             href="/reports/bas"
             className="bg-white rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow block"
           >
