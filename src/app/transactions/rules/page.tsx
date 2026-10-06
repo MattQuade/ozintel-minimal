@@ -50,7 +50,11 @@ export default function RulesManagement() {
   const [newRule, setNewRule] = useState(emptyRule);
 
   useEffect(() => {
-    Promise.all([fetch('/api/rules'), fetch('/api/coa'), fetch('/api/bank-accounts')])
+    Promise.all([
+      fetch('/api/rules', { cache: 'no-store' }),
+      fetch('/api/coa', { cache: 'no-store' }),
+      fetch('/api/bank-accounts', { cache: 'no-store' }),
+    ])
       .then(async ([rulesRes, coaRes, banksRes]) => {
         const rulesData = await rulesRes.json();
         const coaData = await coaRes.json();
@@ -555,7 +559,9 @@ export default function RulesManagement() {
                     </td>
                     <td className="px-5 py-3 text-gray-600">{matchSummary(rule)}</td>
                     <td className="px-5 py-3 font-mono text-xs">
-                      {rule.accountCode} — {rule.accountName}
+                      {rule.accountCode} —{' '}
+                      {coa.find((account) => account.code === rule.accountCode)?.name ||
+                        rule.accountName}
                     </td>
                     <td className="px-5 py-3 text-gray-600">
                       {rule.noGST ? 'No GST' : 'Taxable'}

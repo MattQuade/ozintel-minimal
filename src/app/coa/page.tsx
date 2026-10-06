@@ -88,7 +88,7 @@ export default function COAPage() {
 
   const loadAccounts = async () => {
     try {
-      const res = await fetch('/api/coa');
+      const res = await fetch('/api/coa', { cache: 'no-store' });
       const data = await res.json();
       setAccounts(Array.isArray(data) ? data : []);
       setStatus('Loaded from server');

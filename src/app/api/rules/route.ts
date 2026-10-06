@@ -16,7 +16,9 @@ export async function GET(req: Request) {
   return access.run(async () => {
     try {
       const rules = await readRules();
-      return NextResponse.json(rules);
+      return NextResponse.json(rules, {
+        headers: { "Cache-Control": "no-store" },
+      });
     } catch (error) {
       console.error(error);
       return NextResponse.json([], { status: 500 });

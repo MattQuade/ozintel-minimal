@@ -16,7 +16,9 @@ export async function GET(req: Request) {
   return access.run(async () => {
     try {
       const accounts = await readCoa();
-      return NextResponse.json(accounts);
+      return NextResponse.json(accounts, {
+        headers: { "Cache-Control": "no-store" },
+      });
     } catch {
       return NextResponse.json([]);
     }

@@ -183,11 +183,20 @@ export const JOURNAL_PRIORITY_RULES: RuleLike[] = [
   },
 ];
 
-function isKatarinaIncome(rule: RuleLike): boolean {
-  const blob = [rule.name, rule.matchValue, ...(rule.matchValues || [])]
-    .join(" ")
-    .toUpperCase();
-  return blob.includes("KATARINA");
+function ruleText(rule: RuleLike): string {
+  const extra = Array.isArray(rule.matchValues) ? rule.matchValues : [];
+  return [rule.name, rule.matchValue, ...extra].join(" ").toUpperCase();
+}
+
+function isWholesaleDraughtRule(rule: RuleLike): boolean {
+  const blob = ruleText(rule);
+  if (/CAFE|P AND C|P&C/.test(blob) && !/KATARINA|NAMANA|MANGOPLAH|GRONG|WHITE TANK|RAILWAY/.test(blob)) {
+    return false;
+  }
+  if (/KATARINA|NAMANA|MANGOPLAH|GRONG|WHITE TANK|RAILWAY/.test(blob)) return true;
+  if (blob.includes("LOCKHART") && !blob.includes("CAFE")) return true;
+  if (blob.includes("TALLIMBA") && !/P AND C|P&C/.test(blob)) return true;
+  return false;
 }
 
 function isCardRepayment(rule: RuleLike): boolean {
@@ -231,10 +240,26 @@ export function withJournalRuleFixes<T extends RuleLike>(
       delete (next as { bankAccountId?: string }).bankAccountId;
       return next;
     }
-    if (isKatarinaIncome(rule) && rule.accountName !== DRAUGHT_WHOLESALE_NAME) {
+    const code = String(rule.accountCode || "").trim();
+    const codedOtherIncome =
+      code === "0500" ||
+      code === "500" ||
+      /other income/i.test(String(rule.accountName || ""));
+    if (isWholesaleDraughtRule(rule) && codedOtherIncome) {
+      if (
+        rule.accountCode === OTHER_INCOME_CODE &&
+        rule.accountName === DRAUGHT_WHOLESALE_NAME &&
+        rule.type === "Revenue" &&
+        rule.noGST === false
+      ) {
+        return rule;
+      }
       changed = true;
       return {
         ...rule,
+        name: /other income/i.test(rule.name)
+          ? rule.name.replace(/other income/gi, "Draught Wholesale")
+          : rule.name,
         accountCode: OTHER_INCOME_CODE,
         accountName: DRAUGHT_WHOLESALE_NAME,
         type: "Revenue",

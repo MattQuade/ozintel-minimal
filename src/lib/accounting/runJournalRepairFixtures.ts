@@ -133,6 +133,39 @@ eq("white tank draught", coded("WHITE TANK HOTEL", "2000").accountName, "Draught
 eq("lockhart cafe not draught", coded("SQ *THE LOCKHART CAFE RESLockhart", "-42.63").accountCode, "9999");
 eq("tallimba p and c not draught", coded("TALLIMBA P AND C TALLIMBA", "-40").accountCode, "9999");
 
+const katarinaRule = withJournalRuleFixes([
+  {
+    id: 3215,
+    name: "Katarina Namana Other Income",
+    matchValue: "KATARINA NAMANA",
+    matchValues: ["KATARINA"],
+    accountCode: "0500",
+    accountName: "Other Income",
+    type: "Revenue",
+  },
+  {
+    id: 3257,
+    name: "Tallimba P and C",
+    matchValue: "TALLIMBA P AND C",
+    matchValues: ["TALLIMBA"],
+    accountCode: "3565/04",
+    accountName: "Loan - Matt Quade",
+    type: "Liability",
+    direction: "spend",
+    noGST: true,
+  },
+]);
+eq(
+  "katarina rule renamed",
+  katarinaRule.rules.find((rule) => rule.id === 3215)?.accountName,
+  "Draught Wholesale"
+);
+eq(
+  "tallimba p and c rule kept",
+  katarinaRule.rules.find((rule) => rule.id === 3257)?.accountCode,
+  "3565/04"
+);
+
 eq("collapsed count", repaired.entries.length, 1);
 eq("kept bank line", repaired.entries[0]?.id, "bank");
 
@@ -143,6 +176,7 @@ const split = repairJournalEntries([
     description: "White Tank Hotel",
     amount: 2200,
     accountCode: "2101",
+    accountName: "Accounts Receivable",
     type: "Asset",
     source: "bank-import",
   },
@@ -152,6 +186,7 @@ const split = repairJournalEntries([
     description: "White Tank Hotel",
     amount: 2000,
     accountCode: "0500",
+    accountName: "Other Income",
     type: "Revenue",
     source: "bank-import",
   },
@@ -161,6 +196,7 @@ const split = repairJournalEntries([
     description: "White Tank Hotel",
     amount: 200,
     accountCode: "820",
+    accountName: "GST",
     type: "Liability",
     source: "bank-import",
   },

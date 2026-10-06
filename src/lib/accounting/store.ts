@@ -453,9 +453,16 @@ export async function readCoa(): Promise<CoaAccount[]> {
   }
 
   let renamed = 0;
-  const wholesale = byCode.get("0500");
-  if (wholesale && wholesale.name === "Other Income") {
-    byCode.set("0500", { ...wholesale, name: "Draught Wholesale" });
+  for (const [code, account] of [...byCode.entries()]) {
+    const trimmed = String(code).trim();
+    if (trimmed !== "0500" && trimmed !== "500") continue;
+    const already =
+      trimmed === "0500" &&
+      String(account.code) === "0500" &&
+      String(account.name || "").trim() === "Draught Wholesale";
+    if (already) continue;
+    if (trimmed !== "0500") byCode.delete(code);
+    byCode.set("0500", { ...account, code: "0500", name: "Draught Wholesale" });
     renamed += 1;
   }
 
