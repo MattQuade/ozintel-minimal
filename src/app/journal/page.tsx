@@ -29,6 +29,36 @@ function money(n: number) {
   }).format(n || 0);
 }
 
+function journalGroupKey(tx: { id: string; journalRef?: string }) {
+  const ref = String(tx.journalRef || '');
+  return ref.startsWith('DE-') ? ref : tx.id;
+}
+
+function isSupportLeg(tx: { journalRole?: string }) {
+  return tx.journalRole === 'bank' || tx.journalRole === 'gst';
+}
+
+function legRank(role?: string) {
+  if (role === 'account' || role === 'ar') return 0;
+  if (role === 'gst') return 1;
+  if (role === 'bank') return 2;
+  return 3;
+}
+
+/** Debit and credit for a balanced line. A single bank line stays one-sided. */
+function debitCredit(tx: { amount: number; journalRole?: string }) {
+  if (tx.journalRole) {
+    const n = Number(tx.amount) || 0;
+    if (n > 0.004) return { debit: n, credit: 0 };
+    if (n < -0.004) return { debit: 0, credit: Math.abs(n) };
+    return { debit: 0, credit: 0 };
+  }
+  const n = Number(tx.amount) || 0;
+  if (n < -0.004) return { debit: Math.abs(n), credit: 0 };
+  if (n > 0.004) return { debit: 0, credit: n };
+  return { debit: 0, credit: 0 };
+}
+
 type CoaOption = { code: string; name: string; type: string };
 
 type Transaction = {
@@ -44,6 +74,7 @@ type Transaction = {
   receiptIds?: string[];
   source?: string;
   journalRole?: string;
+  journalRef?: string;
   displayAmount?: number;
 };
 
@@ -74,7 +105,7 @@ export default function JournalPage() {
 
   const loadTransactions = async () => {
     const [ledRes, coaRes] = await Promise.all([
-      fetch('/api/ledger/entries'),
+      fetch('/api/ledger/entries', { cache: 'no-store' }),
       fetch('/api/coa'),
     ]);
     const data = await ledRes.json();
@@ -109,27 +140,46 @@ export default function JournalPage() {
     };
   }, [activePeriod, transactions]);
 
-  const filtered = transactions
-    .filter((tx) => {
-      const matchesSearch = (tx.description || '')
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+  const groups = (() => {
+    const period = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
+    const inView = transactions.filter((tx) => {
       if (INVOICE_JOURNAL_SOURCES.has(String(tx.source || ''))) return false;
-      const role = String((tx as { journalRole?: string }).journalRole || '');
-      if (role === 'bank' || role === 'gst') return false;
-      if (reconFilter === 'open' && tx.reconciled) return false;
-      if (reconFilter === 'done' && !tx.reconciled) return false;
-      const period = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
-      if (!period) return matchesSearch;
+      if (!period) return true;
       const iso = toIsoDateInput(tx.date);
       if (!iso) return false;
-      return iso >= period.from && iso <= period.to && matchesSearch;
-    })
-    .sort((a, b) => {
-      const da = parseFlexibleDate(a.date)?.getTime() || 0;
-      const db = parseFlexibleDate(b.date)?.getTime() || 0;
-      return db - da;
+      return iso >= period.from && iso <= period.to;
     });
+    const byKey = new Map<string, Transaction[]>();
+    for (const tx of inView) {
+      const key = journalGroupKey(tx);
+      const list = byKey.get(key) || [];
+      list.push(tx);
+      byKey.set(key, list);
+    }
+    const needle = searchTerm.toLowerCase();
+    return [...byKey.values()]
+      .map((lines) => [...lines].sort((a, b) => legRank(a.journalRole) - legRank(b.journalRole)))
+      .filter((lines) => {
+        const primary =
+          lines.find((line) => line.journalRole === 'account' || line.journalRole === 'ar') ||
+          lines.find((line) => !isSupportLeg(line)) ||
+          lines[0];
+        if (reconFilter === 'open' && primary.reconciled) return false;
+        if (reconFilter === 'done' && !primary.reconciled) return false;
+        if (!needle) return true;
+        return lines.some((line) => (line.description || '').toLowerCase().includes(needle));
+      })
+      .sort((a, b) => {
+        const da = parseFlexibleDate(a[0]?.date)?.getTime() || 0;
+        const db = parseFlexibleDate(b[0]?.date)?.getTime() || 0;
+        return db - da;
+      });
+  })();
+
+  const filtered = groups.flatMap((lines) => lines);
+  const balancedCount = groups.filter((lines) =>
+    lines.some((line) => line.journalRole)
+  ).length;
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return;
@@ -205,7 +255,7 @@ export default function JournalPage() {
     }
     if (
       !confirm(
-        `Clear all ${filtered.length} visible journal transactions on this page? Hidden entries outside the current filters will be kept.`
+        `Clear all ${groups.length} visible journals on this page? Hidden entries outside the current filters will be kept.`
       )
     ) {
       return;
@@ -278,8 +328,11 @@ export default function JournalPage() {
     }
   };
 
-  const openCount = transactions.filter((t) => !t.reconciled).length;
-  const doneCount = transactions.length - openCount;
+  const posted = transactions.filter(
+    (tx) => !INVOICE_JOURNAL_SOURCES.has(String(tx.source || '')) && !isSupportLeg(tx)
+  );
+  const openCount = posted.filter((t) => !t.reconciled).length;
+  const doneCount = posted.length - openCount;
 
   return (
     <AccountingGate section="Journal">
@@ -288,7 +341,7 @@ export default function JournalPage() {
           <div>
             <h1 className="text-4xl font-bold">Journal Entries</h1>
             <p className="text-gray-600">
-              {transactions.length} total • {openCount} unreconciled
+              {posted.length} transactions • {openCount} unreconciled
               {loading ? ' • loading…' : ''}
             </p>
             {notice && (
@@ -458,7 +511,13 @@ export default function JournalPage() {
 
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
           <div className="p-6 border-b bg-gray-50">
-            <h3 className="font-semibold text-lg">{filtered.length} Entries</h3>
+            <h3 className="font-semibold text-lg">{groups.length} journals</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              {balancedCount} shown as debit and credit
+              {groups.length - balancedCount > 0
+                ? ` • ${groups.length - balancedCount} still a single line`
+                : ''}
+            </p>
           </div>
 
           <div className="overflow-x-auto">
@@ -468,78 +527,104 @@ export default function JournalPage() {
                   <th className="text-left p-5 font-medium">Date</th>
                   <th className="text-left p-5 font-medium">Description</th>
                   <th className="text-left p-5 font-medium">Account</th>
-                  <th className="text-right p-5 font-medium">Amount</th>
-                  <th className="text-center p-5 font-medium">Type</th>
+                  <th className="text-right p-5 font-medium">Debit</th>
+                  <th className="text-right p-5 font-medium">Credit</th>
                   <th className="text-center p-5 font-medium">Receipt</th>
                   <th className="text-center p-5 font-medium">Reconciled</th>
                   <th className="w-40 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((tx) => (
-                  <tr key={tx.id} className="border-t hover:bg-gray-50">
-                    <td className="p-5 whitespace-nowrap">{formatAuDate(tx.date)}</td>
-                    <td className="p-5">{tx.description}</td>
-                    <td className="p-5 text-sm font-mono">
-                      {tx.accountCode || '—'}
-                      {tx.accountName ? ` — ${tx.accountName}` : ''}
-                    </td>
-                    <td className="p-5 text-right font-medium">
-                      ${bankAmount(tx).toFixed(2)}
-                    </td>
-                    <td className="p-5 text-center">
-                      <span
-                        className={`px-4 py-1 rounded-full text-xs font-medium ${
-                          tx.type === 'Revenue'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                {groups.map((lines) => {
+                  const primary =
+                    lines.find(
+                      (line) => line.journalRole === 'account' || line.journalRole === 'ar'
+                    ) ||
+                    lines.find((line) => !isSupportLeg(line)) ||
+                    lines[0];
+                  const balanced = lines.some((line) => line.journalRole);
+                  return lines.map((tx, index) => {
+                    const lead = index === 0;
+                    const { debit, credit } = debitCredit(tx);
+                    const editable = tx.id === primary.id;
+                    return (
+                      <tr
+                        key={tx.id}
+                        className={`hover:bg-gray-50 ${
+                          lead ? 'border-t' : 'border-t border-gray-100 bg-slate-50/80'
                         }`}
                       >
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td className="p-5 text-center">
-                      <ReceiptBadge
-                        receiptIds={tx.receiptIds}
-                        onChange={(ids) => {
-                          setTransactions((prev) =>
-                            prev.map((t) =>
-                              t.id === tx.id ? { ...t, receiptIds: ids } : t
-                            )
-                          );
-                          setEditingTx((cur) =>
-                            cur?.id === tx.id
-                              ? { ...cur, receiptIds: ids }
-                              : cur
-                          );
-                        }}
-                      />
-                    </td>
-                    <td className="p-5 text-center">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(tx.reconciled)}
-                        onChange={() => toggleReconciled(tx)}
-                        className="w-5 h-5"
-                        title="Mark reconciled to bank statement"
-                      />
-                    </td>
-                    <td className="p-5 text-center space-x-4">
-                      <button
-                        onClick={() => setEditingTx(tx)}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tx.id)}
-                        className="text-red-600 hover:text-red-800 font-medium"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        <td className="p-5 whitespace-nowrap">
+                          {lead ? formatAuDate(tx.date) : ''}
+                        </td>
+                        <td className="p-5">
+                          {lead ? tx.description : ''}
+                          {lead && balanced ? (
+                            <span className="ml-2 align-middle text-xs font-medium text-emerald-700">
+                              Balanced
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="p-5 text-sm font-mono">
+                          {tx.accountCode || '—'}
+                          {tx.accountName ? ` — ${tx.accountName}` : ''}
+                        </td>
+                        <td className="p-5 text-right font-medium">
+                          {debit > 0.004 ? `$${debit.toFixed(2)}` : ''}
+                        </td>
+                        <td className="p-5 text-right font-medium">
+                          {credit > 0.004 ? `$${credit.toFixed(2)}` : ''}
+                        </td>
+                        <td className="p-5 text-center">
+                          {editable ? (
+                            <ReceiptBadge
+                              receiptIds={tx.receiptIds}
+                              onChange={(ids) => {
+                                setTransactions((prev) =>
+                                  prev.map((t) =>
+                                    t.id === tx.id ? { ...t, receiptIds: ids } : t
+                                  )
+                                );
+                                setEditingTx((cur) =>
+                                  cur?.id === tx.id ? { ...cur, receiptIds: ids } : cur
+                                );
+                              }}
+                            />
+                          ) : null}
+                        </td>
+                        <td className="p-5 text-center">
+                          {editable ? (
+                            <input
+                              type="checkbox"
+                              checked={Boolean(tx.reconciled)}
+                              onChange={() => toggleReconciled(tx)}
+                              className="w-5 h-5"
+                              title="Mark reconciled to bank statement"
+                            />
+                          ) : null}
+                        </td>
+                        <td className="p-5 text-center space-x-4">
+                          {editable ? (
+                            <>
+                              <button
+                                onClick={() => setEditingTx(tx)}
+                                className="text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(tx.id)}
+                                className="text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })}
               </tbody>
             </table>
           </div>

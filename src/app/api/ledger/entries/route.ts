@@ -14,10 +14,14 @@ export async function GET(req: Request) {
       const entries = await ensureFy26DoubleEntry();
       try {
         const withReceipts = await attachInboxReceiptsToBankImportEntries(entries);
-        return NextResponse.json(withReceipts);
+        return NextResponse.json(withReceipts, {
+          headers: { "Cache-Control": "no-store" },
+        });
       } catch (attachErr) {
         console.error("Receipt rematch failed:", attachErr);
-        return NextResponse.json(entries);
+        return NextResponse.json(entries, {
+          headers: { "Cache-Control": "no-store" },
+        });
       }
     } catch (err) {
       console.error("Entries API Error:", err);

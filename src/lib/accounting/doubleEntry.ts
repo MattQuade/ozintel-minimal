@@ -85,9 +85,23 @@ function bankForLine(
     const hit = banks.find((bank) => bank.id === id);
     if (hit) return hit;
   }
-  const name = String(entry.bankAccountName || "").trim().toLowerCase();
-  if (!name) return undefined;
-  return banks.find((bank) => bank.name.trim().toLowerCase() === name);
+  const name = String(entry.bankAccountName || "").trim();
+  if (name) {
+    const hit = banks.find((bank) => bank.name.trim().toLowerCase() === name.toLowerCase());
+    if (hit) return hit;
+  }
+  // The line already names its bank. Still balance it when the account list
+  // is empty or uses a different id.
+  if (!id && !name) return undefined;
+  return {
+    id: id || name,
+    name: name || id,
+    accountNumber: "",
+    bsb: "",
+    openingBalance: 0,
+    openingAsAt: "",
+    type: "Cheque",
+  };
 }
 
 function gstOnGross(entry: DoubleEntryLine, grossAbs: number): number {
@@ -109,8 +123,9 @@ function gstOnGross(entry: DoubleEntryLine, grossAbs: number): number {
 
 function needsExpand(entry: DoubleEntryLine, from: string, banks: BankAccount[]): boolean {
   if (isJournalLeg(entry)) return false;
-  if (SKIP_SOURCES.has(String(entry.source || ""))) return false;
-  if (String(entry.source || "") !== "bank-import") return false;
+  const source = String(entry.source || "");
+  if (SKIP_SOURCES.has(source)) return false;
+  if (source && source !== "bank-import") return false;
   const day = toIsoDateInput(entry.date);
   if (!day || day < from) return false;
   if (!bankForLine(entry, banks)) return false;

@@ -8,6 +8,7 @@ import {
   expandBankLine,
   journalSumsToZero,
   retargetAllocatedDeposits,
+  type DoubleEntryLine,
 } from "@/lib/accounting/doubleEntry";
 import type { BankAccount } from "@/lib/accounting/store";
 
@@ -167,6 +168,50 @@ function run(): Check[] {
 
   const again = applyDoubleEntry(converted.entries, { banks });
   checks.push(eq("second pass converts nothing", again.converted, 0));
+
+  const namedBank = applyDoubleEntry(
+    [
+      {
+        id: "named",
+        date: "2026-08-01",
+        description: "BP",
+        amount: -55,
+        type: "Expense",
+        accountCode: "449",
+        accountName: "Motor Vehicle",
+        bankAccountId: "2020",
+        bankAccountName: "NAB Business Account #4091",
+        source: "bank-import",
+        noGST: true,
+      },
+    ] as DoubleEntryLine[],
+    { banks: [] }
+  );
+  checks.push(eq("converts when the bank list is empty", namedBank.converted, 1));
+  checks.push(
+    eq(
+      "named bank is the credit",
+      namedBank.entries.find((line) => line.journalRole === "bank")?.accountCode,
+      "2020"
+    )
+  );
+
+  const unsourced = applyDoubleEntry(
+    [
+      {
+        id: "nosrc",
+        date: "2026-08-02",
+        description: "FUEL",
+        amount: -22,
+        type: "Expense",
+        accountCode: "449",
+        bankAccountId: "2020",
+        noGST: true,
+      },
+    ],
+    { banks }
+  );
+  checks.push(eq("converts a bank line with no source", unsourced.converted, 1));
 
   const moved = retargetAllocatedDeposits(
     [
