@@ -5,6 +5,7 @@ import {
   autoMatchDepositToInvoice,
   listOpenInvoicesForAllocation,
 } from "@/lib/accounting/invoices";
+import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { toIsoDateInput } from "@/lib/accounting/dates";
 
 export const runtime = "nodejs";
@@ -109,6 +110,7 @@ export async function POST(req: Request) {
         replaceLedgerEntryId,
         autoMatched,
       });
+      await ensureFy26DoubleEntry();
 
       return NextResponse.json({
         success: true,

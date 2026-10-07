@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { updateLedgerEntry } from "@/lib/accounting/store";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 import { tryAllocateLedgerDepositToInvoice } from "@/lib/accounting/invoices";
+import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
       if (updated.reconciled && (Number(updated.amount) || 0) > 0) {
         allocatedInvoice = await tryAllocateLedgerDepositToInvoice(updated);
       }
+      await ensureFy26DoubleEntry();
       return NextResponse.json({
         success: true,
         entry: allocatedInvoice ? null : updated,

@@ -42,7 +42,11 @@ export async function attachInboxReceiptsToBankImportEntries(
         ledgerEntryIds: r.ledgerEntryIds,
       };
     }),
-    importEntries,
+    importEntries.map((entry) => ({
+      ...entry,
+      amount:
+        entry.displayAmount != null ? Number(entry.displayAmount) : entry.amount,
+    })),
     approvedAliasBankTermsFrom(merchants)
   );
   if (matches.length === 0) return savedEntries;

@@ -81,9 +81,10 @@ function keywordAmountMatches(
 }
 
 /**
- * Oldest open invoice whose amount due matches and whose keyword is in the
- * bank text. No keyword → no auto-match (invoice number / customer name
- * are not enough).
+ * Oldest open invoice for this bank text.
+ * Exact amount due wins. Otherwise a single open invoice can take an
+ * instalment (the deposit is less than the amount still owed).
+ * No keyword → no auto-match. Two open instalment invoices stay unmatched.
  */
 export function findUniqueDepositInvoiceMatch(
   invoices: InvoiceMatchCandidate[],
@@ -99,14 +100,25 @@ export function findUniqueDepositInvoiceMatch(
     Array.from(opts.excludeInvoiceIds || []).map(String)
   );
   const haystack = String(opts.description || "");
-  const matches = sortInvoicesOldestFirst(
-    invoices.filter((inv) => {
-      if (excluded.has(inv.id)) return false;
-      if (!isOpenForAllocation(inv)) return false;
-      return keywordAmountMatches(inv, opts.amount, haystack);
+  const open = invoices.filter((inv) => {
+    if (excluded.has(inv.id)) return false;
+    return isOpenForAllocation(inv);
+  });
+  const exact = sortInvoicesOldestFirst(
+    open.filter((inv) => keywordAmountMatches(inv, opts.amount, haystack))
+  );
+  if (exact.length > 0) return exact[0];
+
+  // Instalment: one open invoice for this keyword, and the deposit is
+  // less than or equal to what is still owed. Two open invoices stay unmatched.
+  const partial = sortInvoicesOldestFirst(
+    open.filter((inv) => {
+      if (!keywordMatchesDescription(inv.matchKeyword, haystack)) return false;
+      return opts.amount <= (Number(inv.amountDue) || 0) + AMOUNT_TOLERANCE;
     })
   );
-  return matches[0] || null;
+  if (partial.length === 1) return partial[0];
+  return null;
 }
 
 /**

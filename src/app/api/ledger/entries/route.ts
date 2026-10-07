@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { readLedger, writeLedger } from "@/lib/accounting/store";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
-import { repairJournalEntries } from "@/lib/accounting/journalRepair";
+import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { attachInboxReceiptsToBankImportEntries } from "@/lib/accounting/matchInboxReceipts";
 
 export const runtime = "nodejs";
@@ -12,16 +11,13 @@ export async function GET(req: Request) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     try {
-      const entries = await readLedger();
-      const repaired = repairJournalEntries(entries);
-      if (repaired.changed) await writeLedger(repaired.entries);
-      const rows = repaired.changed ? repaired.entries : entries;
+      const entries = await ensureFy26DoubleEntry();
       try {
-        const withReceipts = await attachInboxReceiptsToBankImportEntries(rows);
+        const withReceipts = await attachInboxReceiptsToBankImportEntries(entries);
         return NextResponse.json(withReceipts);
       } catch (attachErr) {
         console.error("Receipt rematch failed:", attachErr);
-        return NextResponse.json(rows);
+        return NextResponse.json(entries);
       }
     } catch (err) {
       console.error("Entries API Error:", err);

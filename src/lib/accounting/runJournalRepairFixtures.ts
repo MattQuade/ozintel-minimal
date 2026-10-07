@@ -166,7 +166,7 @@ eq(
   "3565/04"
 );
 
-eq("collapsed count", repaired.entries.length, 1);
+eq("invoice journal kept beside the bank line", repaired.entries.length, 4);
 eq("kept bank line", repaired.entries[0]?.id, "bank");
 
 const split = repairJournalEntries([

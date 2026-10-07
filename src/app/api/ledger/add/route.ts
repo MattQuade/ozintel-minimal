@@ -3,6 +3,7 @@ import { appendLedgerEntries } from "@/lib/accounting/store";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 import { attachInboxReceiptsToBankImportEntries } from "@/lib/accounting/matchInboxReceipts";
 import { tryAllocateLedgerDepositToInvoice } from "@/lib/accounting/invoices";
+import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -66,6 +67,8 @@ export async function POST(req: Request) {
             ? ` (${allocatedInvoices.length} invoice payment(s) auto-allocated)`
             : "")
       );
+
+      await ensureFy26DoubleEntry();
 
       return NextResponse.json({
         success: true,

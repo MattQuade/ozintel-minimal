@@ -1,4 +1,5 @@
 import type { CoaAccount, LedgerEntry, BankAccount } from "@/lib/accounting/store";
+import { isJournalLeg } from "@/lib/accounting/doubleEntry";
 import {
   formatAuDate,
   formatAuDateRange,
@@ -303,9 +304,10 @@ export function buildBalanceSheet(
     const name = resolveAccountName(entry, coaByCode);
 
     if (type === "Asset" && !bankName) {
-      bump(assetMap, code, name, abs);
+      bump(assetMap, code, name, isJournalLeg(entry) ? signed : abs);
     } else if (type === "Liability") {
-      const delta = bankName ? -signed : abs;
+      const delta =
+        isJournalLeg(entry) && !bankName ? -signed : bankName ? -signed : abs;
       bump(liabilityMap, code, name, delta);
     } else if (type === "Equity") {
       const delta = bankName ? -signed : abs;

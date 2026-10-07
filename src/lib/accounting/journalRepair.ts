@@ -1,8 +1,11 @@
 /**
- * Bring already-imported journal lines into line with the single-entry bank journal.
- * GST on 0500 stays on that one line (gstAmount). It is not its own journal row.
+ * Account fixes for bank lines, then balanced journals from 1 July 2026.
+ * Invoice journals in that year are kept so a customer can pay in instalments.
+ * GST on a bank purchase or deposit is its own line once the journal is balanced.
  */
 
+import { DOUBLE_ENTRY_FROM, isJournalLeg } from "@/lib/accounting/doubleEntry";
+import { toIsoDateInput } from "@/lib/accounting/dates";
 import { round2 } from "@/lib/accounting/invoiceMath";
 import {
   BANK_TRANSFER_CODE,
@@ -184,6 +187,19 @@ function collapseSameDaySplits<T extends RepairEntry>(entries: T[]): {
 } {
   const groups = new Map<string, T[]>();
   for (const entry of entries) {
+    if (isJournalLeg(entry)) continue;
+    const source = String(entry.source || "");
+    if (
+      source === "invoice" ||
+      source === "invoice-payment" ||
+      source === "invoice-void" ||
+      source === "payroll" ||
+      source === "depreciation" ||
+      source === "asset-disposal" ||
+      source === "bank-journal"
+    ) {
+      continue;
+    }
     const key = `${String(entry.date || "").slice(0, 10)}|${textOf(entry)}`;
     const list = groups.get(key) || [];
     list.push(entry);
@@ -235,6 +251,7 @@ export function repairJournalEntries<T extends RepairEntry>(entries: T[]): {
     if (source === "invoice" || source === "invoice-payment" || source === "invoice-void") {
       return entry;
     }
+    if (isJournalLeg(entry)) return entry;
     const fix = accountFixForDescription(
       String(entry.description || ""),
       String(entry.accountCode || "")
@@ -282,6 +299,8 @@ export function repairJournalEntries<T extends RepairEntry>(entries: T[]): {
     const source = key.slice(0, key.indexOf("|"));
     const sample = group[0];
     const desc = String(sample?.description || "");
+    const sampleDay = toIsoDateInput(sample?.date);
+    if (sampleDay && sampleDay >= DOUBLE_ENTRY_FROM) continue;
     const otherIncome =
       isOtherIncomeCustomer(desc) ||
       group.some((line) => String(line.accountCode || "") === OTHER_INCOME_CODE);

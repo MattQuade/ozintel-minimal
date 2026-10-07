@@ -165,6 +165,9 @@ export function resolveTaxCode(
 }
 
 function usesAccountingSigns(entry: TaxableEntry): boolean {
+  if (String((entry as { journalRole?: string }).journalRole || "") === "account") {
+    return true;
+  }
   return ACCOUNTING_SOURCES.has(String(entry.source || ""));
 }
 

@@ -17,6 +17,11 @@ const INVOICE_JOURNAL_SOURCES = new Set([
   'invoice-void',
 ]);
 
+function bankAmount(tx: { amount: number; displayAmount?: number }) {
+  const shown = tx.displayAmount != null ? Number(tx.displayAmount) : Number(tx.amount);
+  return Math.abs(shown || 0);
+}
+
 function money(n: number) {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
@@ -38,6 +43,8 @@ type Transaction = {
   reconciled?: boolean;
   receiptIds?: string[];
   source?: string;
+  journalRole?: string;
+  displayAmount?: number;
 };
 
 type AtoTotals = {
@@ -108,6 +115,8 @@ export default function JournalPage() {
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
       if (INVOICE_JOURNAL_SOURCES.has(String(tx.source || ''))) return false;
+      const role = String((tx as { journalRole?: string }).journalRole || '');
+      if (role === 'bank' || role === 'gst') return false;
       if (reconFilter === 'open' && tx.reconciled) return false;
       if (reconFilter === 'done' && !tx.reconciled) return false;
       const period = JOURNAL_PERIODS.find((p) => p.id === activePeriod);
@@ -476,7 +485,7 @@ export default function JournalPage() {
                       {tx.accountName ? ` — ${tx.accountName}` : ''}
                     </td>
                     <td className="p-5 text-right font-medium">
-                      ${Math.abs(tx.amount).toFixed(2)}
+                      ${bankAmount(tx).toFixed(2)}
                     </td>
                     <td className="p-5 text-center">
                       <span
@@ -586,7 +595,8 @@ export default function JournalPage() {
                   <input
                     type="number"
                     step="0.01"
-                    value={Math.abs(editingTx.amount)}
+                    value={bankAmount(editingTx)}
+                    readOnly={Boolean(editingTx.journalRole)}
                     onChange={(e) =>
                       setEditingTx({
                         ...editingTx,
@@ -640,7 +650,7 @@ export default function JournalPage() {
                     );
                   }}
                   ledgerEntryId={editingTx.id}
-                  suggestAmount={Math.abs(Number(editingTx.amount) || 0)}
+                  suggestAmount={bankAmount(editingTx)}
                   suggestDate={editingTx.date}
                   label="Receipt evidence (ATO)"
                 />

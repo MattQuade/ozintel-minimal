@@ -129,6 +129,40 @@ function run(): Check[] {
   checks.push(eq("newer payment → newer invoice", paired.get("pay-new")?.id, "k2"));
   checks.push(eq("steven left unmatched", paired.size, 2));
 
+  const grong = inv("g1", {
+    number: "4400",
+    amountDue: 4400,
+    matchKeyword: "Grong",
+    customerName: "Grong Grong Hotel",
+    issueDate: "2026-08-01",
+  });
+  checks.push(
+    eq(
+      "instalment matches the one open invoice",
+      findUniqueDepositInvoiceMatch([grong], {
+        amount: 2000,
+        description: "GRONG GRONG HOTEL",
+      })?.id,
+      "g1"
+    )
+  );
+  const grongLater = inv("g2", {
+    number: "4401",
+    amountDue: 3000,
+    matchKeyword: "Grong",
+    issueDate: "2026-08-20",
+  });
+  checks.push(
+    eq(
+      "two open invoices do not take an instalment",
+      findUniqueDepositInvoiceMatch([grong, grongLater], {
+        amount: 2000,
+        description: "GRONG GRONG HOTEL",
+      })?.id,
+      undefined
+    )
+  );
+
   return checks;
 }
 
