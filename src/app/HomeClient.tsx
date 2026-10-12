@@ -1928,7 +1928,7 @@ export default function HomePage({
           Operations
         </a>
         <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.3rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Analysis
+          Intel
         </a>
       </div>
 

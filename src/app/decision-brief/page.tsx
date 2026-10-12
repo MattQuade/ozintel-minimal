@@ -79,7 +79,7 @@ type Store = {
 
 export default function DecisionBriefPage() {
   return (
-    <AccountingGate section="Analysis" backHref="/" backLabel="← Home">
+    <AccountingGate section="Intel" backHref="/" backLabel="← Home">
       <DecisionBriefClient />
     </AccountingGate>
   );
@@ -207,7 +207,7 @@ function DecisionBriefClient() {
       <a href="/" style={{ color: '#38bdf8', textDecoration: 'none' }}>
         ← Home
       </a>
-      <h1 style={{ color: '#a78bfa', margin: '16px 0 8px' }}>Analysis</h1>
+      <h1 style={{ color: '#a78bfa', margin: '16px 0 8px' }}>Intel</h1>
       <p style={{ color: '#94a3b8', maxWidth: 520, marginTop: 0 }}>
         Concise decision intel — not reports. Energy numbers pull from your
         Accounting silo; retailers and installers connect with your code.

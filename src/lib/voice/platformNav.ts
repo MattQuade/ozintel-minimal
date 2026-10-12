@@ -263,8 +263,9 @@ const RULES: NavRule[] = [
   },
   {
     href: "/decision-brief",
-    label: "Analysis",
+    label: "Intel",
     test: (t) =>
+      withOpen("intel").test(t) ||
       withOpen("analysis").test(t) ||
       withOpen("decision brief").test(t) ||
       withOpen("business intel(?:ligence)?").test(t) ||
