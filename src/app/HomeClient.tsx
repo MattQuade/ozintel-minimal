@@ -148,15 +148,17 @@ function alertStatusMessage(
   failed?: string | null,
   reason?: string | null
 ) {
-  if (alert === 'safe-ok') {
-    const n = sent || '1';
+  if (alert === 'safe-ok' || alert === 'emergency-ok') {
+    const n = Number(sent);
+    if (!Number.isFinite(n) || n < 1) {
+      return '❌ The alert was not sent.';
+    }
     const failNote = failed ? ` (${failed} failed)` : '';
-    return `✅ Safe arrival alert sent to ${n} contact${n === '1' ? '' : 's'}${failNote}.`;
-  }
-  if (alert === 'emergency-ok') {
-    const n = sent || '1';
-    const failNote = failed ? ` (${failed} failed)` : '';
-    return `🚨 Emergency alert sent to ${n} contact${n === '1' ? '' : 's'}${failNote}.`;
+    const noun = n === 1 ? 'contact' : 'contacts';
+    if (alert === 'emergency-ok') {
+      return `🚨 Emergency alert sent to ${n} ${noun}${failNote}.`;
+    }
+    return `✅ Safe arrival alert sent to ${n} ${noun}${failNote}.`;
   }
   if (alert === 'error') {
     return `❌ ${reason || 'Could not send alert.'}`;
@@ -1103,11 +1105,12 @@ export default function HomePage({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.success) {
+      const sentCount = Number(data.sent) || 0;
+      if (data.success && sentCount > 0) {
         setStatus(
           alertStatusMessage(
             'safe-ok',
-            String(data.sent || 1),
+            String(sentCount),
             data.failed ? String(data.failed) : null
           )
         );
@@ -1156,11 +1159,12 @@ export default function HomePage({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.success) {
+      const sentCount = Number(data.sent) || 0;
+      if (data.success && sentCount > 0) {
         setStatus(
           alertStatusMessage(
             'emergency-ok',
-            String(data.sent || 1),
+            String(sentCount),
             data.failed ? String(data.failed) : null
           )
         );

@@ -28,6 +28,10 @@ function takeAlertLock(
   return null;
 }
 
+function releaseAlertLock(email: string) {
+  recentAlerts.delete(email.trim().toLowerCase());
+}
+
 function readEmail(req: NextRequest): string {
   const raw = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!raw) return "";
@@ -242,29 +246,27 @@ export async function POST(req: NextRequest) {
 
     const lockedKind = takeAlertLock(user.email, alertType);
     if (lockedKind) {
-      const firstEmergency = lockedKind === "EMERGENCY";
+      const busy =
+        "A send is already in progress. Wait a few seconds, then try again if the text did not arrive.";
       if (html) {
         return NextResponse.redirect(
           publicHomeUrl(req, {
-            alert: firstEmergency ? "emergency-ok" : "safe-ok",
-            sent: "1",
+            alert: "error",
+            reason: busy,
           }),
           303
         );
       }
-      return NextResponse.json({
-        success: true,
-        sent: 0,
-        failed: 0,
-        duplicate: true,
-        kind: firstEmergency ? "emergency" : "safe",
-        alertType: lockedKind,
-      });
+      return NextResponse.json(
+        { success: false, error: busy, duplicate: true },
+        { status: 429 }
+      );
     }
 
     const contactsFile = await readAlertContacts(user.email);
     const contacts = contactsFile[listKey];
     if (!contacts.length) {
+      releaseAlertLock(user.email);
       if (html) {
         return NextResponse.redirect(
           publicHomeUrl(req, {
@@ -288,16 +290,21 @@ export async function POST(req: NextRequest) {
         await sendViaMessageMedia(contact.phone, message, 10000);
         results.push({ phone: contact.phone, ok: true });
       } catch (err) {
+        const error = err instanceof Error ? err.message : "send failed";
+        console.error("[alert SMS failed]", contact.phone, error);
         results.push({
           phone: contact.phone,
           ok: false,
-          error: err instanceof Error ? err.message : "send failed",
+          error,
         });
       }
     }
 
     const sent = results.filter((r) => r.ok).length;
     const failed = results.length - sent;
+    if (sent === 0) releaseAlertLock(user.email);
+    const sendError =
+      results.find((row) => !row.ok)?.error || "SMS send failed — try again";
 
     // Update lastAlert / smsCount when at least one SMS was accepted.
     if (sent > 0) {
@@ -323,7 +330,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.redirect(
           publicHomeUrl(req, {
             alert: "error",
-            reason: "SMS send failed — try again",
+            reason: sendError.slice(0, 180),
           }),
           303
         );
@@ -338,13 +345,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: sent > 0,
-      sent,
-      failed,
-      results,
-      message,
-    });
+    return NextResponse.json(
+      {
+        success: sent > 0,
+        sent,
+        failed,
+        results,
+        message,
+        ...(sent > 0 ? {} : { error: sendError }),
+      },
+      { status: sent > 0 ? 200 : 502 }
+    );
   } catch (error) {
     console.error(error);
     if (html) {

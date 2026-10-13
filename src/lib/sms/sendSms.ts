@@ -7,6 +7,24 @@ export type SendSmsResult = { ok: true; mocked: boolean };
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
+/** MessageMedia can return HTTP 202 while the message itself is rejected. */
+const ACCEPTED_STATUSES = new Set([
+  "queued",
+  "enroute",
+  "submitted",
+  "sent",
+  "delivered",
+  "processed",
+]);
+
+function toSendNumber(phone: string): string {
+  const compact = phone.trim().replace(/[\s()-]/g, "");
+  if (compact.startsWith("+")) return compact;
+  if (compact.startsWith("0")) return `+61${compact.slice(1)}`;
+  if (compact.startsWith("61")) return `+${compact}`;
+  return compact;
+}
+
 export async function sendViaMessageMedia(
   phone: string,
   message: string,
@@ -14,8 +32,8 @@ export async function sendViaMessageMedia(
 ): Promise<SendSmsResult> {
   const mode = process.env.SMS_MODE || "mock";
   if (mode === "mock") {
-    console.log("[SMS mock]", phone, message.slice(0, 80));
-    return { ok: true, mocked: true };
+    console.error("[SMS mock] message was not sent", phone);
+    throw new Error("SMS test mode is on, so the message was not sent.");
   }
 
   const apiKey = process.env.MESSAGEMEDIA_API_KEY;
@@ -40,7 +58,7 @@ export async function sendViaMessageMedia(
         messages: [
           {
             content: message,
-            destination_number: phone,
+            destination_number: toSendNumber(phone),
             format: "SMS",
           },
         ],
@@ -48,9 +66,28 @@ export async function sendViaMessageMedia(
       signal: controller.signal,
     });
 
+    const text = await res.text();
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`MessageMedia failed: ${res.status} ${text}`);
+      throw new Error(`MessageMedia failed: ${res.status} ${text.slice(0, 300)}`);
+    }
+    let payload: { messages?: Array<{ status?: string }> } = {};
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      payload = {};
+    }
+    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+    if (messages.length === 0) {
+      throw new Error("MessageMedia returned no message.");
+    }
+    const rejected = messages.filter(
+      (item) => !ACCEPTED_STATUSES.has(String(item.status || "").toLowerCase())
+    );
+    if (rejected.length > 0) {
+      const status = rejected
+        .map((item) => item.status || "unknown")
+        .join(", ");
+      throw new Error(`MessageMedia rejected the message (${status}).`);
     }
     return { ok: true, mocked: false };
   } catch (err) {
