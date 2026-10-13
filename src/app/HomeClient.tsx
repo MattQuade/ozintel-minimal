@@ -207,7 +207,7 @@ export default function HomePage({
     )
   );
   const [smsCount, setSmsCount] = useState<number>(0);
-  const [isSendingAlert, setIsSendingAlert] = useState(false);
+  const [sendingKind, setSendingKind] = useState<'safe' | 'emergency' | null>(null);
   const cancelSendRef = useRef(false);
   const [signupBusy, setSignupBusy] = useState(false);
 
@@ -1005,10 +1005,10 @@ export default function HomePage({
     alertType: 'SAFE ARRIVAL' | 'EMERGENCY',
     successMessage: string
   ) => {
-    if (isSendingAlert) return;
+    if (sendingKind) return;
 
     cancelSendRef.current = false;
-    setIsSendingAlert(true);
+    setSendingKind(alertType === 'SAFE ARRIVAL' ? 'safe' : 'emergency');
 
     const label = alertType === 'SAFE ARRIVAL' ? 'Safe Arrival' : 'Emergency';
     setStatus(`Sending ${label} alert...`);
@@ -1022,7 +1022,7 @@ export default function HomePage({
     while (pending.length > 0) {
       if (cancelSendRef.current) {
         setStatus(`⏹ ${label} send cancelled. ${contacts.length - pending.length} of ${contacts.length} delivered.`);
-        setIsSendingAlert(false);
+        setSendingKind(null);
         return;
       }
 
@@ -1056,13 +1056,13 @@ export default function HomePage({
     }
 
     if (cancelSendRef.current) {
-      setIsSendingAlert(false);
+      setSendingKind(null);
       return;
     }
 
     setStatus(successMessage);
     await refreshCurrentUser();
-    setIsSendingAlert(false);
+    setSendingKind(null);
   };
 
   const cancelAlertSend = () => {
@@ -1074,7 +1074,7 @@ export default function HomePage({
     // If React is alive, enhance with a short location attempt then JSON POST.
     // If this handler never runs, the native form POST to /api/alerts still works.
     e?.preventDefault();
-    if (isSendingAlert) return;
+    if (sendingKind) return;
 
     if (!currentUser || currentUser.status !== 'approved') {
       setStatus('❌ Restore an approved account before sending alerts.');
@@ -1085,7 +1085,7 @@ export default function HomePage({
       return;
     }
 
-    setIsSendingAlert(true);
+    setSendingKind('safe');
     setStatus('Sending Safe Arrival alert...');
     try {
       const loc = await Promise.race([
@@ -1122,13 +1122,13 @@ export default function HomePage({
       console.error(err);
       setStatus('❌ Could not send safe alert. Try again.');
     } finally {
-      setIsSendingAlert(false);
+      setSendingKind(null);
     }
   };
 
   const sendEmergencyAlert = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
-    if (isSendingAlert) return;
+    if (sendingKind) return;
 
     if (!currentUser || currentUser.status !== 'approved') {
       setStatus('❌ Restore an approved account before sending alerts.');
@@ -1139,7 +1139,7 @@ export default function HomePage({
       return;
     }
 
-    setIsSendingAlert(true);
+    setSendingKind('emergency');
     setStatus('Sending Emergency alert...');
     try {
       const loc = await Promise.race([
@@ -1176,7 +1176,7 @@ export default function HomePage({
       console.error(err);
       setStatus('❌ Could not send emergency alert. Try again.');
     } finally {
-      setIsSendingAlert(false);
+      setSendingKind(null);
     }
   };
 
@@ -1501,23 +1501,24 @@ export default function HomePage({
         <input type="hidden" name="type" value="safe" />
         <button
           type="submit"
-          disabled={isSendingAlert}
+          disabled={sendingKind === 'safe'}
           style={{
             padding: '20px',
             fontSize: '1.3rem',
             border: 'none',
             borderRadius: '12px',
             width: '100%',
-            cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+            cursor: sendingKind === 'emergency' ? 'default' : 'pointer',
             background: '#22c55e',
             color: 'white',
             fontWeight: 'bold',
-            opacity: isSendingAlert ? 0.7 : 1,
+            opacity: sendingKind === 'safe' ? 0.85 : 1,
+            pointerEvents: sendingKind === 'emergency' ? 'none' : 'auto',
             WebkitTapHighlightColor: 'rgba(34, 197, 94, 0.35)',
             touchAction: 'manipulation',
           }}
         >
-          {isSendingAlert ? 'Sending…' : '✅ SAFE ARRIVAL'}
+          {sendingKind === 'safe' ? 'Sending…' : '✅ SAFE ARRIVAL'}
         </button>
       </form>
       <form
@@ -1529,26 +1530,27 @@ export default function HomePage({
         <input type="hidden" name="type" value="emergency" />
         <button
           type="submit"
-          disabled={isSendingAlert}
+          disabled={sendingKind === 'emergency'}
           style={{
             padding: '20px',
             fontSize: '1.3rem',
             border: 'none',
             borderRadius: '12px',
             width: '100%',
-            cursor: isSendingAlert ? 'not-allowed' : 'pointer',
+            cursor: sendingKind === 'safe' ? 'default' : 'pointer',
             background: '#ef4444',
             color: 'white',
             fontWeight: 'bold',
-            opacity: isSendingAlert ? 0.7 : 1,
+            opacity: sendingKind === 'emergency' ? 0.85 : 1,
+            pointerEvents: sendingKind === 'safe' ? 'none' : 'auto',
             WebkitTapHighlightColor: 'rgba(239, 68, 68, 0.35)',
             touchAction: 'manipulation',
           }}
         >
-          {isSendingAlert ? 'Sending…' : '🚨 SEND HELP'}
+          {sendingKind === 'emergency' ? 'Sending…' : '🚨 SEND HELP'}
         </button>
       </form>
-      {isSendingAlert && (
+      {sendingKind && (
         <button
           type="button"
           onClick={cancelAlertSend}
