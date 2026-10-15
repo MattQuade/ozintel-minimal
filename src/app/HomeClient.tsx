@@ -1205,7 +1205,7 @@ export default function HomePage({
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
       
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
-      <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Alert System</p>
+      <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Family & Business</p>
 
       {isAdminAuthenticated && currentUser && !emailsMatch(currentUser.email, ADMIN_SELF_EMAIL) && (
         <div style={{
