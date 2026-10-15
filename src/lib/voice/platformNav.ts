@@ -272,6 +272,14 @@ const RULES: NavRule[] = [
       withOpen("energy brief").test(t),
   },
   {
+    href: "/find-someone",
+    label: "Find Someone",
+    test: (t) =>
+      withOpen("find someone").test(t) ||
+      withOpen("find a person").test(t) ||
+      withOpen("look for someone").test(t),
+  },
+  {
     href: "/operations",
     label: "Operations",
     test: (t) => withOpen("operations?").test(t),

@@ -1936,6 +1936,9 @@ export default function HomePage({
         <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Intel
         </a>
+        <a href="/find-someone" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#0f766e', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
+          Find Someone
+        </a>
       </div>
 
       <div style={{ marginTop: '40px', paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))', display: 'flex', justifyContent: 'center' }}>

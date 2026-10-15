@@ -134,6 +134,26 @@ export function getDecisionBriefInstallersPath(): string {
   return path.join(getDecisionBriefGlobalDir(), "installers.json");
 }
 
+/**
+ * Find Someone — global cross-user store (not per-owner).
+ * Posts are anonymous in the UI; emails stay server-side only.
+ */
+export function getFindSomeoneDir(): string {
+  return path.join(getDataDir(), "find-someone");
+}
+
+export function getFindSomeonePostsPath(): string {
+  return path.join(getFindSomeoneDir(), "posts.json");
+}
+
+export function getFindSomeoneAnswersPath(): string {
+  return path.join(getFindSomeoneDir(), "answers.json");
+}
+
+export function getFindSomeoneMessagesPath(): string {
+  return path.join(getFindSomeoneDir(), "messages.json");
+}
+
 export function getLedgerFilePath(): string {
   return path.join(getAccountingDataDir(), "ledger.json");
 }
