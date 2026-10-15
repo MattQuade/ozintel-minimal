@@ -330,6 +330,7 @@ export default function PubOperationsPage() {
           margin: "0 auto 20px",
           textAlign: "left",
           fontFamily: "ui-monospace, monospace",
+          fontSize: "2rem",
         }}
       >
         {loading ? (
@@ -365,10 +366,10 @@ export default function PubOperationsPage() {
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "1.15rem", color: "#e2e8f0" }}>
+          <h2 style={{ margin: 0, fontSize: "2.3rem", color: "#e2e8f0" }}>
             This month (editable)
           </h2>
-          <label style={{ color: "#94a3b8", fontSize: "0.85rem" }}>
+          <label style={{ color: "#94a3b8", fontSize: "1.7rem" }}>
             Filter day{" "}
             <input
               type="date"
@@ -381,6 +382,7 @@ export default function PubOperationsPage() {
                 border: "1px solid #475569",
                 background: "#0f172a",
                 color: "white",
+                fontSize: "1.7rem",
               }}
             />
           </label>
@@ -423,8 +425,10 @@ export default function PubOperationsPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 600 }}>{formatDay(entry.date)}</div>
-                <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>
+                <div style={{ fontWeight: 600, fontSize: "2rem" }}>
+                  {formatDay(entry.date)}
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: "1.8rem" }}>
                   <span
                     style={{
                       color: entry.type === "in" ? "#4ade80" : "#f87171",
