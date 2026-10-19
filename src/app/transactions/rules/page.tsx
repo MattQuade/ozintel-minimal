@@ -48,6 +48,7 @@ export default function RulesManagement() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [newRule, setNewRule] = useState(emptyRule);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -253,6 +254,33 @@ export default function RulesManagement() {
     if (!b) return id;
     return b.accountNumber ? `${b.name} (${b.accountNumber})` : b.name;
   };
+
+  const visibleRules = [...rules]
+    .filter((rule) => {
+      const query = search.trim().toLowerCase();
+      if (!query) return true;
+      const accountName =
+        coa.find((account) => account.code === rule.accountCode)?.name ||
+        rule.accountName ||
+        '';
+      const haystack = [
+        rule.name,
+        rule.matchValue,
+        ...(rule.matchValues || []),
+        rule.descriptionOverride,
+        rule.accountCode,
+        accountName,
+        bankLabel(rule.bankAccountId),
+        rule.direction,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    })
+    .sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' })
+    );
 
   const inputClass =
     'w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 bg-white';
@@ -509,10 +537,22 @@ export default function RulesManagement() {
           </div>
         )}
 
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, match text, bank, or account…"
+          className="w-full mb-4 bg-white border border-gray-300 rounded-2xl px-5 py-3"
+        />
+
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b bg-gray-50">
             <h2 className="text-xl font-semibold">
-              Current Rules ({rules.length})
+              Current Rules (
+              {search.trim()
+                ? `${visibleRules.length} of ${rules.length}`
+                : rules.length}
+              )
               {saving ? ' · saving…' : ''}
             </h2>
           </div>
@@ -542,7 +582,16 @@ export default function RulesManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {rules.map((rule) => (
+                {visibleRules.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-8 text-center text-gray-500">
+                      {search.trim()
+                        ? `No rules match “${search.trim()}”.`
+                        : 'No bank rules yet.'}
+                    </td>
+                  </tr>
+                ) : (
+                  visibleRules.map((rule) => (
                   <tr key={rule.id} className="hover:bg-gray-50">
                     <td className="px-5 py-3 font-medium">{rule.name}</td>
                     <td className="px-5 py-3 text-gray-600">
@@ -583,7 +632,8 @@ export default function RulesManagement() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
