@@ -67,7 +67,6 @@ type Store = {
     quoteAud?: number;
     receivedAt: string;
   }>;
-  conflictEnergyNotes?: string;
   brief: {
     headline: string;
     bottomLine: string[];
@@ -91,6 +90,7 @@ function DecisionBriefClient() {
   const [schemes, setSchemes] = useState<SchemeEntry[]>([]);
   const [stackingAnswer, setStackingAnswer] = useState('');
   const [conflictNotes, setConflictNotes] = useState('');
+  const [canEditConflict, setCanEditConflict] = useState(false);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -104,7 +104,8 @@ function DecisionBriefClient() {
       throw new Error(data.error || 'Failed to load');
     }
     setStore(data.store);
-    setConflictNotes(String(data.store?.conflictEnergyNotes || ''));
+    setConflictNotes(String(data.conflictEnergyNotes || ''));
+    setCanEditConflict(Boolean(data.canEditConflictEnergy));
     if (Array.isArray(data.schemes)) setSchemes(data.schemes);
     if (typeof data.stackingAnswer === 'string') {
       setStackingAnswer(data.stackingAnswer);
@@ -164,7 +165,7 @@ function DecisionBriefClient() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Save failed');
       }
-      if (data.store) setStore(data.store);
+      setConflictNotes(String(data.conflictEnergyNotes ?? conflictNotes));
       setStatus('Conflict & Energy notes saved');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Failed');
@@ -494,37 +495,61 @@ function DecisionBriefClient() {
       <section style={{ ...card, marginTop: 16 }}>
         <h3 style={{ marginTop: 0, color: '#f87171' }}>Conflict &amp; Energy</h3>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginTop: 0 }}>
-          Narrative for users — context around conflict risk and energy
-          decisions.
+          {canEditConflict
+            ? 'Admin narrative for users — only you can edit. Comments are off for now.'
+            : 'Context around conflict risk and energy decisions.'}
         </p>
-        <textarea
-          value={conflictNotes}
-          onChange={(e) => setConflictNotes(e.target.value)}
-          rows={8}
-          placeholder="Add narrative notes here…"
-          style={{
-            display: 'block',
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: 12,
-            borderRadius: 8,
-            border: '1px solid #475569',
-            background: '#0f172a',
-            color: 'white',
-            fontSize: '1rem',
-            lineHeight: 1.45,
-            resize: 'vertical',
-            fontFamily: 'system-ui',
-          }}
-        />
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void saveConflictNotes()}
-          style={{ ...btn('#b91c1c', busy), marginTop: 10 }}
-        >
-          {busy ? 'Saving…' : 'Save notes'}
-        </button>
+        {canEditConflict ? (
+          <>
+            <textarea
+              value={conflictNotes}
+              onChange={(e) => setConflictNotes(e.target.value)}
+              rows={8}
+              placeholder="Add narrative notes here…"
+              style={{
+                display: 'block',
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: 12,
+                borderRadius: 8,
+                border: '1px solid #475569',
+                background: '#0f172a',
+                color: 'white',
+                fontSize: '1rem',
+                lineHeight: 1.45,
+                resize: 'vertical',
+                fontFamily: 'system-ui',
+              }}
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void saveConflictNotes()}
+              style={{ ...btn('#b91c1c', busy), marginTop: 10 }}
+            >
+              {busy ? 'Saving…' : 'Save notes'}
+            </button>
+          </>
+        ) : conflictNotes.trim() ? (
+          <div
+            style={{
+              whiteSpace: 'pre-wrap',
+              color: '#e2e8f0',
+              fontSize: '1rem',
+              lineHeight: 1.5,
+              background: '#0f172a',
+              borderRadius: 8,
+              padding: 12,
+              border: '1px solid #334155',
+            }}
+          >
+            {conflictNotes}
+          </div>
+        ) : (
+          <p style={{ color: '#64748b', marginBottom: 0 }}>
+            No notes published yet.
+          </p>
+        )}
       </section>
     </main>
   );

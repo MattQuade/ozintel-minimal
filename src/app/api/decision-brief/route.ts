@@ -3,6 +3,7 @@ import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
   ensureConnectCodePublished,
   pruneFailedSchemeUpdates,
+  readConflictEnergyNotes,
   readDecisionBriefStore,
   refreshEnergyFromAccounting,
   rotateConnectCode,
@@ -14,6 +15,7 @@ import {
   SCHEME_CATALOGUE,
   stackingAnswerForPubQuote,
 } from "@/lib/decisionBrief/schemes";
+import { isPlatformAdminEmail } from "@/lib/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,9 +34,12 @@ export async function GET(req: Request) {
       // Rebuild so stored briefs pick up AU date formatting (dd/mm/yyyy).
       store.brief = buildEnergyBrief(store);
       await writeDecisionBriefStore(store);
+      const conflictEnergyNotes = await readConflictEnergyNotes();
       return NextResponse.json({
         success: true,
         store,
+        conflictEnergyNotes,
+        canEditConflictEnergy: isPlatformAdminEmail(access.user.email),
         schemes: SCHEME_CATALOGUE,
         stackingAnswer: stackingAnswerForPubQuote(),
       });
@@ -76,10 +81,24 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, store });
       }
       if (action === "saveConflictEnergy") {
-        const store = await saveConflictEnergyNotes(
-          String(body.notes ?? body.conflictEnergyNotes ?? "")
-        );
-        return NextResponse.json({ success: true, store });
+        if (!isPlatformAdminEmail(access.user.email)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Only the platform admin can edit Conflict & Energy notes.",
+            },
+            { status: 403 }
+          );
+        }
+        const conflictEnergyNotes = await saveConflictEnergyNotes({
+          notes: String(body.notes ?? body.conflictEnergyNotes ?? ""),
+          actorEmail: access.user.email,
+        });
+        return NextResponse.json({
+          success: true,
+          conflictEnergyNotes,
+          canEditConflictEnergy: true,
+        });
       }
       return NextResponse.json(
         { success: false, error: "Unknown action" },
