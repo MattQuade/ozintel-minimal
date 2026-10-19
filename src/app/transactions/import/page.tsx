@@ -577,7 +577,7 @@ function BankImport() {
       backHref="/transactions"
       backLabel="← Back to Transactions"
     >
-      <div className="p-10 max-w-6xl mx-auto">
+      <div className="w-full px-6 py-8">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
           Upload → Classify (auto-saves matched rows + invoice keyword matches) →
@@ -690,7 +690,7 @@ function BankImport() {
                     <tr>
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Amount</th>
-                      <th className="px-4 py-3 text-left">Description</th>
+                      <th className="px-4 py-3 text-left min-w-[28rem] w-[28rem]">Description</th>
                       <th className="px-4 py-3 text-left">Rule</th>
                       <th className="px-4 py-3 text-left">Type</th>
                       <th className="px-4 py-3 text-left">Account</th>
@@ -731,7 +731,7 @@ function BankImport() {
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
                           <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
-                          <td className="px-4 py-3 max-w-xs truncate">
+                          <td className="px-4 py-3 min-w-[28rem] w-[28rem] whitespace-normal break-words align-top">
                             {String(row[2] || '—')}
                           </td>
                           <td className="px-4 py-3 text-gray-600">{ruleName}</td>
