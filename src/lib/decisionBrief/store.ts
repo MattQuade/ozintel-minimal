@@ -5,6 +5,7 @@
 import { promises as fs } from "fs";
 import { randomBytes } from "crypto";
 import {
+  getConflictEnergyNotesPath,
   getDecisionBriefDataDir,
   getDecisionBriefGlobalDir,
   getDecisionBriefInstallersPath,
@@ -14,6 +15,7 @@ import {
 import { getDataOwnerEmail } from "@/lib/dataOwnerContext";
 import { readLedger, type LedgerEntry } from "@/lib/accounting/store";
 import { formatAuDate } from "@/lib/decisionBrief/formatDate";
+import { isPlatformAdminEmail } from "@/lib/users";
 
 export type EnergyBand = "low" | "medium" | "high" | "unknown";
 
@@ -89,8 +91,6 @@ export type DecisionBriefStore = {
     notes?: string;
     receivedAt: string;
   }>;
-  /** Free-form Intel narrative under Recent scheme scans. */
-  conflictEnergyNotes: string;
   brief: {
     headline: string;
     bottomLine: string[];
@@ -128,7 +128,6 @@ function emptyStore(): DecisionBriefStore {
     installerConnections: [],
     retailerBills: [],
     installerQuotes: [],
-    conflictEnergyNotes: "",
     brief: null,
   };
 }
@@ -163,7 +162,6 @@ export async function readDecisionBriefStore(): Promise<DecisionBriefStore> {
       installerQuotes: Array.isArray(parsed.installerQuotes)
         ? parsed.installerQuotes
         : [],
-      conflictEnergyNotes: String(parsed.conflictEnergyNotes || ""),
       brief: parsed.brief || null,
       energy: parsed.energy || null,
     };
@@ -367,14 +365,47 @@ export async function rotateConnectCode(): Promise<string> {
   return store.connectCode;
 }
 
-/** Save free-form Conflict & Energy narrative shown in Intel. */
-export async function saveConflictEnergyNotes(
-  notes: string
-): Promise<DecisionBriefStore> {
-  const store = await readDecisionBriefStore();
-  store.conflictEnergyNotes = String(notes || "").slice(0, 20000);
-  await writeDecisionBriefStore(store);
-  return store;
+type ConflictEnergyFile = {
+  notes: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+/** Shared Conflict & Energy narrative — readable by all Intel users. */
+export async function readConflictEnergyNotes(): Promise<string> {
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(getConflictEnergyNotesPath(), "utf8");
+    const parsed = JSON.parse(raw || "{}") as Partial<ConflictEnergyFile>;
+    return String(parsed.notes || "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Admin-only write of the shared Conflict & Energy narrative.
+ * Users can read it; they cannot edit or comment for now.
+ */
+export async function saveConflictEnergyNotes(args: {
+  notes: string;
+  actorEmail: string;
+}): Promise<string> {
+  if (!isPlatformAdminEmail(args.actorEmail)) {
+    throw new Error("Only the platform admin can edit Conflict & Energy notes.");
+  }
+  await ensureDirs();
+  const payload: ConflictEnergyFile = {
+    notes: String(args.notes || "").slice(0, 20000),
+    updatedAt: new Date().toISOString(),
+    updatedBy: String(args.actorEmail || "").trim().toLowerCase(),
+  };
+  await fs.writeFile(
+    getConflictEnergyNotesPath(),
+    JSON.stringify(payload, null, 2),
+    "utf8"
+  );
+  return payload.notes;
 }
 
 export async function readGlobalRetailers(): Promise<GlobalRetailer[]> {

@@ -313,7 +313,13 @@ export async function findUserForRestore(query: string) {
 
 const GARRY_EMAIL = "garry@ozintel.com.au";
 const GARRY_EMAIL_LEGACY = "gary@ozintel.com.au";
-const ADMIN_SELF_EMAIL = "mattquade2000@gmail.com";
+/** Platform owner — admin-only Intel notes, etc. */
+export const PLATFORM_ADMIN_EMAIL = "mattquade2000@gmail.com";
+const ADMIN_SELF_EMAIL = PLATFORM_ADMIN_EMAIL;
+
+export function isPlatformAdminEmail(email: string): boolean {
+  return String(email || "").trim().toLowerCase() === PLATFORM_ADMIN_EMAIL;
+}
 
 function ownerDirSegment(email: string) {
   return String(email || "")

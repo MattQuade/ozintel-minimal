@@ -134,6 +134,11 @@ export function getDecisionBriefInstallersPath(): string {
   return path.join(getDecisionBriefGlobalDir(), "installers.json");
 }
 
+/** Shared Intel Conflict & Energy narrative (admin-authored, all users read). */
+export function getConflictEnergyNotesPath(): string {
+  return path.join(getDecisionBriefGlobalDir(), "conflict-energy.json");
+}
+
 /**
  * Find Someone — global cross-user store (not per-owner).
  * Posts are anonymous in the UI; emails stay server-side only.
