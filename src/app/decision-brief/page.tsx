@@ -67,6 +67,7 @@ type Store = {
     quoteAud?: number;
     receivedAt: string;
   }>;
+  conflictEnergyNotes?: string;
   brief: {
     headline: string;
     bottomLine: string[];
@@ -89,6 +90,7 @@ function DecisionBriefClient() {
   const [store, setStore] = useState<Store | null>(null);
   const [schemes, setSchemes] = useState<SchemeEntry[]>([]);
   const [stackingAnswer, setStackingAnswer] = useState('');
+  const [conflictNotes, setConflictNotes] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -102,6 +104,7 @@ function DecisionBriefClient() {
       throw new Error(data.error || 'Failed to load');
     }
     setStore(data.store);
+    setConflictNotes(String(data.store?.conflictEnergyNotes || ''));
     if (Array.isArray(data.schemes)) setSchemes(data.schemes);
     if (typeof data.stackingAnswer === 'string') {
       setStackingAnswer(data.stackingAnswer);
@@ -137,6 +140,32 @@ function DecisionBriefClient() {
             ? 'New connect code ready — share with your retailer'
             : 'Done'
       );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveConflictNotes = async () => {
+    setBusy(true);
+    setStatus('');
+    try {
+      const res = await fetch('/api/decision-brief', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'saveConflictEnergy',
+          notes: conflictNotes,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Save failed');
+      }
+      if (data.store) setStore(data.store);
+      setStatus('Conflict & Energy notes saved');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Failed');
     } finally {
@@ -461,6 +490,42 @@ function DecisionBriefClient() {
           </ul>
         </section>
       ) : null}
+
+      <section style={{ ...card, marginTop: 16 }}>
+        <h3 style={{ marginTop: 0, color: '#f87171' }}>Conflict &amp; Energy</h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginTop: 0 }}>
+          Narrative for users — context around conflict risk and energy
+          decisions.
+        </p>
+        <textarea
+          value={conflictNotes}
+          onChange={(e) => setConflictNotes(e.target.value)}
+          rows={8}
+          placeholder="Add narrative notes here…"
+          style={{
+            display: 'block',
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: 12,
+            borderRadius: 8,
+            border: '1px solid #475569',
+            background: '#0f172a',
+            color: 'white',
+            fontSize: '1rem',
+            lineHeight: 1.45,
+            resize: 'vertical',
+            fontFamily: 'system-ui',
+          }}
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void saveConflictNotes()}
+          style={{ ...btn('#b91c1c', busy), marginTop: 10 }}
+        >
+          {busy ? 'Saving…' : 'Save notes'}
+        </button>
+      </section>
     </main>
   );
 }

@@ -6,6 +6,7 @@ import {
   readDecisionBriefStore,
   refreshEnergyFromAccounting,
   rotateConnectCode,
+  saveConflictEnergyNotes,
   writeDecisionBriefStore,
   buildEnergyBrief,
 } from "@/lib/decisionBrief/store";
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
 }
 
 /**
- * Body: { action: "refreshEnergy" | "rotateCode" | "rebuildBrief" }
+ * Body: { action: "refreshEnergy" | "rotateCode" | "rebuildBrief" | "saveConflictEnergy" }
  */
 export async function POST(req: Request) {
   const access = await requireAccountingAccess(req);
@@ -72,6 +73,12 @@ export async function POST(req: Request) {
         const store = await readDecisionBriefStore();
         store.brief = buildEnergyBrief(store);
         await writeDecisionBriefStore(store);
+        return NextResponse.json({ success: true, store });
+      }
+      if (action === "saveConflictEnergy") {
+        const store = await saveConflictEnergyNotes(
+          String(body.notes ?? body.conflictEnergyNotes ?? "")
+        );
         return NextResponse.json({ success: true, store });
       }
       return NextResponse.json(

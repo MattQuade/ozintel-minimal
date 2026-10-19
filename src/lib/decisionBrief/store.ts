@@ -89,6 +89,8 @@ export type DecisionBriefStore = {
     notes?: string;
     receivedAt: string;
   }>;
+  /** Free-form Intel narrative under Recent scheme scans. */
+  conflictEnergyNotes: string;
   brief: {
     headline: string;
     bottomLine: string[];
@@ -126,6 +128,7 @@ function emptyStore(): DecisionBriefStore {
     installerConnections: [],
     retailerBills: [],
     installerQuotes: [],
+    conflictEnergyNotes: "",
     brief: null,
   };
 }
@@ -160,6 +163,7 @@ export async function readDecisionBriefStore(): Promise<DecisionBriefStore> {
       installerQuotes: Array.isArray(parsed.installerQuotes)
         ? parsed.installerQuotes
         : [],
+      conflictEnergyNotes: String(parsed.conflictEnergyNotes || ""),
       brief: parsed.brief || null,
       energy: parsed.energy || null,
     };
@@ -361,6 +365,16 @@ export async function rotateConnectCode(): Promise<string> {
   store.connectCode = randomBytes(3).toString("hex").toUpperCase();
   await writeDecisionBriefStore(store);
   return store.connectCode;
+}
+
+/** Save free-form Conflict & Energy narrative shown in Intel. */
+export async function saveConflictEnergyNotes(
+  notes: string
+): Promise<DecisionBriefStore> {
+  const store = await readDecisionBriefStore();
+  store.conflictEnergyNotes = String(notes || "").slice(0, 20000);
+  await writeDecisionBriefStore(store);
+  return store;
 }
 
 export async function readGlobalRetailers(): Promise<GlobalRetailer[]> {
