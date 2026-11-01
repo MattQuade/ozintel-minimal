@@ -8,7 +8,7 @@ import {
  * Where user JSON and future module data are stored.
  *
  * Local dev: defaults to `<project>/data`
- * Render persistent disk: set OZINTEL_DATA_DIR=/var/data (or your mount path)
+ * Fly volume: set OZINTEL_DATA_DIR=/var/data (or your mount path)
  */
 export function getDataDir(): string {
   const configured = process.env.OZINTEL_DATA_DIR?.trim();
@@ -103,7 +103,7 @@ export function getForestryPhotosDir(): string {
 
 /**
  * Accounting data folder — siloed per owner.
- * Lives on OZINTEL_DATA_DIR when set (Render disk).
+ * Lives on OZINTEL_DATA_DIR when set (Fly volume).
  */
 export function getAccountingDataDir(): string {
   return path.join(getOwnerDataRoot(ownerOrThrow()), "accounting");

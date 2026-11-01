@@ -1,0 +1,31 @@
+# fly.toml app configuration file generated for ozintel-syd on 2026-11-01T18:34:55+11:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ozintel-syd'
+primary_region = 'syd'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  OZINTEL_DATA_DIR = '/var/data'
+
+[[mounts]]
+  source = 'ozintel_data'
+  destination = '/var/data'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024

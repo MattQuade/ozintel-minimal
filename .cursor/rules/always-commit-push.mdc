@@ -1,5 +1,5 @@
 ---
-description: Always commit and push to Render after completed updates
+description: Always commit and push so Fly deploys
 alwaysApply: true
 ---
 
@@ -8,6 +8,6 @@ alwaysApply: true
 After finishing user-requested updates or bug fixes in this repo:
 
 1. **Commit** the relevant changed files (focused commit; exclude secrets, local data dumps, `.cursor/` debug logs, `tsconfig.tsbuildinfo`, one-off classification scripts unless asked).
-2. **Push** to `origin` on the current branch so Render can deploy — do this as a matter of course, without waiting to be asked again.
+2. **Push** to `origin` on the current branch. GitHub `main` deploys to the Fly app `ozintel-syd` (Sydney, `ozintel.com.au`). Do this as a matter of course, without waiting to be asked again.
 3. Only skip commit/push if the user explicitly says not to deploy, or if there is nothing to commit.
-4. After push, briefly tell the user deploy is in progress / what to check once Render finishes.
+4. After push, briefly tell the user the Fly deploy is in progress and what to check on `ozintel.com.au` once it finishes. If the GitHub Action cannot deploy, run `flyctl deploy --remote-only --ha=false` from this repo.

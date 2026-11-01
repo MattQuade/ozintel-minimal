@@ -39,7 +39,7 @@ function createTransport() {
   const pass = String(process.env.SMTP_PASSWORD || "").trim();
   if (!pass) {
     throw new Error(
-      "SMTP is not configured — set SMTP_PASSWORD in Render (VentraIP mailbox password for admin@ozintel.com.au)"
+      "SMTP is not configured — set SMTP_PASSWORD on Fly (VentraIP mailbox password for admin@ozintel.com.au)"
     );
   }
   const secure =
