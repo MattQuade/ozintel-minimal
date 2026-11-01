@@ -708,7 +708,7 @@ function BankImport() {
       backHref="/transactions"
       backLabel="← Back to Transactions"
     >
-      <div className="p-10 max-w-6xl mx-auto">
+      <div className="w-full px-4 py-8">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
           Upload → store the whole statement in one batch → code the lines →
@@ -721,7 +721,7 @@ function BankImport() {
           </div>
         )}
 
-        <div className="bg-white rounded-3xl shadow-xl p-10">
+        <div className="bg-white rounded-3xl shadow-xl px-4 py-8">
           <div className="mb-8">
             <label className="block text-sm font-medium mb-2">
               Import to which Bank Account?
@@ -815,13 +815,13 @@ function BankImport() {
                 )}
               </div>
 
-              <div className="mt-10 overflow-x-auto max-h-[650px] border rounded-2xl">
+              <div className="mt-10 w-full overflow-x-auto max-h-[650px] border rounded-2xl">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Amount</th>
-                      <th className="px-4 py-3 text-left">Bank wording</th>
+                      <th className="px-4 py-3 text-left min-w-[40rem]">Bank wording</th>
                       <th className="px-4 py-3 text-left">Your note</th>
                       <th className="px-4 py-3 text-left">Business %</th>
                       <th className="px-4 py-3 text-left">Rule</th>
@@ -864,10 +864,8 @@ function BankImport() {
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
                           <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
-                          <td className="px-4 py-3 align-top w-[22rem] max-w-[22rem] whitespace-normal break-words leading-5">
-                            <span className="line-clamp-2" title={String(row[2] || '')}>
-                              {String(row[2] || '—')}
-                            </span>
+                          <td className="px-4 py-3 align-top min-w-[40rem] whitespace-normal break-words leading-5">
+                            {String(row[2] || '—')}
                           </td>
                           <td className="px-4 py-3 min-w-[160px]">
                             <input
