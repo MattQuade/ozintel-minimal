@@ -917,7 +917,7 @@ function BankImport() {
                                 });
                               }}
                               placeholder="100"
-                              className="border rounded px-1 py-1 text-sm w-10"
+                              className="border rounded px-1 py-1 text-sm w-[3.25rem]"
                             />
                             {item.businessPercent != null &&
                             Number(item.businessPercent) >= 1 &&
