@@ -138,12 +138,12 @@ function run(): Check[] {
   });
   checks.push(
     eq(
-      "instalment matches the one open invoice",
+      "a smaller deposit is not an automatic payment",
       findUniqueDepositInvoiceMatch([grong], {
         amount: 2000,
         description: "GRONG GRONG HOTEL",
       })?.id,
-      "g1"
+      undefined
     )
   );
   const grongLater = inv("g2", {

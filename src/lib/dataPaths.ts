@@ -188,6 +188,16 @@ export function getInvoicesFilePath(): string {
   return path.join(getAccountingDataDir(), "invoices.json");
 }
 
+/** Bank statement lines waiting to be committed to the journal. */
+export function getImportBatchFilePath(): string {
+  return path.join(getAccountingDataDir(), "import-batch.json");
+}
+
+/** Products and services that can be dropped onto an invoice. */
+export function getInvoiceItemsFilePath(): string {
+  return path.join(getAccountingDataDir(), "invoice-items.json");
+}
+
 export function getEmployeesFilePath(): string {
   return path.join(getAccountingDataDir(), "employees.json");
 }

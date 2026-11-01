@@ -81,10 +81,8 @@ function keywordAmountMatches(
 }
 
 /**
- * Oldest open invoice for this bank text.
- * Exact amount due wins. Otherwise a single open invoice can take an
- * instalment (the deposit is less than the amount still owed).
- * No keyword → no auto-match. Two open instalment invoices stay unmatched.
+ * Oldest open invoice whose keyword is in the bank text and whose amount
+ * due equals the deposit. A smaller deposit is left for the partial-payments list.
  */
 export function findUniqueDepositInvoiceMatch(
   invoices: InvoiceMatchCandidate[],
@@ -107,18 +105,7 @@ export function findUniqueDepositInvoiceMatch(
   const exact = sortInvoicesOldestFirst(
     open.filter((inv) => keywordAmountMatches(inv, opts.amount, haystack))
   );
-  if (exact.length > 0) return exact[0];
-
-  // Instalment: one open invoice for this keyword, and the deposit is
-  // less than or equal to what is still owed. Two open invoices stay unmatched.
-  const partial = sortInvoicesOldestFirst(
-    open.filter((inv) => {
-      if (!keywordMatchesDescription(inv.matchKeyword, haystack)) return false;
-      return opts.amount <= (Number(inv.amountDue) || 0) + AMOUNT_TOLERANCE;
-    })
-  );
-  if (partial.length === 1) return partial[0];
-  return null;
+  return exact[0] || null;
 }
 
 /**

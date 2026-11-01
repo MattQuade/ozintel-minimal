@@ -109,7 +109,7 @@ function InvoicesContent() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Invoices</h1>
           <p className="text-slate-500 mt-1">
-            AR invoicing — bank deposits mark invoices paid when they uniquely match
+            A deposit marks an invoice paid when the bank keyword and the amount both match.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -118,6 +118,18 @@ function InvoicesContent() {
             className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 rounded-xl text-sm"
           >
             Customers
+          </Link>
+          <Link
+            href="/invoices/items"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 rounded-xl text-sm"
+          >
+            Items
+          </Link>
+          <Link
+            href="/invoices/partial-payments"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium px-4 py-2 rounded-xl text-sm"
+          >
+            Partial payments
           </Link>
           <Link
             href="/invoices/new"

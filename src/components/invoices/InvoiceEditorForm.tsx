@@ -29,6 +29,17 @@ type LineDraft = {
   unitPrice: string;
   accountCode: string;
   hasGST: boolean;
+  itemId?: string;
+};
+
+type CatalogItem = {
+  id: string;
+  name: string;
+  unitPrice: number;
+  accountCode: string;
+  hasGST: boolean;
+  tracked: boolean;
+  quantityOnHand: number;
 };
 
 function money(n: number) {
@@ -64,6 +75,8 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
   const isEdit = Boolean(invoiceId);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [coa, setCoa] = useState<CoaOption[]>([]);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [catalogId, setCatalogId] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [issueDate, setIssueDate] = useState(
     new Date().toISOString().slice(0, 10)
@@ -104,6 +117,10 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         const all = Array.isArray(d) ? d : [];
         setCoa(all.filter((a: CoaOption) => a.type === 'Revenue'));
       })
+      .catch(() => {});
+    fetch('/api/invoice-items')
+      .then((r) => r.json())
+      .then((d) => setCatalog(Array.isArray(d.items) ? d.items : []))
       .catch(() => {});
   }, []);
 
@@ -160,6 +177,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
                 ),
                 accountCode: String(l.accountCode || DEFAULT_INVOICE_REVENUE_CODE),
                 hasGST: l.hasGST !== false,
+                itemId: String((l as { itemId?: string }).itemId || '') || undefined,
               })
             )
           : [];
@@ -268,6 +286,7 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
             unitPrice: parseDraftNumber(l.unitPrice),
             accountCode: l.accountCode,
             hasGST: l.hasGST,
+            ...(l.itemId ? { itemId: l.itemId } : {}),
           })),
       };
       if (invoiceId) {
@@ -406,7 +425,37 @@ export default function InvoiceEditorForm({ invoiceId }: Props) {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold">Line items</h2>
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
+              <select
+                value={catalogId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setCatalogId('');
+                  const item = catalog.find((entry) => entry.id === id);
+                  if (!item) return;
+                  setLines((prev) => [
+                    ...prev,
+                    {
+                      id: String(Date.now()),
+                      description: item.name,
+                      quantity: '1',
+                      unitPrice: String(item.unitPrice),
+                      accountCode: item.accountCode || defaultInvoiceRevenueCode(revenueAccounts),
+                      hasGST: item.hasGST !== false,
+                      itemId: item.id,
+                    },
+                  ]);
+                }}
+                className="border border-slate-300 rounded-lg px-2 py-1 text-sm max-w-[220px]"
+              >
+                <option value="">Add from items</option>
+                {catalog.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                    {item.tracked ? ` · ${item.quantityOnHand} on hand` : ''}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="text-sm text-slate-600 hover:underline"

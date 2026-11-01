@@ -75,6 +75,11 @@ export type BankRule = {
   type: string;
   autoReconcile?: boolean;
   noGST?: boolean;
+  /** 1–99. The rest of the bank amount posts to personalAccountCode with no GST. */
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
 };
 
 export type BankAccount = {

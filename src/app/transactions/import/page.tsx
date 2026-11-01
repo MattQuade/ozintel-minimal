@@ -44,8 +44,53 @@ type ClassifiedImportRow = {
   invoiceStatus?: string;
   invoiceAllocated?: boolean;
   invoiceAutoMatched?: boolean;
+  batchId?: string;
+  userNote?: string;
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
   [key: string]: unknown;
 };
+
+function batchToRow(line: {
+  id: string;
+  date: string;
+  amount: number;
+  bankDescription: string;
+  userNote?: string;
+  type: string;
+  accountCode?: string;
+  accountName?: string;
+  noGST?: boolean;
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceAutoMatched?: boolean;
+  receiptIds?: string[];
+}): ClassifiedImportRow {
+  return {
+    batchId: line.id,
+    original: [line.date, line.amount, line.bankDescription],
+    type: line.type || 'Uncategorized',
+    accountCode: line.accountCode || '',
+    accountName: line.accountName || '',
+    noGST: Boolean(line.noGST),
+    userNote: line.userNote || '',
+    businessPercent: line.businessPercent ?? null,
+    personalAccountCode: line.personalAccountCode || '',
+    personalAccountName: line.personalAccountName || '',
+    personalAccountType: line.personalAccountType || '',
+    invoiceId: line.invoiceId,
+    invoiceNumber: line.invoiceNumber,
+    invoiceAutoMatched: Boolean(line.invoiceAutoMatched),
+    receiptIds: Array.isArray(line.receiptIds) ? line.receiptIds : [],
+    rule: line.invoiceAutoMatched ? 'Invoice auto-match' : 'Manual',
+  };
+}
 
 function money(n: number) {
   return new Intl.NumberFormat('en-AU', {
@@ -106,7 +151,54 @@ function BankImport() {
         setOpenInvoices(Array.isArray(invData.invoices) ? invData.invoices : []);
       })
       .catch(() => setStatus('Failed to load bank accounts / COA'));
+    fetch('/api/import-batch', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        const lines = Array.isArray(data.lines) ? data.lines : [];
+        setClassified(lines.map(batchToRow));
+      })
+      .catch(() => {});
   }, []);
+
+  const patchLine = async (
+    id: string | undefined,
+    patch: Record<string, unknown>
+  ) => {
+    if (!id) return;
+    await fetch('/api/import-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update', id, patch }),
+    });
+  };
+
+  const commitBatch = async () => {
+    setSaving(true);
+    setStatus('Committing coded lines to the journal…');
+    try {
+      const res = await fetch('/api/import-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'commit' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setStatus(data.error || 'Commit failed');
+        setLedgerSaved(false);
+        return;
+      }
+      const lines = Array.isArray(data.lines) ? data.lines : [];
+      setClassified(lines.map(batchToRow));
+      setSavedCount(Number(data.committed) || 0);
+      setLedgerSaved((Number(data.committed) || 0) > 0 && lines.length === 0);
+      setStatus(
+        `Committed ${Number(data.committed) || 0} line(s). ${lines.length} still in the batch.`
+      );
+      await loadOpenInvoices();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const accountsForType = (type: string) => {
     if (!type || type === 'Uncategorized') return coa;
@@ -162,7 +254,6 @@ function BankImport() {
     setFileName(file.name);
     setStatus('Parsing CSV...');
     setPreview([]);
-    setClassified([]);
     setSavedCount(0);
     setLedgerSaved(false);
 
@@ -438,16 +529,33 @@ function BankImport() {
         receiptIds: [] as string[],
       })) as ClassifiedImportRow[];
 
-      const withInvoices = applyInvoiceAutoMatch(results, invoices);
-      setClassified(withInvoices);
-      const matched = withInvoices.filter((r) => r.type !== 'Uncategorized').length;
-      const autoInv = withInvoices.filter((r) => r.invoiceAutoMatched).length;
+      const selectedBank = bankAccounts.find((acc) => acc.id === selectedAccount);
+      const added = await fetch('/api/import-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add',
+          bankAccountId: selectedAccount,
+          bankAccountName: selectedBank?.name || '',
+          quarter,
+          rows: preview,
+        }),
+      });
+      const data = await added.json().catch(() => ({}));
+      if (!added.ok || !data.success) {
+        setStatus(data.error || 'Could not store the batch');
+        return;
+      }
+      const lines = Array.isArray(data.lines) ? data.lines : [];
+      setClassified(lines.map(batchToRow));
+      setPreview([]);
+      const matched = results.filter((r) => r.type !== 'Uncategorized').length;
       setStatus(
-        `✅ ${matched} matched / ${results.length}` +
-          (autoInv ? ` (${autoInv} invoice auto-match)` : '') +
-          ' — saving…'
+        `Stored ${Number(data.added) || 0} line(s)` +
+          (Number(data.skipped) ? ` · ${data.skipped} already in the batch or the journal` : '') +
+          ` · ${matched} coded in this file. Nothing is in the journal until you commit.`
       );
-      await persistClassified(withInvoices);
+      setLedgerSaved(false);
     } catch (err) {
       console.error(err);
       setStatus('❌ Failed to load bank rules');
@@ -472,6 +580,14 @@ function BankImport() {
     };
     setClassified(updated);
     setLedgerSaved(false);
+    const next = updated[index];
+    void patchLine(current.batchId, {
+      type: next.type,
+      accountCode: next.accountCode || '',
+      accountName: next.accountName || '',
+      noGST: Boolean(next.noGST),
+      autoReconcile: false,
+    });
   };
 
   const updateAccount = (index: number, code: string) => {
@@ -489,6 +605,14 @@ function BankImport() {
     };
     setClassified(updated);
     setLedgerSaved(false);
+    const next = updated[index];
+    void patchLine(current.batchId, {
+      accountCode: next.accountCode || '',
+      accountName: next.accountName || '',
+      noGST: Boolean(next.noGST),
+      type: next.type,
+      autoReconcile: false,
+    });
   };
 
   const updateReceiptIds = (index: number, ids: string[]) => {
@@ -501,6 +625,7 @@ function BankImport() {
     if (!updated[index].ledgerEntryId) {
       setLedgerSaved(false);
     }
+    void patchLine(updated[index].batchId, { receiptIds: ids });
   };
 
   const setManualInvoiceLink = (index: number, invoiceId: string) => {
@@ -519,26 +644,32 @@ function BankImport() {
       };
       setClassified(updated);
       setLedgerSaved(false);
+      void patchLine(current.batchId, {
+        invoiceId: '',
+        invoiceNumber: '',
+        invoiceAutoMatched: false,
+      });
       return;
     }
 
     const inv = openInvoices.find((i) => i.id === invoiceId);
-    updated[index] = {
-      ...current,
-      invoiceId,
-      invoiceNumber: inv?.number,
-      invoiceStatus: inv?.status,
-      invoiceAutoMatched: false,
-      invoiceAllocated: false,
-      type: 'Revenue',
-      accountCode: '2101',
-      accountName: 'Accounts Receivable (invoice allocate)',
-      noGST: true,
-      rule: 'Invoice allocate',
+      updated[index] = {
+        ...current,
+        invoiceId,
+        invoiceNumber: inv?.number,
+        invoiceStatus: inv?.status,
+        invoiceAutoMatched: false,
+        invoiceAllocated: false,
+        rule: 'Invoice allocate',
+      };
+      setClassified(updated);
+      setLedgerSaved(false);
+      void patchLine(current.batchId, {
+        invoiceId,
+        invoiceNumber: inv?.number || '',
+        invoiceAutoMatched: false,
+      });
     };
-    setClassified(updated);
-    setLedgerSaved(false);
-  };
 
   const allocateNow = async (index: number) => {
     const item = classified[index];
@@ -577,11 +708,11 @@ function BankImport() {
       backHref="/transactions"
       backLabel="← Back to Transactions"
     >
-      <div className="w-full px-6 py-8">
+      <div className="p-10 max-w-6xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">📥 Bank Import & Reconciliation</h1>
         <p className="text-gray-600 mb-8">
-          Upload → Classify (auto-saves matched rows + invoice keyword matches) →
-          Attach receipts / allocate deposits to invoices → save updates
+          Upload → store the whole statement in one batch → code the lines →
+          Commit coded lines to the journal. Uncoded lines stay in the batch.
         </p>
         {windowFrom && windowTo && (
           <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-950">
@@ -639,7 +770,7 @@ function BankImport() {
               disabled={isProcessing || !selectedAccount}
               className="mt-8 w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-5 rounded-2xl text-xl font-semibold"
             >
-              {isProcessing ? 'Classifying & saving…' : `Classify ${preview.length} Transactions`}
+              {isProcessing ? 'Adding to the batch…' : `Add ${preview.length} lines to the batch`}
             </button>
           )}
 
@@ -675,11 +806,11 @@ function BankImport() {
                 ) : (
                   <button
                     type="button"
-                    disabled={saving}
-                    onClick={() => persistClassified(classified)}
+                    disabled={saving || classified.length === 0}
+                    onClick={() => void commitBatch()}
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white py-5 rounded-2xl text-xl font-semibold"
                   >
-                    {saving ? 'Saving…' : 'Save updates to Ledger'}
+                    {saving ? 'Committing…' : 'Commit coded lines to the journal'}
                   </button>
                 )}
               </div>
@@ -690,7 +821,9 @@ function BankImport() {
                     <tr>
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Amount</th>
-                      <th className="px-4 py-3 text-left min-w-[28rem] w-[28rem]">Description</th>
+                      <th className="px-4 py-3 text-left">Bank wording</th>
+                      <th className="px-4 py-3 text-left">Your note</th>
+                      <th className="px-4 py-3 text-left">Business %</th>
                       <th className="px-4 py-3 text-left">Rule</th>
                       <th className="px-4 py-3 text-left">Type</th>
                       <th className="px-4 py-3 text-left">Account</th>
@@ -731,8 +864,89 @@ function BankImport() {
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
                           <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
-                          <td className="px-4 py-3 min-w-[28rem] w-[28rem] whitespace-normal break-words align-top">
+                          <td className="px-4 py-3 max-w-xs truncate">
                             {String(row[2] || '—')}
+                          </td>
+                          <td className="px-4 py-3 min-w-[160px]">
+                            <input
+                              value={String(item.userNote || '')}
+                              onChange={(e) => {
+                                const updated = [...classified];
+                                updated[i] = { ...updated[i], userNote: e.target.value };
+                                setClassified(updated);
+                              }}
+                              onBlur={(e) =>
+                                void patchLine(item.batchId, { userNote: e.target.value })
+                              }
+                              placeholder="Your note"
+                              className="border rounded px-2 py-1 text-sm w-full"
+                            />
+                          </td>
+                          <td className="px-4 py-3 min-w-[180px]">
+                            <input
+                              type="number"
+                              min={1}
+                              max={99}
+                              value={
+                                item.businessPercent == null ? '' : String(item.businessPercent)
+                              }
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const updated = [...classified];
+                                updated[i] = {
+                                  ...updated[i],
+                                  businessPercent: raw === '' ? null : Number(raw),
+                                };
+                                setClassified(updated);
+                              }}
+                              onBlur={(e) => {
+                                const raw = e.target.value.trim();
+                                const percent = raw === '' ? null : Math.round(Number(raw));
+                                void patchLine(item.batchId, {
+                                  businessPercent:
+                                    percent != null && percent >= 1 && percent <= 99
+                                      ? percent
+                                      : null,
+                                  personalAccountCode: item.personalAccountCode || '',
+                                  personalAccountName: item.personalAccountName || '',
+                                  personalAccountType: item.personalAccountType || '',
+                                });
+                              }}
+                              placeholder="100"
+                              className="border rounded px-2 py-1 text-sm w-20"
+                            />
+                            {item.businessPercent != null &&
+                            Number(item.businessPercent) >= 1 &&
+                            Number(item.businessPercent) <= 99 ? (
+                              <select
+                                value={String(item.personalAccountCode || '')}
+                                onChange={(e) => {
+                                  const account = coa.find((a) => a.code === e.target.value);
+                                  const updated = [...classified];
+                                  updated[i] = {
+                                    ...updated[i],
+                                    personalAccountCode: e.target.value,
+                                    personalAccountName: account?.name || '',
+                                    personalAccountType: account?.type || '',
+                                  };
+                                  setClassified(updated);
+                                  void patchLine(item.batchId, {
+                                    businessPercent: item.businessPercent,
+                                    personalAccountCode: e.target.value,
+                                    personalAccountName: account?.name || '',
+                                    personalAccountType: account?.type || '',
+                                  });
+                                }}
+                                className="mt-1 border rounded px-2 py-1 text-xs w-full"
+                              >
+                                <option value="">Personal account</option>
+                                {coa.map((a) => (
+                                  <option key={a.code} value={a.code}>
+                                    {a.code} — {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
                           </td>
                           <td className="px-4 py-3 text-gray-600">{ruleName}</td>
                           <td className="px-4 py-3">
@@ -807,20 +1021,13 @@ function BankImport() {
                                         </option>
                                       ))}
                                     </select>
-                                    {item.invoiceId && (
-                                      <button
-                                        type="button"
-                                        disabled={allocatingIndex === i}
-                                        onClick={() => allocateNow(i)}
-                                        className="text-xs bg-sky-700 text-white rounded px-2 py-1 hover:bg-sky-800 disabled:opacity-50"
-                                      >
-                                        {allocatingIndex === i
-                                          ? 'Posting…'
-                                          : item.invoiceAutoMatched
-                                            ? 'Confirm auto-match'
-                                            : 'Apply payment'}
-                                      </button>
-                                    )}
+                                    {item.invoiceId ? (
+                                      <p className="text-xs text-sky-800">
+                                        {item.invoiceAutoMatched
+                                          ? 'Exact match. The invoice is marked paid when you commit.'
+                                          : 'Linked. It is marked paid on commit only if the amount still matches.'}
+                                      </p>
+                                    ) : null}
                                   </>
                                 )}
                               </div>

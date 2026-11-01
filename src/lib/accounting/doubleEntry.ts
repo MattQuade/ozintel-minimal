@@ -8,6 +8,7 @@
 
 import { round2 } from "@/lib/accounting/invoiceMath";
 import { toIsoDateInput } from "@/lib/accounting/dates";
+import { businessShare } from "@/lib/accounting/percentSplit";
 import type { BankAccount } from "@/lib/accounting/store";
 
 export const DOUBLE_ENTRY_FROM = "2026-07-01";
@@ -16,7 +17,7 @@ export const GST_ACCOUNT_NAME = "GST";
 export const AR_ACCOUNT_CODE = "2101";
 export const AR_ACCOUNT_NAME = "Accounts Receivable";
 
-export type JournalRole = "bank" | "gst" | "account" | "ar";
+export type JournalRole = "bank" | "gst" | "account" | "ar" | "personal";
 
 export type DoubleEntryLine = {
   id: string;
@@ -154,8 +155,19 @@ export function expandBankLine(
   const applied =
     gross > 0 ? round2(Math.min(grossAbs, Math.max(0, allocated))) : 0;
   const toReceivable = applied > 0.009 && Math.abs(applied - grossAbs) <= 0.02;
-  const gst = toReceivable ? 0 : gstOnGross(entry, grossAbs);
-  const netAbs = round2(grossAbs - gst);
+  const personalCode = String(entry.personalAccountCode || "").trim();
+  const split = toReceivable
+    ? null
+    : businessShare(grossAbs, Number(entry.businessPercent));
+  const useSplit = Boolean(split && personalCode);
+  const gstBase = useSplit && split ? split.business : grossAbs;
+  const gst = toReceivable
+    ? 0
+    : gstOnGross(
+        { ...entry, gstAmount: useSplit ? undefined : entry.gstAmount },
+        gstBase
+      );
+  const netAbs = round2(gstBase - gst);
   const journalRef = `DE-${entry.id}`;
   const bankCode = chartCodeForBank(bank);
   const bankAmount = gross;
@@ -181,6 +193,11 @@ export function expandBankLine(
     taxCode: "N-T",
     reconciled: entry.reconciled,
     timestamp: entry.timestamp,
+    userNote: entry.userNote,
+    importFingerprint: entry.importFingerprint,
+    businessPercent: useSplit ? entry.businessPercent : undefined,
+    personalAccountCode: useSplit ? personalCode : undefined,
+    personalAccountName: useSplit ? entry.personalAccountName : undefined,
   };
 
   const legs: DoubleEntryLine[] = [bankLeg];
@@ -204,6 +221,8 @@ export function expandBankLine(
       taxCode: "N-T",
       reconciled: entry.reconciled,
       timestamp: entry.timestamp,
+      userNote: entry.userNote,
+      importFingerprint: entry.importFingerprint,
     });
   }
 
@@ -247,7 +266,40 @@ export function expandBankLine(
     taxCode: gst > 0.004 ? String(entry.taxCode || "GST") : "N-T",
     gstExclusive: gst > 0.004,
     amountIncludesGst: false,
+    businessPercent: useSplit ? entry.businessPercent : undefined,
+    personalAccountCode: useSplit ? personalCode : undefined,
+    personalAccountName: useSplit ? entry.personalAccountName : undefined,
   });
+
+  if (useSplit && split) {
+    const personalAmount = gross < 0 ? split.personal : round2(-split.personal);
+    const personalName = String(entry.personalAccountName || "Personal");
+    legs.push({
+      id: `${entry.id}-personal`,
+      date: entry.date,
+      description: entry.description,
+      userNote: entry.userNote,
+      amount: personalAmount,
+      type: String(entry.personalAccountType || "Equity"),
+      accountCode: personalCode,
+      accountName: personalName,
+      account: `${personalCode} - ${personalName}`,
+      source: "bank-journal",
+      journalRef,
+      journalRole: "personal",
+      displayAmount: gross < 0 ? round2(-split.personal) : split.personal,
+      noGST: true,
+      hasGST: false,
+      gstAmount: 0,
+      taxCode: "N-T",
+      reconciled: entry.reconciled,
+      timestamp: entry.timestamp,
+      importFingerprint: entry.importFingerprint,
+      businessPercent: entry.businessPercent,
+      personalAccountCode: personalCode,
+      personalAccountName: personalName,
+    });
+  }
   return legs;
 }
 
@@ -328,6 +380,129 @@ export function applyDoubleEntry<T extends DoubleEntryLine>(
     for (const leg of legs) next.push(leg as T);
   }
   return { entries: next, changed, converted };
+}
+
+/**
+ * Set the business percentage on a journal line.
+ * An expanded bank journal is rebuilt so the personal share is its own line.
+ * A line that is not expanded yet only stores the percentage.
+ */
+export function rewriteJournalSplit<T extends DoubleEntryLine>(
+  entries: T[],
+  targetId: string,
+  patch: {
+    businessPercent?: number | null;
+    personalAccountCode?: string;
+    personalAccountName?: string;
+    personalAccountType?: string;
+    userNote?: string;
+  },
+  banks: BankAccount[]
+): { entries: T[]; changed: boolean; expanded: boolean } {
+  const target = entries.find((entry) => entry.id === targetId);
+  if (!target) return { entries, changed: false, expanded: false };
+  const ref = String(target.journalRef || "");
+  const group = ref.startsWith("DE-")
+    ? entries.filter((entry) => entry.journalRef === ref)
+    : [target];
+  const groupIds = new Set(group.map((entry) => entry.id));
+  const expanded = group.some((entry) => entry.journalRole);
+  const noteOnly =
+    patch.userNote !== undefined &&
+    patch.businessPercent === undefined &&
+    patch.personalAccountCode === undefined;
+
+  if (!expanded || noteOnly) {
+    const next = entries.map((entry) => {
+      if (!groupIds.has(entry.id)) return entry;
+      if (noteOnly) return { ...entry, userNote: patch.userNote };
+      if (entry.id !== target.id && expanded) return entry;
+      const percent = parseStoredPercent(patch.businessPercent);
+      return {
+        ...entry,
+        ...(patch.userNote !== undefined ? { userNote: patch.userNote } : {}),
+        businessPercent: percent ?? undefined,
+        personalAccountCode: percent
+          ? String(patch.personalAccountCode || "").trim() || undefined
+          : undefined,
+        personalAccountName: percent
+          ? String(patch.personalAccountName || "").trim() || undefined
+          : undefined,
+        personalAccountType: percent
+          ? String(patch.personalAccountType || "").trim() || undefined
+          : undefined,
+      };
+    });
+    return { entries: next, changed: true, expanded };
+  }
+
+  const account =
+    group.find((entry) => entry.journalRole === "account") ||
+    group.find((entry) => entry.journalRole === "ar");
+  if (!account || account.journalRole === "ar") {
+    return { entries, changed: false, expanded: true };
+  }
+  const bankLeg = group.find((entry) => entry.journalRole === "bank");
+  const gross = round2(
+    Number(bankLeg?.amount) || Number(account.displayAmount) || Number(account.amount) || 0
+  );
+  const percent = parseStoredPercent(patch.businessPercent);
+  const personalCode = percent
+    ? String(patch.personalAccountCode || account.personalAccountCode || "").trim()
+    : "";
+  const synthetic: DoubleEntryLine = {
+    ...account,
+    id: account.id,
+    amount: gross,
+    journalRole: undefined,
+    journalRef: undefined,
+    displayAmount: undefined,
+    gstAmount: undefined,
+    bankAccountId: bankLeg?.bankAccountId || account.bankAccountId,
+    bankAccountName: bankLeg?.bankAccountName || account.bankAccountName,
+    description: String(bankLeg?.description || account.description || ""),
+    userNote: patch.userNote !== undefined ? patch.userNote : account.userNote,
+    businessPercent: percent ?? undefined,
+    personalAccountCode: personalCode || undefined,
+    personalAccountName: percent
+      ? String(patch.personalAccountName || account.personalAccountName || "")
+      : undefined,
+    personalAccountType: percent
+      ? String(patch.personalAccountType || account.personalAccountType || "Equity")
+      : undefined,
+    importFingerprint: account.importFingerprint || bankLeg?.importFingerprint,
+  };
+  const legs = expandBankLine(synthetic, banks, 0);
+  if (!legs || !journalSumsToZero(legs)) {
+    return { entries, changed: false, expanded: true };
+  }
+  const rebuilt = legs.map((leg) => {
+    if (leg.journalRole === "account") {
+      return {
+        ...leg,
+        receiptIds: account.receiptIds,
+        userNote: synthetic.userNote,
+      };
+    }
+    return { ...leg, userNote: synthetic.userNote };
+  });
+  const next: T[] = [];
+  let inserted = false;
+  for (const entry of entries) {
+    if (!groupIds.has(entry.id)) {
+      next.push(entry);
+      continue;
+    }
+    if (!inserted) {
+      for (const leg of rebuilt) next.push(leg as unknown as T);
+      inserted = true;
+    }
+  }
+  return { entries: next, changed: true, expanded: true };
+}
+
+function parseStoredPercent(raw: number | null | undefined): number | null {
+  return businessShare(100, raw) ? Math.round(Number(raw)) : null;
 }
 
 /** Ids in the same balanced journal as any id being deleted. */

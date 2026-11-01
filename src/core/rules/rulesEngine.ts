@@ -28,6 +28,11 @@ export interface BankRule {
     | string;
   autoReconcile?: boolean;
   noGST?: boolean;
+  /** 1–99. The rest of the bank amount posts to personalAccountCode with no GST. */
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
 }
 
 /** Rules with no bankAccountId apply to every account; scoped rules only to their bank. */

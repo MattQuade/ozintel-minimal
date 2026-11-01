@@ -31,6 +31,7 @@ import {
   displayInvoiceNumber,
   titleCaseSubject,
 } from "@/lib/invoices/invoiceBrand";
+import { adjustItemQuantities } from "@/lib/accounting/invoiceItems";
 
 export type InvoiceStatus = "draft" | "authorised" | "paid" | "void";
 
@@ -43,6 +44,8 @@ export type InvoiceLine = {
   accountCode: string;
   accountName: string;
   hasGST: boolean;
+  /** Set when the line was added from the items list. */
+  itemId?: string;
 };
 
 export {
@@ -429,6 +432,7 @@ function normalizeLine(input: Partial<InvoiceLine>, index: number): InvoiceLine 
   const accountCode = String(input.accountCode || "").trim();
   if (!description) throw new Error(`Line ${index + 1}: description required`);
   if (!accountCode) throw new Error(`Line ${index + 1}: account required`);
+  const itemId = String(input.itemId || "").trim();
   return {
     id: String(input.id || `line-${Date.now()}-${index}`),
     description,
@@ -437,6 +441,7 @@ function normalizeLine(input: Partial<InvoiceLine>, index: number): InvoiceLine 
     accountCode,
     accountName: String(input.accountName || "").trim(),
     hasGST: input.hasGST !== false,
+    ...(itemId ? { itemId } : {}),
   };
 }
 
@@ -851,6 +856,7 @@ export async function authoriseInvoice(id: string): Promise<Invoice> {
     };
     invoices[idx] = next;
     await writeInvoicesUnlocked(invoices);
+    await adjustItemQuantities(inv.lines, -1);
     return next;
   });
 }
@@ -998,6 +1004,7 @@ export async function voidInvoice(id: string): Promise<Invoice> {
     };
     invoices[idx] = next;
     await writeInvoicesUnlocked(invoices);
+    await adjustItemQuantities(inv.lines, 1);
     return next;
   });
 }

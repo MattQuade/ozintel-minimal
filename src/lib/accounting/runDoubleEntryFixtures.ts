@@ -246,6 +246,33 @@ function run(): Check[] {
   checks.push(eq("retarget is receivable", moved.entries.find((line) => line.id === "pay")?.accountCode, "2101"));
   checks.push(eq("retarget still balances", journalSumsToZero(moved.entries), true));
 
+  const split = expandBankLine(
+    {
+      id: "fuel",
+      date: "2026-08-02",
+      description: "BPAY FUEL",
+      amount: -110,
+      type: "Expense",
+      accountCode: "449",
+      accountName: "Motor Vehicle",
+      bankAccountId: "2020",
+      source: "bank-import",
+      hasGST: true,
+      businessPercent: 70,
+      personalAccountCode: "880",
+      personalAccountName: "Drawings",
+      personalAccountType: "Equity",
+      userNote: "ute",
+    },
+    banks
+  );
+  checks.push(eq("split balances", split ? journalSumsToZero(split) : false, true));
+  checks.push(eq("split bank stays whole", split?.find((line) => line.journalRole === "bank")?.amount, -110));
+  checks.push(eq("split gst is on 70%", split?.find((line) => line.journalRole === "gst")?.amount, 7));
+  checks.push(eq("split business net", split?.find((line) => line.journalRole === "account")?.amount, 70));
+  checks.push(eq("split personal has no gst", split?.find((line) => line.journalRole === "personal")?.amount, 33));
+  checks.push(eq("split keeps the note", split?.find((line) => line.journalRole === "account")?.userNote, "ute"));
+
   return checks;
 }
 

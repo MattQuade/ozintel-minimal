@@ -18,6 +18,10 @@ interface BankRule {
   type: 'Revenue' | 'Expense' | 'Asset' | 'Liability' | 'Equity' | string;
   autoReconcile?: boolean;
   noGST?: boolean;
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
 }
 
 type CoaOption = { code: string; name: string; type: string; noGST?: boolean };
@@ -38,6 +42,10 @@ const emptyRule = {
   type: 'Expense' as const,
   autoReconcile: true,
   noGST: false,
+  businessPercent: '' as number | '' ,
+  personalAccountCode: '',
+  personalAccountName: '',
+  personalAccountType: '',
 };
 
 export default function RulesManagement() {
@@ -102,6 +110,10 @@ export default function RulesManagement() {
       type: (rule.type as typeof emptyRule.type) || 'Expense',
       autoReconcile: rule.autoReconcile !== false,
       noGST: Boolean(rule.noGST),
+      businessPercent: rule.businessPercent || '',
+      personalAccountCode: rule.personalAccountCode || '',
+      personalAccountName: rule.personalAccountName || '',
+      personalAccountType: rule.personalAccountType || '',
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -113,6 +125,14 @@ export default function RulesManagement() {
     }
     if (!newRule.accountCode) {
       return alert('Select a Chart of Accounts account');
+    }
+    const splitPercent =
+      newRule.businessPercent === '' ? null : Math.round(Number(newRule.businessPercent));
+    if (splitPercent != null && (splitPercent < 1 || splitPercent > 99)) {
+      return alert('Business percentage is from 1 to 99. Leave it blank for the whole amount.');
+    }
+    if (splitPercent != null && !newRule.personalAccountCode) {
+      return alert('Choose the personal account for the rest of the split');
     }
 
     const payload: Omit<BankRule, 'id'> = {
@@ -128,6 +148,13 @@ export default function RulesManagement() {
       type: newRule.type,
       autoReconcile: newRule.autoReconcile,
       noGST: newRule.noGST,
+      businessPercent:
+        newRule.businessPercent === ''
+          ? undefined
+          : Math.round(Number(newRule.businessPercent)),
+      personalAccountCode: newRule.personalAccountCode || undefined,
+      personalAccountName: newRule.personalAccountName || undefined,
+      personalAccountType: newRule.personalAccountType || undefined,
     };
 
     if (editingId != null) {
@@ -513,6 +540,60 @@ export default function RulesManagement() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mt-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Business %{' '}
+                  <span className="font-normal text-gray-500">
+                    (blank = whole amount)
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  placeholder="e.g. 70"
+                  value={newRule.businessPercent}
+                  onChange={(e) =>
+                    setNewRule({
+                      ...newRule,
+                      businessPercent:
+                        e.target.value === '' ? '' : Number(e.target.value),
+                    })
+                  }
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Personal account{' '}
+                  <span className="font-normal text-gray-500">
+                    (the rest, no GST)
+                  </span>
+                </label>
+                <select
+                  value={newRule.personalAccountCode}
+                  onChange={(e) => {
+                    const account = coa.find((a) => a.code === e.target.value);
+                    setNewRule({
+                      ...newRule,
+                      personalAccountCode: e.target.value,
+                      personalAccountName: account?.name || '',
+                      personalAccountType: account?.type || '',
+                    });
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">No split</option>
+                  {coa.map((a) => (
+                    <option key={a.code} value={a.code}>
+                      {a.code} — {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="flex gap-4 mt-8">
               <button
                 type="button"
@@ -611,6 +692,14 @@ export default function RulesManagement() {
                       {rule.accountCode} —{' '}
                       {coa.find((account) => account.code === rule.accountCode)?.name ||
                         rule.accountName}
+                      {rule.businessPercent ? (
+                        <div className="text-gray-500">
+                          {rule.businessPercent}% business
+                          {rule.personalAccountCode
+                            ? ` / rest ${rule.personalAccountCode}`
+                            : ''}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-5 py-3 text-gray-600">
                       {rule.noGST ? 'No GST' : 'Taxable'}

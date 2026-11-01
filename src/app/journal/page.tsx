@@ -76,6 +76,11 @@ type Transaction = {
   journalRole?: string;
   journalRef?: string;
   displayAmount?: number;
+  userNote?: string;
+  businessPercent?: number | null;
+  personalAccountCode?: string;
+  personalAccountName?: string;
+  personalAccountType?: string;
 };
 
 type AtoTotals = {
@@ -167,7 +172,9 @@ export default function JournalPage() {
         if (reconFilter === 'open' && primary.reconciled) return false;
         if (reconFilter === 'done' && !primary.reconciled) return false;
         if (!needle) return true;
-        return lines.some((line) => (line.description || '').toLowerCase().includes(needle));
+        return lines.some((line) =>
+          `${line.description || ''} ${line.userNote || ''}`.toLowerCase().includes(needle)
+        );
       })
       .sort((a, b) => {
         const da = parseFlexibleDate(a[0]?.date)?.getTime() || 0;
@@ -194,6 +201,21 @@ export default function JournalPage() {
       return;
     }
     loadTransactions();
+  };
+
+  const saveSplit = async (tx: Transaction, patch: Record<string, unknown>) => {
+    const res = await fetch('/api/ledger/split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: tx.id, ...patch }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      setNotice(data.error || 'Could not save that split');
+      return;
+    }
+    if (Array.isArray(data.entries)) setTransactions(data.entries);
+    else await loadTransactions();
   };
 
   const toggleReconciled = async (tx: Transaction) => {
@@ -527,6 +549,7 @@ export default function JournalPage() {
                   <th className="text-left p-5 font-medium">Date</th>
                   <th className="text-left p-5 font-medium">Description</th>
                   <th className="text-left p-5 font-medium">Account</th>
+                  <th className="text-left p-5 font-medium">Business %</th>
                   <th className="text-right p-5 font-medium">Debit</th>
                   <th className="text-right p-5 font-medium">Credit</th>
                   <th className="text-center p-5 font-medium">Receipt</th>
@@ -564,10 +587,97 @@ export default function JournalPage() {
                               Balanced
                             </span>
                           ) : null}
+                          {lead && (tx.journalRole || tx.source === 'bank-import') ? (
+                            <input
+                              defaultValue={tx.userNote || ''}
+                              key={`${tx.id}-${tx.userNote || ''}`}
+                              onBlur={(e) => {
+                                if (e.target.value === (tx.userNote || '')) return;
+                                void saveSplit(primary, { userNote: e.target.value });
+                              }}
+                              placeholder="Your note"
+                              className="mt-2 block w-full max-w-xs border rounded-lg px-2 py-1 text-sm"
+                            />
+                          ) : null}
                         </td>
                         <td className="p-5 text-sm font-mono">
                           {tx.accountCode || '—'}
                           {tx.accountName ? ` — ${tx.accountName}` : ''}
+                        </td>
+                        <td className="p-5">
+                          {lead && primary.journalRole !== 'ar' && (primary.journalRole || primary.source === 'bank-import') ? (
+                            <div className="min-w-[140px]">
+                              <input
+                                type="number"
+                                min={1}
+                                max={99}
+                                defaultValue={
+                                  primary.businessPercent == null
+                                    ? ''
+                                    : String(primary.businessPercent)
+                                }
+                                key={`${primary.id}-pct-${primary.businessPercent ?? ''}`}
+                                onBlur={(e) => {
+                                  const raw = e.target.value.trim();
+                                  const next = raw === '' ? null : Math.round(Number(raw));
+                                  const current = primary.businessPercent ?? null;
+                                  if ((next ?? null) === (current ?? null)) return;
+                                  if (next != null && (next < 1 || next > 99)) {
+                                    setNotice('Business percentage is from 1 to 99, or blank for the whole amount.');
+                                    return;
+                                  }
+                                  if (next != null && !primary.personalAccountCode) {
+                                    setTransactions((prev) =>
+                                      prev.map((line) =>
+                                        line.id === primary.id
+                                          ? { ...line, businessPercent: next }
+                                          : line
+                                      )
+                                    );
+                                    setNotice('Choose the personal account for the rest of the split.');
+                                    return;
+                                  }
+                                  void saveSplit(primary, {
+                                    businessPercent: next,
+                                    personalAccountCode: primary.personalAccountCode || '',
+                                    personalAccountName: primary.personalAccountName || '',
+                                    personalAccountType: primary.personalAccountType || '',
+                                  });
+                                }}
+                                placeholder="—"
+                                className="w-16 border rounded-lg px-2 py-1 text-sm"
+                              />
+                              <select
+                                value={primary.personalAccountCode || ''}
+                                onChange={(e) => {
+                                  const account = coa.find((a) => a.code === e.target.value);
+                                  const percent = primary.businessPercent;
+                                  if (percent == null || percent < 1 || percent > 99) {
+                                    setNotice('Enter a business percentage from 1 to 99 first.');
+                                    return;
+                                  }
+                                  if (!e.target.value) {
+                                    setNotice('Choose the personal account for the rest of the split.');
+                                    return;
+                                  }
+                                  void saveSplit(primary, {
+                                    businessPercent: percent,
+                                    personalAccountCode: e.target.value,
+                                    personalAccountName: account?.name || '',
+                                    personalAccountType: account?.type || '',
+                                  });
+                                }}
+                                className="mt-1 block w-full max-w-[180px] border rounded-lg px-1 py-1 text-xs"
+                              >
+                                <option value="">Personal account</option>
+                                {coa.map((a) => (
+                                  <option key={a.code} value={a.code}>
+                                    {a.code} — {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : null}
                         </td>
                         <td className="p-5 text-right font-medium">
                           {debit > 0.004 ? `$${debit.toFixed(2)}` : ''}
