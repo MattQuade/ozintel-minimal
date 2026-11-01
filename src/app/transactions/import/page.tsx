@@ -821,7 +821,7 @@ function BankImport() {
                     <tr>
                       <th className="px-4 py-3 text-left">Date</th>
                       <th className="px-4 py-3 text-left">Amount</th>
-                      <th className="px-4 py-3 text-left min-w-[40rem]">Bank wording</th>
+                      <th className="px-4 py-3 text-left w-[28rem]">Bank wording</th>
                       <th className="px-4 py-3 text-left">Your note</th>
                       <th className="px-4 py-3 text-left">Business %</th>
                       <th className="px-4 py-3 text-left">Rule</th>
@@ -864,8 +864,10 @@ function BankImport() {
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
                           <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
-                          <td className="px-4 py-3 align-top min-w-[40rem] whitespace-normal break-words leading-5">
-                            {String(row[2] || '—')}
+                          <td className="px-4 py-3 align-top w-[28rem] max-w-[28rem]">
+                            <div className="w-[28rem] max-w-[28rem] whitespace-normal break-words leading-5">
+                              {String(row[2] || '—')}
+                            </div>
                           </td>
                           <td className="px-4 py-3 min-w-[160px]">
                             <input
