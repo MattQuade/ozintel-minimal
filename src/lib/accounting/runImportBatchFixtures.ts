@@ -1,4 +1,4 @@
-import { bankLineFingerprint, takeNewBatchLines, linesReadyToCommit, type ImportBatchLine } from "@/lib/accounting/importBatch";
+import { bankLineFingerprint, clipUserNote, paymentClearedWithLedger, takeNewBatchLines, linesReadyToCommit, type ImportBatchLine } from "@/lib/accounting/importBatch";
 
 type Check = { name: string; ok: boolean; detail: string };
 
@@ -74,6 +74,54 @@ function run(): Check[] {
   });
   checks.push(eq("uncoded stays out of commit", linesReadyToCommit([uncoded, first]).length, 1));
   checks.push(eq("split without a personal account waits", linesReadyToCommit([split]).length, 0));
+  checks.push(eq("note stops at 50 characters", clipUserNote("a".repeat(60)).length, 50));
+  const anju = bankLineFingerprint({
+    bankAccountId: "3",
+    date: "2026-10-15",
+    amount: 412.57,
+    description: "PAYMENT FROM ANJU CHOUJAR 269-1510-26",
+  });
+  const note =
+    "Auto-allocated from bank deposit · bank-import:3|2026-10-15|412.57|PAYMENT FROM ANJU CHOUJAR 269-1510-26";
+  checks.push(
+    eq(
+      "deleted bank line clears the invoice payment",
+      paymentClearedWithLedger({
+        ledgerEntryIds: ["bank-269"],
+        note,
+        removedIds: new Set(["bank-269"]),
+        liveIds: new Set(),
+        liveFingerprints: new Set(),
+      }),
+      true
+    )
+  );
+  checks.push(
+    eq(
+      "a missing bank line clears the payment even without this delete",
+      paymentClearedWithLedger({
+        ledgerEntryIds: ["bank-269"],
+        note,
+        removedIds: new Set(),
+        liveIds: new Set(),
+        liveFingerprints: new Set(),
+      }),
+      true
+    )
+  );
+  checks.push(
+    eq(
+      "payment stays while its bank line is still in the journal",
+      paymentClearedWithLedger({
+        ledgerEntryIds: ["bank-269"],
+        note,
+        removedIds: new Set(),
+        liveIds: new Set(["bank-269"]),
+        liveFingerprints: new Set([anju]),
+      }),
+      false
+    )
+  );
   return checks;
 }
 

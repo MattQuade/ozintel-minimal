@@ -8,9 +8,14 @@ import {
   appendLedgerEntries,
   readBankAccounts,
   readCoa,
+  readLedger,
   replaceLedgerEntries,
   type LedgerEntry,
 } from "@/lib/accounting/store";
+import {
+  ledgerFingerprints,
+  paymentClearedWithLedger,
+} from "@/lib/accounting/importBatch";
 import { DEFAULT_INVOICE_REVENUE_CODE, invoiceReceiptBankId } from "@/lib/accounting/invoiceDefaults";
 import { getCustomerById, readCustomers } from "@/lib/accounting/customers";
 import {
@@ -1320,6 +1325,60 @@ export async function autoMatchDepositToInvoice(opts: {
 }
 
 export { amountsMatch, findUniqueDepositInvoiceMatch };
+
+/**
+ * Drop invoice payments whose bank or payment journal lines are no longer
+ * in the ledger. Deleting a period puts those invoices back to the amount due.
+ */
+export async function releasePaymentsClearedWithLedger(
+  removedIds: string[] = []
+): Promise<number> {
+  return withInvoicesLock(async () => {
+    const invoices = await readInvoicesUnlocked();
+    const ledger = await readLedger();
+    const removed = new Set(removedIds.map((id) => String(id || "").trim()).filter(Boolean));
+    const liveIds = new Set(ledger.map((entry) => String(entry.id || "")));
+    const liveFingerprints = ledgerFingerprints(ledger);
+    let cleared = 0;
+    let changed = false;
+    const next = invoices.map((inv) => {
+      if (inv.status === "void" || !inv.payments?.length) return inv;
+      const kept = inv.payments.filter(
+        (payment) =>
+          !paymentClearedWithLedger({
+            ledgerEntryIds: payment.ledgerEntryIds,
+            note: payment.note,
+            removedIds: removed,
+            liveIds,
+            liveFingerprints,
+          })
+      );
+      if (kept.length === inv.payments.length) return inv;
+      changed = true;
+      cleared += inv.payments.length - kept.length;
+      const amountPaid = round2(
+        kept.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0)
+      );
+      const amountDue = round2(Math.max(0, inv.total - amountPaid));
+      const status: InvoiceStatus =
+        amountDue <= 0.009
+          ? "paid"
+          : inv.status === "paid"
+            ? "authorised"
+            : inv.status;
+      return {
+        ...inv,
+        payments: kept,
+        amountPaid,
+        amountDue,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    if (changed) await writeInvoicesUnlocked(next);
+    return cleared;
+  });
+}
 
 function normalizeInvNumber(number: string): string {
   return displayInvoiceNumber(number).toLowerCase();

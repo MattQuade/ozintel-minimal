@@ -11,6 +11,7 @@ import {
 import {
   matchDepositsToInvoices,
   isDepositAmount,
+  isOpenForAllocation,
   type InvoiceMatchCandidate,
 } from "@/lib/accounting/invoiceDepositMatch";
 import {
@@ -45,6 +46,13 @@ export type ImportBatchLine = {
   addedAt: string;
 };
 
+export const USER_NOTE_MAX = 50;
+
+/** Notes are capped at 50 characters, spaces included. */
+export function clipUserNote(raw: unknown): string {
+  return String(raw ?? "").slice(0, USER_NOTE_MAX);
+}
+
 export function bankLineFingerprint(parts: {
   bankAccountId: string;
   date: string;
@@ -58,6 +66,88 @@ export function bankLineFingerprint(parts: {
   const date = toIsoDateInput(parts.date) || String(parts.date || "").trim();
   const amount = round2(Number(parts.amount) || 0).toFixed(2);
   return `${parts.bankAccountId}|${date}|${amount}|${desc}`;
+}
+
+/** Fingerprint stored on an invoice payment note as bank-import:… */
+export function bankImportFingerprintFromNote(note: string): string | null {
+  const marker = String(note || "").match(/bank-import:([^\n·]+)/i);
+  if (!marker) return null;
+  const parts = marker[1].trim().split("|");
+  if (parts.length < 4) return null;
+  const [bankAccountId, date, amount, ...desc] = parts;
+  return bankLineFingerprint({
+    bankAccountId,
+    date,
+    amount: Number(amount),
+    description: desc.join("|"),
+  });
+}
+
+/**
+ * An invoice payment is gone when the ledger lines it came from are gone.
+ * A deleted period must not leave the invoice marked paid.
+ */
+export function paymentClearedWithLedger(opts: {
+  ledgerEntryIds?: string[];
+  note?: string;
+  removedIds: Set<string>;
+  liveIds: Set<string>;
+  liveFingerprints: Set<string>;
+}): boolean {
+  const ids = (opts.ledgerEntryIds || [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  const surviving = ids.filter((id) => opts.liveIds.has(id));
+  if (surviving.length > 0) return false;
+  const fingerprint = bankImportFingerprintFromNote(String(opts.note || ""));
+  if (fingerprint && opts.liveFingerprints.has(fingerprint)) return false;
+  if (ids.some((id) => opts.removedIds.has(id))) return true;
+  if (ids.length > 0) return true;
+  if (fingerprint) return true;
+  return false;
+}
+
+/** Re-apply keyword + amount matching. A manual invoice link is left as the user set it. */
+export function applyOpenInvoiceMatches(
+  lines: ImportBatchLine[],
+  invoices: InvoiceMatchCandidate[]
+): ImportBatchLine[] {
+  const open = invoices.filter(isOpenForAllocation);
+  const auto = new Set<number>();
+  const deposits = lines.flatMap((line, index) => {
+    const manual = Boolean(line.invoiceId) && line.invoiceAutoMatched === false;
+    if (manual || !isDepositAmount(line.amount)) return [];
+    auto.add(index);
+    return [
+      {
+        key: String(index),
+        amount: line.amount,
+        description: line.bankDescription,
+        date: line.date,
+      },
+    ];
+  });
+  const matched = matchDepositsToInvoices(open, deposits);
+  return lines.map((line, index) => {
+    if (!auto.has(index)) return line;
+    const hit = matched.get(String(index));
+    const invoiceId = hit?.id || "";
+    const invoiceNumber = hit?.number || "";
+    const invoiceAutoMatched = Boolean(hit);
+    if (
+      (line.invoiceId || "") === invoiceId &&
+      (line.invoiceNumber || "") === invoiceNumber &&
+      Boolean(line.invoiceAutoMatched) === invoiceAutoMatched
+    ) {
+      return line;
+    }
+    return {
+      ...line,
+      invoiceId: invoiceId || undefined,
+      invoiceNumber: invoiceNumber || undefined,
+      invoiceAutoMatched,
+    };
+  });
 }
 
 export function ledgerFingerprints(
@@ -157,6 +247,17 @@ export async function readImportBatch(): Promise<ImportBatchLine[]> {
 
 export async function writeImportBatch(lines: ImportBatchLine[]) {
   await writeBatchFile(lines);
+}
+
+/** Point unlinked deposits at open invoices again after a period was cleared. */
+export async function syncImportBatchWithOpenInvoices(
+  invoices: InvoiceMatchCandidate[]
+): Promise<ImportBatchLine[]> {
+  const lines = await readBatchFile();
+  const next = applyOpenInvoiceMatches(lines, invoices);
+  const changed = next.some((line, index) => line !== lines[index]);
+  if (changed) await writeBatchFile(next);
+  return next;
 }
 
 export function buildBatchLines(opts: {
@@ -292,7 +393,7 @@ export async function updateImportBatchLine(
     ...current,
     ...patch,
     userNote:
-      patch.userNote !== undefined ? String(patch.userNote || "") : current.userNote,
+      patch.userNote !== undefined ? clipUserNote(patch.userNote) : current.userNote,
     businessPercent:
       patch.businessPercent !== undefined
         ? parseBusinessPercent(patch.businessPercent)

@@ -341,7 +341,7 @@ export default function JournalPage() {
       setTransactions((prev) => prev.filter((tx) => !deletedIds.has(tx.id)));
       setEditingTx(null);
       setNotice(
-        `Deleted ${data.deletedCount ?? ids.length} entries for ${selectedPeriod.label}. Reload the CSVs when you are ready.`
+        `Deleted ${data.deletedCount ?? ids.length} entries for ${selectedPeriod.label}. Invoice payments from those entries are cleared. Reload the CSVs when you are ready.`
       );
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to delete this period');
@@ -590,10 +590,12 @@ export default function JournalPage() {
                           {lead && (tx.journalRole || tx.source === 'bank-import') ? (
                             <input
                               defaultValue={tx.userNote || ''}
+                              maxLength={50}
                               key={`${tx.id}-${tx.userNote || ''}`}
                               onBlur={(e) => {
-                                if (e.target.value === (tx.userNote || '')) return;
-                                void saveSplit(primary, { userNote: e.target.value });
+                                const note = e.target.value.slice(0, 50);
+                                if (note === (tx.userNote || '')) return;
+                                void saveSplit(primary, { userNote: note });
                               }}
                               placeholder="Your note"
                               className="mt-2 block w-full max-w-xs border rounded-lg px-2 py-1 text-sm"

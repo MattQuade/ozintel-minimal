@@ -864,25 +864,31 @@ function BankImport() {
                             {formatAuDate(String(row[0] ?? ''))}
                           </td>
                           <td className="px-4 py-3 font-medium">{String(row[1] ?? '')}</td>
-                          <td className="px-4 py-3 max-w-xs truncate">
-                            {String(row[2] || '—')}
+                          <td className="px-4 py-3 align-top w-[22rem] max-w-[22rem] whitespace-normal break-words leading-5">
+                            <span className="line-clamp-2" title={String(row[2] || '')}>
+                              {String(row[2] || '—')}
+                            </span>
                           </td>
                           <td className="px-4 py-3 min-w-[160px]">
                             <input
                               value={String(item.userNote || '')}
+                              maxLength={50}
                               onChange={(e) => {
+                                const note = e.target.value.slice(0, 50);
                                 const updated = [...classified];
-                                updated[i] = { ...updated[i], userNote: e.target.value };
+                                updated[i] = { ...updated[i], userNote: note };
                                 setClassified(updated);
                               }}
                               onBlur={(e) =>
-                                void patchLine(item.batchId, { userNote: e.target.value })
+                                void patchLine(item.batchId, {
+                                  userNote: e.target.value.slice(0, 50),
+                                })
                               }
                               placeholder="Your note"
                               className="border rounded px-2 py-1 text-sm w-full"
                             />
                           </td>
-                          <td className="px-4 py-3 min-w-[180px]">
+                          <td className="px-2 py-3 w-[90px] max-w-[90px]">
                             <input
                               type="number"
                               min={1}
@@ -913,7 +919,7 @@ function BankImport() {
                                 });
                               }}
                               placeholder="100"
-                              className="border rounded px-2 py-1 text-sm w-20"
+                              className="border rounded px-1 py-1 text-sm w-10"
                             />
                             {item.businessPercent != null &&
                             Number(item.businessPercent) >= 1 &&
@@ -937,7 +943,7 @@ function BankImport() {
                                     personalAccountType: account?.type || '',
                                   });
                                 }}
-                                className="mt-1 border rounded px-2 py-1 text-xs w-full"
+                                className="mt-1 border rounded px-1 py-1 text-xs w-[90px] max-w-[90px]"
                               >
                                 <option value="">Personal account</option>
                                 {coa.map((a) => (

@@ -4,6 +4,7 @@ import {
   readLedger,
 } from "@/lib/accounting/store";
 import { releaseReceiptsFromLedgerEntries } from "@/lib/accounting/receipts";
+import { releasePaymentsClearedWithLedger } from "@/lib/accounting/invoices";
 import { idsWithJournalGroup } from "@/lib/accounting/doubleEntry";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
           { status: 404 }
         );
       }
+      await releasePaymentsClearedWithLedger(expanded);
       await releaseReceiptsFromLedgerEntries(expanded);
       return NextResponse.json({ success: true, deletedCount });
     } catch (err) {

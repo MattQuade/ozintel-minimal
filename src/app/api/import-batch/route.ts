@@ -6,17 +6,26 @@ import {
   linesReadyToCommit,
   readImportBatch,
   removeImportBatchLines,
+  syncImportBatchWithOpenInvoices,
   updateImportBatchLine,
   type ImportBatchLine,
 } from "@/lib/accounting/importBatch";
 import { appendLedgerEntries } from "@/lib/accounting/store";
-import { readInvoices, tryAllocateLedgerDepositToInvoice, allocateBankDepositToInvoice } from "@/lib/accounting/invoices";
+import { readInvoices, releasePaymentsClearedWithLedger, tryAllocateLedgerDepositToInvoice, allocateBankDepositToInvoice } from "@/lib/accounting/invoices";
 import { amountsMatch, isOpenForAllocation } from "@/lib/accounting/invoiceDepositMatch";
 import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { registerLedgerEntryOnReceipts } from "@/lib/accounting/receipts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+async function openBatch() {
+  await releasePaymentsClearedWithLedger();
+  const invoices = await readInvoices();
+  return syncImportBatchWithOpenInvoices(
+    invoices.filter((inv) => isOpenForAllocation(toMatchShape(inv))).map(toMatchShape)
+  );
+}
 
 function toMatchShape(inv: {
   id: string;
@@ -42,7 +51,7 @@ export async function GET(req: Request) {
   const access = await requireAccountingAccess(req);
   if (!access.ok) return access.response;
   return access.run(async () => {
-    const lines = await readImportBatch();
+    const lines = await openBatch();
     return NextResponse.json({ lines });
   });
 }
@@ -63,15 +72,24 @@ export async function POST(req: Request) {
         );
       }
       const rows = Array.isArray(body.rows) ? body.rows : [];
+      await releasePaymentsClearedWithLedger();
       const invoices = await readInvoices();
+      const open = invoices
+        .filter((inv) => isOpenForAllocation(toMatchShape(inv)))
+        .map(toMatchShape);
       const result = await addRowsToImportBatch({
         rows,
         bankAccountId,
         bankAccountName: String(body.bankAccountName || ""),
         quarter: String(body.quarter || ""),
-        invoices: invoices.filter((inv) => isOpenForAllocation(toMatchShape(inv))).map(toMatchShape),
+        invoices: open,
       });
-      return NextResponse.json({ success: true, ...result });
+      const lines = await syncImportBatchWithOpenInvoices(open);
+      return NextResponse.json({
+        success: true,
+        ...result,
+        lines,
+      });
     }
 
     if (action === "update") {
@@ -93,7 +111,7 @@ export async function POST(req: Request) {
     }
 
     if (action === "commit") {
-      const all = await readImportBatch();
+      const all = await openBatch();
       const wanted = Array.isArray(body.ids)
         ? new Set(body.ids.map((id: unknown) => String(id)))
         : null;

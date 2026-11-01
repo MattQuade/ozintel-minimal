@@ -4,6 +4,7 @@ import { readBankAccounts, readLedger, writeLedger, type LedgerEntry } from "@/l
 import { rewriteJournalSplit, type DoubleEntryLine } from "@/lib/accounting/doubleEntry";
 import { ensureFy26DoubleEntry } from "@/lib/accounting/ensureDoubleEntry";
 import { parseBusinessPercent } from "@/lib/accounting/percentSplit";
+import { clipUserNote } from "@/lib/accounting/importBatch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
           body.personalAccountType === undefined
             ? undefined
             : String(body.personalAccountType || ""),
-        userNote: body.userNote === undefined ? undefined : String(body.userNote || ""),
+        userNote: body.userNote === undefined ? undefined : clipUserNote(body.userNote),
       },
       banks
     );
