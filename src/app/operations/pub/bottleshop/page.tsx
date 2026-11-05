@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import OpsGate from "@/components/OpsGate";
+import ReceiptCropEditor from "@/components/ReceiptCropEditor";
 import {
   enableBottleShopPush,
   syncAppBadge,
 } from "@/lib/client/bottleShopPush";
+import {
+  exportCroppedJpegFromSrc,
+  FULL_CROP,
+  type CropRectNorm,
+} from "@/lib/client/cropImage";
 
 type Product = {
   id: string;
@@ -74,6 +80,27 @@ function BottleShopAdminInner() {
   const [drafts, setDrafts] = useState<
     Record<string, { price: string; quantity: string; name: string }>
   >({});
+  const [photoCrop, setPhotoCrop] = useState<{
+    productId: string;
+    productName: string;
+    objectUrl: string;
+    fileName: string;
+  } | null>(null);
+  const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
+  const [cropSaving, setCropSaving] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
+    };
+  }, [photoCrop?.objectUrl]);
+
+  const closePhotoCrop = () => {
+    if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
+    setPhotoCrop(null);
+    setCrop(FULL_CROP);
+    setCropSaving(false);
+  };
 
   const customerLink = (code: string) => {
     if (typeof window === "undefined") return `/bottleshop?code=${code}`;
@@ -154,8 +181,19 @@ function BottleShopAdminInner() {
     }
   };
 
-  const uploadPhoto = async (id: string, file: File | null | undefined) => {
+  const beginPhotoCrop = (product: Product, file: File | null | undefined) => {
     if (!file) return;
+    if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
+    setCrop(FULL_CROP);
+    setPhotoCrop({
+      productId: product.id,
+      productName: product.name,
+      objectUrl: URL.createObjectURL(file),
+      fileName: file.name || `${product.id}.jpg`,
+    });
+  };
+
+  const uploadPhoto = async (id: string, file: File) => {
     setStatus(`Uploading photo for ${id}…`);
     try {
       const form = new FormData();
@@ -168,13 +206,39 @@ function BottleShopAdminInner() {
       const data = await res.json();
       if (!data.success) {
         setStatus(data.error || "Photo upload failed");
-        return;
+        return false;
       }
       setStatus("Photo uploaded — public bottle shop will show it.");
       await load();
+      return true;
     } catch (error) {
       console.error(error);
       setStatus("Photo upload failed.");
+      return false;
+    }
+  };
+
+  const confirmPhotoCrop = async () => {
+    if (!photoCrop) return;
+    setCropSaving(true);
+    setStatus("Cropping photo…");
+    try {
+      const cropped = await exportCroppedJpegFromSrc({
+        src: photoCrop.objectUrl,
+        crop,
+        fileName: photoCrop.fileName,
+        maxEdge: 1600,
+        quality: 0.88,
+      });
+      const ok = await uploadPhoto(photoCrop.productId, cropped);
+      if (ok) closePhotoCrop();
+    } catch (error) {
+      console.error(error);
+      setStatus(
+        error instanceof Error ? error.message : "Could not crop photo."
+      );
+    } finally {
+      setCropSaving(false);
     }
   };
 
@@ -271,7 +335,8 @@ function BottleShopAdminInner() {
       </p>
       <h1 style={{ color: "#f59e0b", marginTop: 0 }}>Bottle Shop ledger</h1>
       <p style={{ color: "#94a3b8" }}>
-        Update stock, prices, and photos. Photos are stored on the server
+        Update stock, prices, and photos. After you pick a photo you can crop
+        away dead space before it saves. Photos are stored on the server
         (not in git) and show on the public bottle shop. Customer reserves
         write here and text you the bottles + quantities.
       </p>
@@ -642,7 +707,7 @@ function BottleShopAdminInner() {
                           style={{ display: "none" }}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            void uploadPhoto(p.id, file);
+                            beginPhotoCrop(p, file);
                             e.target.value = "";
                           }}
                         />
@@ -748,6 +813,120 @@ function BottleShopAdminInner() {
           )}
         </>
       )}
+
+      {photoCrop ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 80,
+            background: "rgba(2, 6, 23, 0.82)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Crop bottle photo"
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 720,
+              maxHeight: "92vh",
+              overflow: "auto",
+              background: "#0f172a",
+              border: "1px solid #334155",
+              borderRadius: 14,
+              padding: 16,
+              color: "white",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "flex-start",
+                marginBottom: 10,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 20 }}>Crop bottle photo</h2>
+                <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 14 }}>
+                  Drag the border to cut away dead space around{" "}
+                  {photoCrop.productName}.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={cropSaving}
+                onClick={closePhotoCrop}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  cursor: cropSaving ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <ReceiptCropEditor
+              key={photoCrop.objectUrl}
+              src={photoCrop.objectUrl}
+              initialCrop={FULL_CROP}
+              theme="dark"
+              style={{ minHeight: 360 }}
+              onCropChange={setCrop}
+            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 14,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                disabled={cropSaving}
+                onClick={closePhotoCrop}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #475569",
+                  background: "transparent",
+                  color: "white",
+                  fontWeight: 600,
+                  cursor: cropSaving ? "not-allowed" : "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={cropSaving}
+                onClick={() => void confirmPhotoCrop()}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#b45309",
+                  color: "white",
+                  fontWeight: 600,
+                  cursor: cropSaving ? "not-allowed" : "pointer",
+                }}
+              >
+                {cropSaving ? "Uploading…" : "Crop & upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
