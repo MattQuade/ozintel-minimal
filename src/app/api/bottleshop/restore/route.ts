@@ -3,12 +3,14 @@ import {
   bottleCustomerLogin,
   findBottleCustomerForRestore,
 } from "@/lib/operations/pub/bottleshop";
+import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import {
   ensureApprovedBottleShopUser,
   findUserForRestore,
   publicUser,
 } from "@/lib/users";
 import { setSessionEmailCookie } from "@/lib/sessionCookie";
+import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +48,11 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
-    const customer = await findBottleCustomerForRestore(query);
+    // Ledger customers live in the pub owner's silo.
+    const customer = await runWithDataOwnerAsync(
+      getBottleShopOwnerEmail(),
+      () => findBottleCustomerForRestore(query)
+    );
     if (!customer) {
       if (user && user.status !== "approved") {
         return NextResponse.json(
