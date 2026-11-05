@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   bottleCustomerLogin,
-  consolidateBottleShopIntoOwnerSilo,
   findBottleCustomerForRestore,
   restoreQueryVariants,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import {
   ensureApprovedBottleShopUser,
-  findUserForRestore,
+  matchUserForRestore,
+  PLATFORM_ADMIN_EMAIL,
   publicUser,
+  readUsers,
 } from "@/lib/users";
 import { setSessionEmailCookie } from "@/lib/sessionCookie";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
@@ -27,17 +28,27 @@ function jsonUser(user: ReturnType<typeof publicUser>) {
   return res;
 }
 
-async function findUserAcrossVariants(query: string) {
-  for (const variant of restoreQueryVariants(query)) {
-    const user = await findUserForRestore(variant);
-    if (user) return user;
+async function findCustomerFast(query: string) {
+  const owners = Array.from(
+    new Set(
+      [getBottleShopOwnerEmail(), PLATFORM_ADMIN_EMAIL]
+        .map((e) => String(e || "").trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+  for (const owner of owners) {
+    const customer = await runWithDataOwnerAsync(owner, () =>
+      findBottleCustomerForRestore(query)
+    );
+    if (customer) return customer;
   }
   return null;
 }
 
 /**
- * Restore for /bottleshop (username only):
- * approved Bottle Shop user, or ledger customer with matching username.
+ * Fast restore only — no silo merge (that was hanging phones).
+ * 1) users.json match with Bottle Shop permission
+ * 2) ledger customer in the pub owner silo → approve Bottle Shop login
  */
 export async function POST(req: NextRequest) {
   try {
@@ -55,29 +66,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Merge any split silos first so ledger usernames are visible.
-    try {
-      await consolidateBottleShopIntoOwnerSilo();
-    } catch (error) {
-      console.error("[bottleshop restore consolidate]", error);
+    const variants = restoreQueryVariants(query);
+    const users = await readUsers();
+    let user = null;
+    for (const variant of variants) {
+      user = matchUserForRestore(variant, users);
+      if (user) break;
     }
 
-    let user = await findUserAcrossVariants(query);
     if (user && user.status === "approved" && user.permissions?.bottleShop) {
       return jsonUser(publicUser(user));
     }
 
-    const customer = await runWithDataOwnerAsync(
-      getBottleShopOwnerEmail(),
-      () => findBottleCustomerForRestore(query)
-    );
+    const customer = await findCustomerFast(query);
 
     if (customer) {
       const login =
         bottleCustomerLogin(customer) ||
-        (String(customer.name || "").includes("@")
-          ? customer.name.trim().toLowerCase()
-          : restoreQueryVariants(query).find((v) => v.includes("@")) || "");
+        variants.find((v) => v.includes("@")) ||
+        "";
       if (!login) {
         return NextResponse.json(
           {
@@ -88,14 +95,16 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      user = await ensureApprovedBottleShopUser({
+      const next = await ensureApprovedBottleShopUser({
         email: login,
         name: customer.name,
         phone: customer.phone,
       });
-      return jsonUser(publicUser(user));
+      return jsonUser(publicUser(next));
     }
 
+    // Username typed with @ but only exists as a normal user without ledger row:
+    // if they already have Bottle Shop from Admin, handled above. Otherwise explain.
     if (user && user.status !== "approved") {
       return NextResponse.json(
         {
@@ -111,7 +120,7 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error:
-            "Account found, but Bottle Shop is not enabled yet. Ask the pub to tick Bottle Shop on your account.",
+            "Account found, but Bottle Shop is not enabled yet. Ask the pub to tick Bottle Shop, or add them in the Bottle Shop ledger with this username.",
           user: publicUser(user),
         },
         { status: 403 }
@@ -122,12 +131,12 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error:
-          "No bottle shop account found for that username. Ask the pub to add you with a restore username like jsmith@ozintel.",
+          "No bottle shop account found for that username. Add them in the Bottle Shop ledger with username jsmith@ozintel-style login.",
       },
       { status: 404 }
     );
   } catch (error) {
-    console.error(error);
+    console.error("[bottleshop restore]", error);
     return NextResponse.json(
       {
         success: false,

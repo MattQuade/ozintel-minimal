@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  consolidateBottleShopIntoOwnerSilo,
-  listBottleProducts,
-} from "@/lib/operations/pub/bottleshop";
+import { listBottleProducts } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
@@ -19,12 +16,6 @@ export async function GET(req: NextRequest) {
         { success: false, error: gate.error, needsAccess: true },
         { status: 403, headers: { "Cache-Control": "no-store" } }
       );
-    }
-
-    try {
-      await consolidateBottleShopIntoOwnerSilo();
-    } catch (error) {
-      console.error("[bottleshop products consolidate]", error);
     }
 
     const products = await runWithDataOwnerAsync(

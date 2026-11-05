@@ -116,17 +116,22 @@ export default function BottleShopPage() {
     async (query: string) => {
       const trimmed = normalizeRestoreQuery(query);
       if (!trimmed) return false;
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 12000);
       try {
         const res = await fetch("/api/bottleshop/restore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({ query: trimmed }),
-          signal: AbortSignal.timeout(20000),
+          signal: controller.signal,
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!data.success || !data.user?.email) {
-          setStatus(data.error || "No bottle shop account found.");
+          setStatus(
+            data.error ||
+              "No bottle shop account found. Ask the pub to add this username in the Bottle Shop ledger."
+          );
           return false;
         }
         try {
@@ -140,12 +145,17 @@ export default function BottleShopPage() {
         return loadCatalogue();
       } catch (error) {
         console.error(error);
+        const aborted =
+          error instanceof Error &&
+          (error.name === "AbortError" || error.name === "TimeoutError");
         setStatus(
-          error instanceof Error && error.name === "TimeoutError"
-            ? "Restore timed out — check reception and try again."
+          aborted
+            ? "Restore timed out. Try again on wifi, or ask the pub to re-add your username."
             : "Restore failed. Please try again."
         );
         return false;
+      } finally {
+        window.clearTimeout(timer);
       }
     },
     [loadCatalogue]
@@ -153,7 +163,9 @@ export default function BottleShopPage() {
 
   useEffect(() => {
     clearLegacyInviteCode();
-    const storedLogin = readStoredLogin() || readStoredUserEmail();
+    const storedLogin = normalizeRestoreQuery(
+      readStoredLogin() || readStoredUserEmail()
+    );
     if (storedLogin) setRestoreInput(storedLogin);
     void (async () => {
       let ok = await loadCatalogue();
@@ -164,10 +176,13 @@ export default function BottleShopPage() {
         setStatus("Restore your account to open the bottle shop.");
       }
     })();
-  }, [loadCatalogue, silentRestore]);
+    // Boot once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const refresh = () => {
+      if (restoring) return;
       if (document.visibilityState === "visible") {
         void loadCatalogue();
       }
@@ -178,7 +193,7 @@ export default function BottleShopPage() {
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("focus", refresh);
     };
-  }, [loadCatalogue]);
+  }, [loadCatalogue, restoring]);
 
   const unlocked = products.length > 0 || Boolean(unlockedName);
 
