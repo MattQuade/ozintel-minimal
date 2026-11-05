@@ -1,36 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listBottleProducts } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
-import {
-  readBottleShopCodeFromRequest,
-  requireBottleShopCustomer,
-} from "@/lib/operations/pub/bottleShopAccess";
+import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Catalogue for invited customers only (manual access code). */
+/** Catalogue for Bottle Shop permission holders or invite-code customers. */
 export async function GET(req: NextRequest) {
   try {
-    const accessCode = readBottleShopCodeFromRequest(req);
-    const gate = await runWithDataOwnerAsync(getBottleShopOwnerEmail(), () =>
-      requireBottleShopCustomer(accessCode)
+    const ownerEmail = getBottleShopOwnerEmail();
+    const gate = await runWithDataOwnerAsync(ownerEmail, () =>
+      resolveBottleShopGate(req)
     );
     if (!gate.ok) {
       return NextResponse.json(
-        { success: false, error: gate.error, needsAccessCode: true },
+        { success: false, error: gate.error, needsAccess: true },
         { status: 403 }
       );
     }
-    const products = await runWithDataOwnerAsync(
-      getBottleShopOwnerEmail(),
-      () => listBottleProducts({ activeOnly: true })
+    const products = await runWithDataOwnerAsync(ownerEmail, () =>
+      listBottleProducts({ activeOnly: true })
     );
     return NextResponse.json({
       success: true,
       products,
-      customer: { id: gate.customer.id, name: gate.customer.name },
+      customer: { id: gate.customerId, name: gate.displayName },
+      via: gate.via,
     });
   } catch (error) {
     console.error(error);

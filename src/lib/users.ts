@@ -11,6 +11,8 @@ export type UserPermissions = {
   pubOps: boolean;
   forestryOps: boolean;
   logisticsOps: boolean;
+  /** Customer access to /bottleshop catalogue + reserves. */
+  bottleShop: boolean;
 };
 
 /** Per-module share lists: emails allowed to open THIS user's siloed data. */
@@ -51,6 +53,7 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
     pubOps: false,
     forestryOps: false,
     logisticsOps: false,
+    bottleShop: false,
   };
   if (Array.isArray(permissionsRaw)) {
     permissions = {
@@ -63,6 +66,10 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
       logisticsOps:
         permissionsRaw.includes("logistics") ||
         permissionsRaw.includes("logisticsOps"),
+      bottleShop:
+        permissionsRaw.includes("bottleshop") ||
+        permissionsRaw.includes("bottleShop") ||
+        permissionsRaw.includes("BottleShop"),
     };
   } else if (permissionsRaw && typeof permissionsRaw === "object") {
     permissions = {
@@ -70,6 +77,7 @@ function normalizeUser(raw: Partial<User> & { email: string }): User {
       pubOps: Boolean((permissionsRaw as UserPermissions).pubOps),
       forestryOps: Boolean((permissionsRaw as UserPermissions).forestryOps),
       logisticsOps: Boolean((permissionsRaw as UserPermissions).logisticsOps),
+      bottleShop: Boolean((permissionsRaw as UserPermissions).bottleShop),
     };
   }
 

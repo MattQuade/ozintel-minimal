@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
         pubOps: false,
         forestryOps: false,
         logisticsOps: false,
+        bottleShop: false,
       },
       shares: { pubOps: [], logisticsOps: [] },
       lastAlert: null,

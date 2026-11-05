@@ -22,6 +22,7 @@ type UserProfile = {
     pubOps: boolean;
     forestryOps: boolean;
     logisticsOps: boolean;
+    bottleShop?: boolean;
   };
   shares?: {
     pubOps: string[];
@@ -228,8 +229,9 @@ export default function HomePage({
 
   const [manualName, setManualName] = useState('');
   const [manualEmail, setManualEmail] = useState('');
-  const [manualPhone, setManualPhone] = useState('+614');
+  const [manualPhone, setManualPhone] = useState('');
   const [manualApproved, setManualApproved] = useState(true);
+  const [manualBottleShop, setManualBottleShop] = useState(true);
 
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState('');
@@ -573,38 +575,49 @@ export default function HomePage({
 
   const handleManualAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualName.trim() || !manualEmail.trim() || !manualPhone.trim()) {
-      alert("Please fill in all fields.");
+    if (!manualName.trim() || !manualEmail.trim()) {
+      alert("Name and username/email are required.");
       return;
     }
 
     try {
+      const email = manualEmail.trim();
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: manualName.trim(),
-          email: manualEmail.trim(),
-          phone: manualPhone.trim()
+          email,
+          phone: manualPhone.trim() || 'No phone yet'
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        if (manualApproved) {
-          await fetch(`${API_BASE}/api/users`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: manualEmail.trim(), status: 'approved' })
-          });
-        }
+        const permissions = {
+          accounting: false,
+          pubOps: false,
+          forestryOps: false,
+          logisticsOps: false,
+          bottleShop: Boolean(manualBottleShop),
+        };
+        await fetch(`${API_BASE}/api/users`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            ...(manualApproved ? { status: 'approved' } : {}),
+            permissions,
+          })
+        });
 
         fetchUsers();
         setManualName('');
         setManualEmail('');
-        setManualPhone('+614');
+        setManualPhone('');
         setManualApproved(true);
+        setManualBottleShop(true);
         setStatus("✅ User added successfully.");
       } else {
         alert("Failed to add user: " + (data.error || "Unknown error"));
@@ -690,7 +703,7 @@ export default function HomePage({
     }
   };
 
-  const updatePermissions = async (email: string, key: 'accounting' | 'pubOps' | 'forestryOps' | 'logisticsOps', val: boolean) => {
+  const updatePermissions = async (email: string, key: 'accounting' | 'pubOps' | 'forestryOps' | 'logisticsOps' | 'bottleShop', val: boolean) => {
     const user = allUsers.find(u => u.email === email);
     if (!user) return;
 
@@ -1315,13 +1328,20 @@ export default function HomePage({
           
           <div style={{ marginBottom: '25px', padding: '15px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#38bdf8' }}>Manually Add User</h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+              Username can be a short address like <code>sdurnan@ozintel</code> — they restore with that on /bottleshop.
+            </p>
             <form onSubmit={handleManualAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <input type="text" placeholder="Full Name" value={manualName} onChange={e => setManualName(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-              <input type="email" placeholder="Email" value={manualEmail} onChange={e => setManualEmail(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-              <input type="tel" placeholder="Phone" value={manualPhone} onChange={e => setManualPhone(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <input type="text" placeholder="Username / email (e.g. sdurnan@ozintel)" value={manualEmail} onChange={e => setManualEmail(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <input type="tel" placeholder="Phone (optional)" value={manualPhone} onChange={e => setManualPhone(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
                 <input type="checkbox" checked={manualApproved} onChange={e => setManualApproved(e.target.checked)} />
                 Approve immediately
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                <input type="checkbox" checked={manualBottleShop} onChange={e => setManualBottleShop(e.target.checked)} />
+                Bottle Shop access
               </label>
               <button type="submit" style={{ padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
                 Add User
@@ -1393,6 +1413,9 @@ export default function HomePage({
                         </label>
                         <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
                           <input type="checkbox" checked={Boolean(u.permissions.logisticsOps)} onChange={e => updatePermissions(u.email, 'logisticsOps', e.target.checked)} /> Logistics Ops
+                        </label>
+                        <label style={{ display: 'block', margin: '4px 0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={Boolean(u.permissions.bottleShop)} onChange={e => updatePermissions(u.email, 'bottleShop', e.target.checked)} /> Bottle Shop
                         </label>
                         <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #334155' }}>
                           <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: '#f97316' }}>

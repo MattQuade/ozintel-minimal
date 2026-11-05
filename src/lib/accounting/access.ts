@@ -9,6 +9,7 @@ export type AccountingUser = {
     pubOps?: boolean;
     forestryOps?: boolean;
     logisticsOps?: boolean;
+    bottleShop?: boolean;
   };
 };
 

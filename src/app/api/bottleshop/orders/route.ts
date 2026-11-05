@@ -4,10 +4,7 @@ import {
   placeBottleOrder,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
-import {
-  readBottleShopCodeFromRequest,
-  requireBottleShopCustomer,
-} from "@/lib/operations/pub/bottleShopAccess";
+import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
 import {
   getBottleShopNotifyPhone,
   getBottleShopOwnerEmail,
@@ -18,21 +15,18 @@ import { sendPushToOwner } from "@/lib/push/subscriptions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Invited-customer reserve — stock, ledger, SMS + push owner. */
+/** Reserve for Bottle Shop users or invite-code customers. */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const ownerEmail = getBottleShopOwnerEmail();
-    const accessCode =
-      String(body.accessCode || body.code || "").trim() ||
-      readBottleShopCodeFromRequest(req);
-
+    const explicitCode = String(body.accessCode || body.code || "").trim();
     const gate = await runWithDataOwnerAsync(ownerEmail, () =>
-      requireBottleShopCustomer(accessCode)
+      resolveBottleShopGate(req, explicitCode)
     );
     if (!gate.ok) {
       return NextResponse.json(
-        { success: false, error: gate.error, needsAccessCode: true },
+        { success: false, error: gate.error, needsAccess: true },
         { status: 403 }
       );
     }
@@ -40,9 +34,9 @@ export async function POST(req: NextRequest) {
     const result = await runWithDataOwnerAsync(ownerEmail, () =>
       placeBottleOrder({
         items: Array.isArray(body.items) ? body.items : [],
-        customerName: body.customerName || gate.customer.name,
+        customerName: body.customerName || gate.displayName,
         customerNote: body.customerNote,
-        accessCode,
+        accessCode: gate.via === "code" ? gate.accessCode : undefined,
       })
     );
 
