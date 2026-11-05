@@ -262,7 +262,7 @@ export default function BottleShopPage() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="e.g. sdurnan@ozintel"
+              placeholder="e.g. jsmith@ozintel"
               value={restoreInput}
               onChange={(e) => setRestoreInput(e.target.value)}
               style={{

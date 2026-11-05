@@ -1329,11 +1329,11 @@ export default function HomePage({
           <div style={{ marginBottom: '25px', padding: '15px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
             <h3 style={{ margin: '0 0 12px 0', color: '#38bdf8' }}>Manually Add User</h3>
             <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#94a3b8' }}>
-              Username can be a short address like <code>sdurnan@ozintel</code> — they restore with that on /bottleshop.
+              Username can be a short address like <code>jsmith@ozintel</code> — they restore with that on /bottleshop.
             </p>
             <form onSubmit={handleManualAddUser} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <input type="text" placeholder="Full Name" value={manualName} onChange={e => setManualName(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
-              <input type="text" placeholder="Username / email (e.g. sdurnan@ozintel)" value={manualEmail} onChange={e => setManualEmail(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
+              <input type="text" placeholder="Username / email (e.g. jsmith@ozintel)" value={manualEmail} onChange={e => setManualEmail(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
               <input type="tel" placeholder="Phone (optional)" value={manualPhone} onChange={e => setManualPhone(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#1e2937', color: 'white' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
                 <input type="checkbox" checked={manualApproved} onChange={e => setManualApproved(e.target.checked)} />
