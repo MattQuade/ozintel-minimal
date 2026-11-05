@@ -383,6 +383,7 @@ export function ensureKnownUsers(users: User[]): { users: User[]; changed: boole
           pubOps: false,
           forestryOps: false,
           logisticsOps: true,
+          bottleShop: false,
         },
         shares: { pubOps: [], logisticsOps: [ADMIN_SELF_EMAIL] },
         lastAlert: null,
