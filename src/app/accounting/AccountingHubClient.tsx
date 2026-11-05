@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { checkAccountingAccess } from "@/lib/accounting/access";
 import AccountingPinLock from "@/components/AccountingPinLock";
+import HomeReceiptCapture from "@/components/HomeReceiptCapture";
 import VoiceNavBar from "@/components/VoiceNavBar";
 
 const previewLinks = [
@@ -145,6 +146,7 @@ export default function AccountingHubPage() {
           marginTop: 24,
         }}
       >
+        {hasAccess ? <HomeReceiptCapture /> : null}
         {links.map((link) => (
           <a
             key={link.href}

@@ -238,6 +238,25 @@ function DecisionBriefClient() {
         ← Home
       </a>
       <h1 style={{ color: '#a78bfa', margin: '16px 0 8px' }}>Intel</h1>
+      <a
+        href="/find-someone"
+        style={{
+          display: 'block',
+          width: '100%',
+          maxWidth: 400,
+          padding: '16px',
+          margin: '0 0 16px',
+          borderRadius: 12,
+          background: '#0f766e',
+          color: 'white',
+          textDecoration: 'none',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          boxSizing: 'border-box',
+        }}
+      >
+        Find Someone
+      </a>
       <p style={{ color: '#94a3b8', maxWidth: 520, marginTop: 0 }}>
         Concise decision intel — not reports. Energy numbers pull from your
         Accounting silo; retailers and installers connect with your code.
