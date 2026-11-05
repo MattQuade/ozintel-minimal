@@ -76,6 +76,11 @@ export function getBottleShopFilePath(): string {
   return path.join(getPubOpsDataDir(), "bottleshop.json");
 }
 
+/** Uploaded bottle thumbnails on the Fly volume (not git public/). */
+export function getBottleShopPhotosDir(): string {
+  return path.join(getPubOpsDataDir(), "bottleshop-photos");
+}
+
 export function getRepoSeedBottleShopPath(): string {
   return path.join(
     process.cwd(),

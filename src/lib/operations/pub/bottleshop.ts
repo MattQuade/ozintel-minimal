@@ -1,6 +1,9 @@
 import { promises as fs } from "fs";
+import path from "path";
+import sharp from "sharp";
 import {
   getBottleShopFilePath,
+  getBottleShopPhotosDir,
   getPubOpsDataDir,
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
@@ -62,6 +65,17 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
 
 async function ensureDirs() {
   await fs.mkdir(getPubOpsDataDir(), { recursive: true });
+  await fs.mkdir(getBottleShopPhotosDir(), { recursive: true });
+}
+
+function photoFilePath(productId: string) {
+  return path.join(getBottleShopPhotosDir(), `${productId}.jpg`);
+}
+
+/** Public URL for an uploaded product photo (served from the owner volume). */
+export function bottleProductPhotoUrl(productId: string, version?: number | string) {
+  const v = version != null ? `?v=${version}` : "";
+  return `/api/bottleshop/photos/${encodeURIComponent(productId)}${v}`;
 }
 
 async function maybeSeedFromRepo() {
@@ -138,6 +152,54 @@ export async function loadBottleShopAdmin() {
     products: store.products,
     orders: [...store.orders].reverse().slice(0, 100),
   };
+}
+
+export async function saveBottleProductPhoto(
+  productId: string,
+  buffer: Buffer
+): Promise<BottleProduct> {
+  const id = String(productId || "").trim();
+  if (!id) throw new Error("productId is required");
+  if (!buffer?.length) throw new Error("Photo file is empty");
+
+  const store = await readStore();
+  const idx = store.products.findIndex((p) => p.id === id);
+  if (idx < 0) throw new Error("Product not found");
+
+  await ensureDirs();
+  const jpeg = await sharp(buffer)
+    .rotate()
+    .resize({
+      width: 900,
+      height: 1200,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({ quality: 82 })
+    .toBuffer();
+  await fs.writeFile(photoFilePath(id), jpeg);
+
+  const next: BottleProduct = {
+    ...store.products[idx],
+    imageUrl: bottleProductPhotoUrl(id, Date.now()),
+  };
+  store.products[idx] = next;
+  await writeStore(store);
+  return next;
+}
+
+export async function readBottleProductPhoto(
+  productId: string
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const id = String(productId || "").trim();
+  if (!id) return null;
+  const filePath = photoFilePath(id);
+  try {
+    const buffer = await fs.readFile(filePath);
+    return { buffer, contentType: "image/jpeg" };
+  } catch {
+    return null;
+  }
 }
 
 export async function updateBottleProduct(

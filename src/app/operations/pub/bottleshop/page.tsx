@@ -120,6 +120,30 @@ function BottleShopAdminInner() {
     }
   };
 
+  const uploadPhoto = async (id: string, file: File | null | undefined) => {
+    if (!file) return;
+    setStatus(`Uploading photo for ${id}…`);
+    try {
+      const form = new FormData();
+      form.set("productId", id);
+      form.set("file", file);
+      const res = await fetch("/api/operations/pub/bottleshop/photo", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Photo upload failed");
+        return;
+      }
+      setStatus("Photo uploaded — public bottle shop will show it.");
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Photo upload failed.");
+    }
+  };
+
   const setOrderStatus = async (id: string, next: Order["status"]) => {
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
@@ -160,8 +184,9 @@ function BottleShopAdminInner() {
       </p>
       <h1 style={{ color: "#f59e0b", marginTop: 0 }}>Bottle Shop ledger</h1>
       <p style={{ color: "#94a3b8" }}>
-        Update stock and prices. Customer reserves write here and text you the
-        bottles + quantities.
+        Update stock, prices, and photos. Photos are stored on the server
+        (not in git) and show on the public bottle shop. Customer reserves
+        write here and text you the bottles + quantities.
       </p>
       {status ? (
         <p style={{ color: "#93c5fd" }}>{status}</p>
@@ -295,6 +320,31 @@ function BottleShopAdminInner() {
                       >
                         Save
                       </button>
+                      <label
+                        style={{
+                          marginTop: 18,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          background: "#b45309",
+                          color: "white",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "inline-block",
+                        }}
+                      >
+                        Upload photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            void uploadPhoto(p.id, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
                     </div>
                   </div>
                 </div>
