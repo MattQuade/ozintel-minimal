@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { findUserByEmail, type User } from "@/lib/users";
-import { SESSION_COOKIE_NAME } from "@/lib/sessionCookie";
+import {
+  decodeSessionEmailCookie,
+  SESSION_COOKIE_NAME,
+} from "@/lib/sessionCookie";
 
 export type BottleShopGate =
   | {
@@ -12,27 +15,17 @@ export type BottleShopGate =
     }
   | { ok: false; error: string };
 
-function decodeCookieValue(raw: string): string {
-  const trimmed = String(raw || "").trim();
-  if (!trimmed) return "";
-  try {
-    return decodeURIComponent(trimmed).trim();
-  } catch {
-    return trimmed;
-  }
-}
-
 export function readSessionEmail(req: Request): string {
   if (req instanceof NextRequest) {
     const fromCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-    if (fromCookie) return decodeCookieValue(fromCookie);
+    if (fromCookie) return decodeSessionEmailCookie(fromCookie);
   }
   const header = req.headers.get("cookie") || "";
   const match = header.match(
     new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]*)`)
   );
   if (!match?.[1]) return "";
-  return decodeCookieValue(match[1]);
+  return decodeSessionEmailCookie(match[1]);
 }
 
 /**

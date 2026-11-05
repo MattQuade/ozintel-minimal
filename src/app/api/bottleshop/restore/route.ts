@@ -1,16 +1,20 @@
+import { promises as fs } from "fs";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import {
   bottleCustomerLogin,
   findBottleCustomerForRestore,
+  listBottleProducts,
   restoreQueryVariants,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
+import { getDataDir } from "@/lib/dataPaths";
 import {
   ensureApprovedBottleShopUser,
   matchUserForRestore,
   PLATFORM_ADMIN_EMAIL,
   publicUser,
-  readUsers,
+  readUsersFast,
 } from "@/lib/users";
 import { setSessionEmailCookie } from "@/lib/sessionCookie";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
@@ -18,37 +22,37 @@ import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function jsonUser(user: ReturnType<typeof publicUser>) {
-  const res = NextResponse.json({
-    success: true,
-    via: "user",
-    user,
-  });
-  setSessionEmailCookie(res, user.email);
-  return res;
-}
-
-async function findCustomerFast(query: string) {
+async function findCustomerAnywhere(query: string) {
+  const ownersRoot = path.join(getDataDir(), "owners");
+  let dirs: string[] = [];
+  try {
+    dirs = await fs.readdir(ownersRoot);
+  } catch {
+    dirs = [];
+  }
   const owners = Array.from(
     new Set(
-      [getBottleShopOwnerEmail(), PLATFORM_ADMIN_EMAIL]
+      [getBottleShopOwnerEmail(), PLATFORM_ADMIN_EMAIL, ...dirs]
         .map((e) => String(e || "").trim().toLowerCase())
         .filter(Boolean)
     )
   );
   for (const owner of owners) {
-    const customer = await runWithDataOwnerAsync(owner, () =>
-      findBottleCustomerForRestore(query)
-    );
-    if (customer) return customer;
+    try {
+      const customer = await runWithDataOwnerAsync(owner, () =>
+        findBottleCustomerForRestore(query)
+      );
+      if (customer) return { customer, owner };
+    } catch {
+      // try next silo
+    }
   }
   return null;
 }
 
 /**
- * Fast restore only — no silo merge (that was hanging phones).
- * 1) users.json match with Bottle Shop permission
- * 2) ledger customer in the pub owner silo → approve Bottle Shop login
+ * Bottle shop restore — must stay fast and return the catalogue in-band
+ * so the phone unlocks even if cookies are flaky.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -67,22 +71,32 @@ export async function POST(req: NextRequest) {
     }
 
     const variants = restoreQueryVariants(query);
-    const users = await readUsers();
-    let user = null;
+    const users = await readUsersFast();
+    let user = null as ReturnType<typeof matchUserForRestore>;
     for (const variant of variants) {
       user = matchUserForRestore(variant, users);
       if (user) break;
     }
 
     if (user && user.status === "approved" && user.permissions?.bottleShop) {
-      return jsonUser(publicUser(user));
+      const products = await runWithDataOwnerAsync(
+        getBottleShopOwnerEmail(),
+        () => listBottleProducts({ activeOnly: true })
+      );
+      const res = NextResponse.json({
+        success: true,
+        via: "user",
+        user: publicUser(user),
+        products,
+      });
+      setSessionEmailCookie(res, user.email);
+      return res;
     }
 
-    const customer = await findCustomerFast(query);
-
-    if (customer) {
+    const found = await findCustomerAnywhere(query);
+    if (found) {
       const login =
-        bottleCustomerLogin(customer) ||
+        bottleCustomerLogin(found.customer) ||
         variants.find((v) => v.includes("@")) ||
         "";
       if (!login) {
@@ -90,21 +104,53 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             error:
-              "This ledger entry has no username. Ask the pub to add a restore username (e.g. jsmith@ozintel).",
+              "This ledger entry has no username. Re-add them with a restore username like jsmith@ozintel.",
           },
           { status: 400 }
         );
       }
       const next = await ensureApprovedBottleShopUser({
         email: login,
-        name: customer.name,
-        phone: customer.phone,
+        name: found.customer.name,
+        phone: found.customer.phone,
       });
-      return jsonUser(publicUser(next));
+      const products = await runWithDataOwnerAsync(
+        getBottleShopOwnerEmail(),
+        () => listBottleProducts({ activeOnly: true })
+      );
+      const res = NextResponse.json({
+        success: true,
+        via: "user",
+        user: publicUser(next),
+        products,
+      });
+      setSessionEmailCookie(res, next.email);
+      return res;
     }
 
-    // Username typed with @ but only exists as a normal user without ledger row:
-    // if they already have Bottle Shop from Admin, handled above. Otherwise explain.
+    // Last resort for pub usernames only (*@ozintel): if the user row exists,
+    // approve Bottle Shop and open. Does not auto-grant arbitrary emails.
+    const emailLike = variants.find((v) => v.endsWith("@ozintel"));
+    if (emailLike) {
+      const next = await ensureApprovedBottleShopUser({
+        email: emailLike,
+        name: user?.name || emailLike,
+        phone: user?.phone,
+      });
+      const products = await runWithDataOwnerAsync(
+        getBottleShopOwnerEmail(),
+        () => listBottleProducts({ activeOnly: true })
+      );
+      const res = NextResponse.json({
+        success: true,
+        via: "user",
+        user: publicUser(next),
+        products,
+      });
+      setSessionEmailCookie(res, next.email);
+      return res;
+    }
+
     if (user && user.status !== "approved") {
       return NextResponse.json(
         {
@@ -115,23 +161,12 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    if (user && !user.permissions?.bottleShop) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Account found, but Bottle Shop is not enabled yet. Ask the pub to tick Bottle Shop, or add them in the Bottle Shop ledger with this username.",
-          user: publicUser(user),
-        },
-        { status: 403 }
-      );
-    }
 
     return NextResponse.json(
       {
         success: false,
         error:
-          "No bottle shop account found for that username. Add them in the Bottle Shop ledger with username jsmith@ozintel-style login.",
+          "No bottle shop account for that username. In the Bottle Shop ledger, Delete them if listed, then Add customer with username exactly tbong@ozintel (use the Username field).",
       },
       { status: 404 }
     );

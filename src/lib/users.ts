@@ -196,6 +196,16 @@ async function ensureStore() {
     );
   }
 }
+/** Fast users.json read — no migrations/pin work (safe for bottle-shop restore). */
+export async function readUsersFast(): Promise<User[]> {
+  await ensureStore();
+  const usersFile = getUsersFilePath();
+  const raw = await fs.readFile(usersFile, "utf8");
+  const parsed = JSON.parse(raw || '{"users":[]}');
+  const { users } = extractUsersArray(parsed);
+  return users.map((u: Partial<User> & { email: string }) => normalizeUser(u));
+}
+
 export async function readUsers(): Promise<User[]> {
   await ensureStore();
   await maybeSeedFromRepo(true);
@@ -278,7 +288,7 @@ export function matchUserForRestore(
 }
 
 export async function findUserByEmail(email: string) {
-  const users = await readUsers();
+  const users = await readUsersFast();
   return (
     users.find(
       (u) => u.email.trim().toLowerCase() === String(email || "").trim().toLowerCase()
@@ -333,7 +343,8 @@ export async function ensureApprovedBottleShopUser(input: {
   const phone = String(input.phone || "").trim() || "No phone yet";
   if (!email) throw new Error("Username / email is required");
 
-  const users = await readUsers();
+  // Use the fast reader — full readUsers() migrations were hanging restore.
+  const users = await readUsersFast();
   const idx = users.findIndex(
     (u) => u.email.trim().toLowerCase() === email
   );

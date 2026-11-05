@@ -112,54 +112,58 @@ export default function BottleShopPage() {
     return trimmed;
   };
 
-  const silentRestore = useCallback(
-    async (query: string) => {
-      const trimmed = normalizeRestoreQuery(query);
-      if (!trimmed) return false;
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 12000);
-      try {
-        const res = await fetch("/api/bottleshop/restore", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ query: trimmed }),
-          signal: controller.signal,
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!data.success || !data.user?.email) {
-          setStatus(
-            data.error ||
-              "No bottle shop account found. Ask the pub to add this username in the Bottle Shop ledger."
-          );
-          return false;
-        }
-        try {
-          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        } catch {
-          // ignore
-        }
-        writeStoredLogin(data.user.email);
-        persistSessionEmailCookie(data.user.email);
-        setRestoreInput(data.user.email);
-        return loadCatalogue();
-      } catch (error) {
-        console.error(error);
-        const aborted =
-          error instanceof Error &&
-          (error.name === "AbortError" || error.name === "TimeoutError");
+  const silentRestore = useCallback(async (query: string) => {
+    const trimmed = normalizeRestoreQuery(query);
+    if (!trimmed) return false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch("/api/bottleshop/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ query: trimmed }),
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success || !data.user?.email) {
         setStatus(
-          aborted
-            ? "Restore timed out. Try again on wifi, or ask the pub to re-add your username."
-            : "Restore failed. Please try again."
+          data.error ||
+            "No bottle shop account found. Ask the pub to add this username in the Bottle Shop ledger."
         );
         return false;
-      } finally {
-        window.clearTimeout(timer);
       }
-    },
-    [loadCatalogue]
-  );
+      try {
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      } catch {
+        // ignore
+      }
+      writeStoredLogin(data.user.email);
+      persistSessionEmailCookie(data.user.email);
+      setRestoreInput(data.user.email);
+      // Unlock from restore payload — do not depend on a second cookie round-trip.
+      if (Array.isArray(data.products)) {
+        setProducts(data.products);
+        setUnlockedName(data.user.name || data.user.email);
+        setStatus("");
+        return true;
+      }
+      return loadCatalogue();
+    } catch (error) {
+      console.error(error);
+      const aborted =
+        error instanceof Error &&
+        (error.name === "AbortError" || error.name === "TimeoutError");
+      setStatus(
+        aborted
+          ? "Restore timed out. Try again on wifi."
+          : "Restore failed. Please try again."
+      );
+      return false;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }, [loadCatalogue]);
 
   useEffect(() => {
     clearLegacyInviteCode();

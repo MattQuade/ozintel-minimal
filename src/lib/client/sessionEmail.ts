@@ -6,7 +6,7 @@ const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 /** Persist login cookie from the browser — more reliable than Set-Cookie alone on iOS PWAs. */
 export function persistSessionEmailCookie(email: string) {
   if (typeof document === "undefined") return;
-  const value = encodeURIComponent(String(email || "").trim());
+  const value = encodeURIComponent(String(email || "").trim().toLowerCase());
   if (!value) return;
   const secure =
     typeof window !== "undefined" && window.location.protocol === "https:"
