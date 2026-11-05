@@ -280,6 +280,14 @@ const RULES: NavRule[] = [
       withOpen("look for someone").test(t),
   },
   {
+    href: "/bottleshop",
+    label: "Bottle Shop",
+    test: (t) =>
+      withOpen("bottle shop").test(t) ||
+      withOpen("bottleshop").test(t) ||
+      withOpen("wine shop").test(t),
+  },
+  {
     href: "/operations",
     label: "Operations",
     test: (t) => withOpen("operations?").test(t),
