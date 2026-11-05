@@ -234,6 +234,10 @@ export default function PubOperationsPage() {
         <a href="/operations" style={{ color: "#38bdf8" }}>
           ← Back to Operations
         </a>
+        {" · "}
+        <a href="/operations/pub/bottleshop" style={{ color: "#fbbf24" }}>
+          Bottle Shop ledger
+        </a>
       </p>
 
       <h1 style={{ color: "#3b82f6", marginBottom: 8 }}>Pub Operations</h1>

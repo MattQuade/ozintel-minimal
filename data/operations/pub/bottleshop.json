@@ -1,0 +1,85 @@
+{
+  "products": [
+    {
+      "id": "wine-01",
+      "name": "House Shiraz",
+      "price": 28,
+      "quantity": 12,
+      "imageUrl": "/bottleshop/wine-01.svg",
+      "active": true
+    },
+    {
+      "id": "wine-02",
+      "name": "House Cabernet",
+      "price": 30,
+      "quantity": 10,
+      "imageUrl": "/bottleshop/wine-02.svg",
+      "active": true
+    },
+    {
+      "id": "wine-03",
+      "name": "House Merlot",
+      "price": 26,
+      "quantity": 8,
+      "imageUrl": "/bottleshop/wine-03.svg",
+      "active": true
+    },
+    {
+      "id": "wine-04",
+      "name": "House Pinot Noir",
+      "price": 34,
+      "quantity": 6,
+      "imageUrl": "/bottleshop/wine-04.svg",
+      "active": true
+    },
+    {
+      "id": "wine-05",
+      "name": "House Chardonnay",
+      "price": 24,
+      "quantity": 14,
+      "imageUrl": "/bottleshop/wine-05.svg",
+      "active": true
+    },
+    {
+      "id": "wine-06",
+      "name": "House Sauvignon Blanc",
+      "price": 22,
+      "quantity": 16,
+      "imageUrl": "/bottleshop/wine-06.svg",
+      "active": true
+    },
+    {
+      "id": "wine-07",
+      "name": "House Riesling",
+      "price": 23,
+      "quantity": 9,
+      "imageUrl": "/bottleshop/wine-07.svg",
+      "active": true
+    },
+    {
+      "id": "wine-08",
+      "name": "House Rosé",
+      "price": 21,
+      "quantity": 11,
+      "imageUrl": "/bottleshop/wine-08.svg",
+      "active": true
+    },
+    {
+      "id": "wine-09",
+      "name": "House Sparkling",
+      "price": 32,
+      "quantity": 7,
+      "imageUrl": "/bottleshop/wine-09.svg",
+      "active": true
+    },
+    {
+      "id": "wine-10",
+      "name": "House Moscato",
+      "price": 20,
+      "quantity": 13,
+      "imageUrl": "/bottleshop/wine-10.svg",
+      "active": true
+    }
+  ],
+  "orders": []
+}

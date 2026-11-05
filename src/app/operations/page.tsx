@@ -48,6 +48,44 @@ export default function OperationsIndexPage() {
           Pub Operations
         </a>
         <a
+          href="/operations/pub/bottleshop"
+          style={{
+            display: "block",
+            width: "90%",
+            maxWidth: 400,
+            padding: 20,
+            fontSize: "1.3rem",
+            borderRadius: 12,
+            background: "#b45309",
+            color: "white",
+            textDecoration: "none",
+            fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
+          }}
+        >
+          Bottle Shop ledger
+        </a>
+        <a
+          href="/bottleshop"
+          style={{
+            display: "block",
+            width: "90%",
+            maxWidth: 400,
+            padding: 20,
+            fontSize: "1.3rem",
+            borderRadius: 12,
+            background: "#334155",
+            color: "#fbbf24",
+            textDecoration: "none",
+            fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
+          }}
+        >
+          Public bottle shop →
+        </a>
+        <a
           href="/operations/forestry"
           style={{
             display: "block",

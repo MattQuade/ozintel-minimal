@@ -71,6 +71,21 @@ export function getKegsArchiveFilePath(month: string): string {
   return path.join(getKegsArchiveDir(), `kegs-${month}.json`);
 }
 
+/** Pub bottle shop catalogue + orders (JSON v1; Postgres later if needed). */
+export function getBottleShopFilePath(): string {
+  return path.join(getPubOpsDataDir(), "bottleshop.json");
+}
+
+export function getRepoSeedBottleShopPath(): string {
+  return path.join(
+    process.cwd(),
+    "data",
+    "operations",
+    "pub",
+    "bottleshop.json"
+  );
+}
+
 /** Logistics Operations data folder (kegs, later freight) — siloed per owner. */
 export function getLogisticsOpsDataDir(): string {
   return path.join(getOwnerDataRoot(ownerOrThrow()), "operations", "logistics");

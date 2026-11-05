@@ -102,6 +102,25 @@ export async function sendViaMessageMedia(
 
 const ADMIN_NOTIFY_PHONE = "+61416619600";
 
+/** Owner phone for bottle-shop order texts (same default as signup admin alerts). */
+export function getBottleShopNotifyPhone(): string {
+  const configured = process.env.BOTTLESHOP_NOTIFY_PHONE?.trim();
+  if (configured) return configured;
+  return ADMIN_NOTIFY_PHONE;
+}
+
+/**
+ * Whose pub-ops silo holds the public bottle shop catalogue.
+ * Customers are anonymous; stock lives under this owner.
+ */
+export function getBottleShopOwnerEmail(): string {
+  const configured =
+    process.env.BOTTLESHOP_OWNER_EMAIL?.trim() ||
+    process.env.OZINTEL_DEFAULT_OWNER_EMAIL?.trim();
+  if (configured) return configured.toLowerCase();
+  return "mattquade2000@gmail.com";
+}
+
 /** Fire-and-forget admin SMS for a new signup. Never blocks the HTTP response. */
 export function notifyAdminNewSignup(user: {
   name: string;
