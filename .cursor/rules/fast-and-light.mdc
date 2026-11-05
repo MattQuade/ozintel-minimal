@@ -1,0 +1,25 @@
+---
+description: OzIntel must stay fast and light — non-negotiable
+alwaysApply: true
+---
+
+# Fast and light (absolute bottom line)
+
+OzIntel runs **fast and light**. That is the absolute bottom line of this project. Do not re-litigate it. Do not add anything that makes the app feel slow, heavy, or stuck — especially on phones / PWA restore paths.
+
+## Hard rules
+
+1. **No heavy work on request hot paths.** API handlers for restore, login/session, catalogue, alerts, and similar must not scan every owner silo, merge photo trees, run multi-step migrations, or do bulk “sync everyone” loops.
+2. **One job per request.** Read the minimum JSON needed, write the minimum change, return. Prefer `readUsersFast()` (or equivalent) over full bootstrap/migration readers on hot paths.
+3. **Migrations are rare and offline.** Seed/migrate/consolidate only on explicit admin/setup/one-shot tools — never on every GET/POST that customers hit.
+4. **No speculative complexity.** Do not add background merges, double round-trips, or “just in case” filesystem walks to fix a bug. Fix the direct path.
+5. **If speed and a feature conflict, speed wins.** Strip the feature or defer it; do not leave a hang, timeout, or multi-second spinner in production.
+6. **Keep the stack thin.** Prefer simple JSON files and small handlers. Do not introduce heavy ORMs, large frameworks, or request-time batch jobs without an explicit user ask that accepts the cost.
+
+## When changing bottle shop / auth / ops
+
+- Restore must answer in about a second: match user or ledger row → set session → return payload (include catalogue in-band when useful).
+- Ledger admin load: read one store under the configured owner. Do not consolidate all owners on page load.
+- Never reintroduce invite-code complexity or silo-merge-on-restore.
+
+If a change would make OzIntel slower or heavier, do not ship it.

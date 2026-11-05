@@ -206,35 +206,47 @@ export async function readUsersFast(): Promise<User[]> {
   return users.map((u: Partial<User> & { email: string }) => normalizeUser(u));
 }
 
+/** Once per process — never on every request. */
+let usersBootstrapped = false;
+
+/**
+ * Default users reader for APIs. Hot path stays light: read + normalize.
+ * One-time process bootstrap may seed known users / legacy fixes.
+ */
 export async function readUsers(): Promise<User[]> {
-  await ensureStore();
-  await maybeSeedFromRepo(true);
-  const usersFile = getUsersFilePath();
-  const raw = await fs.readFile(usersFile, "utf8");
-  const parsed = JSON.parse(raw || '{"users":[]}');
-  const { users, wasLegacyArray } = extractUsersArray(parsed);
-  const month = currentMonthKey();
-  let changed = wasLegacyArray;
-  const normalized = users.map((u: Partial<User> & { email: string }) => {
-    const next = normalizeUser(u);
-    if (u.smsMonth !== month || Number(u.smsCount || 0) !== next.smsCount) {
-      changed = true;
-    }
-    if (!(u as { shares?: unknown }).shares) {
-      changed = true;
-    }
-    return next;
-  });
-  const ensured = ensureKnownUsers(normalized);
-  const finalUsers = ensured.users;
-  if (changed || ensured.changed) await writeUsers(finalUsers);
-  await migrateGarryOwnerSilo();
-  const { ensureAccountingPinIfUnset, deleteAccountingPin } = await import(
-    "@/lib/accounting/pinStore"
-  );
-  await ensureAccountingPinIfUnset(GARRY_EMAIL, "4444");
-  await deleteAccountingPin(GARRY_EMAIL_LEGACY);
-  return finalUsers;
+  if (!usersBootstrapped) {
+    usersBootstrapped = true;
+    await ensureStore();
+    await maybeSeedFromRepo(true);
+    const usersFile = getUsersFilePath();
+    const raw = await fs.readFile(usersFile, "utf8");
+    const parsed = JSON.parse(raw || '{"users":[]}');
+    const { users, wasLegacyArray } = extractUsersArray(parsed);
+    const month = currentMonthKey();
+    let changed = wasLegacyArray;
+    const normalized = users.map((u: Partial<User> & { email: string }) => {
+      const next = normalizeUser(u);
+      if (u.smsMonth !== month || Number(u.smsCount || 0) !== next.smsCount) {
+        changed = true;
+      }
+      if (!(u as { shares?: unknown }).shares) {
+        changed = true;
+      }
+      return next;
+    });
+    const ensured = ensureKnownUsers(normalized);
+    if (changed || ensured.changed) await writeUsers(ensured.users);
+    // Legacy one-shots — never block later requests.
+    void migrateGarryOwnerSilo().catch(() => undefined);
+    void import("@/lib/accounting/pinStore")
+      .then(async (pin) => {
+        await pin.ensureAccountingPinIfUnset(GARRY_EMAIL, "4444");
+        await pin.deleteAccountingPin(GARRY_EMAIL_LEGACY);
+      })
+      .catch(() => undefined);
+    return ensured.users;
+  }
+  return readUsersFast();
 }
 export async function writeUsers(users: User[]) {
   await ensureStore();
@@ -316,7 +328,7 @@ async function listShareOwnersFor(
 ): Promise<string[]> {
   const needle = String(granteeEmail || "").trim().toLowerCase();
   if (!needle) return [];
-  const users = await readUsers();
+  const users = await readUsersFast();
   return users
     .filter((u) =>
       (u.shares?.[module] || []).some((e) => e.toLowerCase() === needle)
@@ -325,7 +337,7 @@ async function listShareOwnersFor(
 }
 
 export async function findUserForRestore(query: string) {
-  const users = await readUsers();
+  const users = await readUsersFast();
   return matchUserForRestore(query, users);
 }
 

@@ -4,12 +4,9 @@ import sharp from "sharp";
 import {
   getBottleShopFilePath,
   getBottleShopPhotosDir,
-  getDataDir,
   getPubOpsDataDir,
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
-import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
-import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 
 export type BottleProduct = {
   id: string;
@@ -272,130 +269,6 @@ export async function findBottleCustomerForRestore(
   );
 }
 
-function productLooksCustom(p: BottleProduct): boolean {
-  const name = String(p.name || "");
-  const image = String(p.imageUrl || "");
-  if (image.includes("/api/bottleshop/photos/")) return true;
-  if (!/^House\s+/i.test(name)) return true;
-  return false;
-}
-
-/**
- * Merge bottle-shop JSON from every owner silo into the configured pub owner.
- * Fixes split-brain where ops previously wrote a different silo than /bottleshop.
- */
-export async function consolidateBottleShopIntoOwnerSilo(): Promise<{
-  ownerEmail: string;
-  mergedProducts: number;
-  mergedCustomers: number;
-}> {
-  const ownerEmail = getBottleShopOwnerEmail();
-  const ownersRoot = path.join(getDataDir(), "owners");
-  let ownerNames: string[] = [];
-  try {
-    ownerNames = await fs.readdir(ownersRoot);
-  } catch {
-    ownerNames = [];
-  }
-
-  const primary = await runWithDataOwnerAsync(ownerEmail, () => readStore());
-  const productMap = new Map<string, BottleProduct>();
-  const customerMap = new Map<string, BottleCustomer>();
-  const orderMap = new Map<string, BottleOrder>();
-
-  for (const p of primary.products) productMap.set(p.id, p);
-  for (const c of primary.customers) {
-    customerMap.set(bottleCustomerLogin(c) || c.id, c);
-  }
-  for (const o of primary.orders) orderMap.set(o.id, o);
-
-  let mergedProducts = 0;
-  let mergedCustomers = 0;
-
-  for (const ownerDir of ownerNames) {
-    const email = String(ownerDir || "").trim().toLowerCase();
-    if (!email || email === ownerEmail.toLowerCase()) continue;
-    let other: BottleShopStore;
-    try {
-      other = await runWithDataOwnerAsync(email, () => readStore());
-    } catch {
-      continue;
-    }
-    for (const p of other.products) {
-      const existing = productMap.get(p.id);
-      if (!existing) {
-        productMap.set(p.id, p);
-        mergedProducts += 1;
-        continue;
-      }
-      if (productLooksCustom(p) && !productLooksCustom(existing)) {
-        productMap.set(p.id, p);
-        mergedProducts += 1;
-      } else if (productLooksCustom(p) || productLooksCustom(existing)) {
-        // Prefer uploaded photo + non-default details.
-        const next: BottleProduct = {
-          ...existing,
-          name: productLooksCustom(p) ? p.name : existing.name,
-          price: p.price || existing.price,
-          quantity: Math.max(existing.quantity, p.quantity),
-          imageUrl: productLooksCustom(p) ? p.imageUrl : existing.imageUrl,
-          active: existing.active || p.active,
-        };
-        if (
-          next.name !== existing.name ||
-          next.imageUrl !== existing.imageUrl ||
-          next.quantity !== existing.quantity
-        ) {
-          productMap.set(p.id, next);
-          mergedProducts += 1;
-        }
-      }
-    }
-    for (const c of other.customers) {
-      const key = bottleCustomerLogin(c) || c.id;
-      if (!customerMap.has(key)) {
-        customerMap.set(key, c);
-        mergedCustomers += 1;
-      }
-    }
-    for (const o of other.orders) {
-      if (!orderMap.has(o.id)) orderMap.set(o.id, o);
-    }
-
-    // Copy any uploaded photos into the owner photos dir.
-    try {
-      const otherPhotos = await runWithDataOwnerAsync(email, async () =>
-        getBottleShopPhotosDir()
-      );
-      const ownerPhotos = await runWithDataOwnerAsync(ownerEmail, async () =>
-        getBottleShopPhotosDir()
-      );
-      await fs.mkdir(ownerPhotos, { recursive: true });
-      const files = await fs.readdir(otherPhotos);
-      for (const file of files) {
-        if (!file.toLowerCase().endsWith(".jpg")) continue;
-        const from = path.join(otherPhotos, file);
-        const to = path.join(ownerPhotos, file);
-        try {
-          await fs.access(to);
-        } catch {
-          await fs.copyFile(from, to);
-        }
-      }
-    } catch {
-      // ignore photo copy failures
-    }
-  }
-
-  const merged: BottleShopStore = {
-    products: [...productMap.values()],
-    customers: [...customerMap.values()],
-    orders: [...orderMap.values()],
-  };
-  await runWithDataOwnerAsync(ownerEmail, () => writeStore(merged));
-  return { ownerEmail, mergedProducts, mergedCustomers };
-}
-
 export async function addBottleCustomer(input: {
   name: string;
   login?: string;
@@ -467,12 +340,12 @@ export async function deleteBottleCustomer(
 
   const login = bottleCustomerLogin(deleted);
   if (login) {
-    const { findUserByEmail, writeUsers, readUsers } = await import(
+    const { findUserByEmail, writeUsers, readUsersFast } = await import(
       "@/lib/users"
     );
     const user = await findUserByEmail(login);
     if (user?.permissions?.bottleShop) {
-      const users = await readUsers();
+      const users = await readUsersFast();
       const uIdx = users.findIndex(
         (u) => u.email.trim().toLowerCase() === login
       );
@@ -490,29 +363,6 @@ export async function deleteBottleCustomer(
   }
 
   return { deleted };
-}
-
-/** Ensure every active ledger username has an approved Bottle Shop login. */
-export async function syncBottleShopCustomerLogins(): Promise<number> {
-  const store = await readStore();
-  const { ensureApprovedBottleShopUser } = await import("@/lib/users");
-  let synced = 0;
-  for (const customer of store.customers) {
-    if (!customer.active) continue;
-    const login = bottleCustomerLogin(customer);
-    if (!login) continue;
-    if (!customer.login && login) {
-      customer.login = login;
-    }
-    await ensureApprovedBottleShopUser({
-      email: login,
-      name: customer.name,
-      phone: customer.phone,
-    });
-    synced += 1;
-  }
-  await writeStore(store);
-  return synced;
 }
 
 export async function saveBottleProductPhoto(

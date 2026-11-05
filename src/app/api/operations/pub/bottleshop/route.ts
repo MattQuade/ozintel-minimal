@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  consolidateBottleShopIntoOwnerSilo,
   createBottleProduct,
   loadBottleShopAdmin,
   setBottleOrderStatus,
-  syncBottleShopCustomerLogins,
   updateBottleProduct,
   type BottleOrder,
 } from "@/lib/operations/pub/bottleshop";
@@ -23,11 +21,7 @@ export async function GET(req: NextRequest) {
   const access = await requireOpsAccess(req, "pubOps");
   if (!access.ok) return access.response;
   try {
-    await consolidateBottleShopIntoOwnerSilo();
-    const data = await withBottleShopOwner(async () => {
-      await syncBottleShopCustomerLogins();
-      return loadBottleShopAdmin();
-    });
+    const data = await withBottleShopOwner(() => loadBottleShopAdmin());
     return NextResponse.json({
       success: true,
       ...data,

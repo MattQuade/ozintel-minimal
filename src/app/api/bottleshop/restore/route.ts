@@ -1,5 +1,3 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import {
   bottleCustomerLogin,
@@ -8,11 +6,9 @@ import {
   restoreQueryVariants,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
-import { getDataDir } from "@/lib/dataPaths";
 import {
   ensureApprovedBottleShopUser,
   matchUserForRestore,
-  PLATFORM_ADMIN_EMAIL,
   publicUser,
   readUsersFast,
 } from "@/lib/users";
@@ -22,37 +18,9 @@ import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function findCustomerAnywhere(query: string) {
-  const ownersRoot = path.join(getDataDir(), "owners");
-  let dirs: string[] = [];
-  try {
-    dirs = await fs.readdir(ownersRoot);
-  } catch {
-    dirs = [];
-  }
-  const owners = Array.from(
-    new Set(
-      [getBottleShopOwnerEmail(), PLATFORM_ADMIN_EMAIL, ...dirs]
-        .map((e) => String(e || "").trim().toLowerCase())
-        .filter(Boolean)
-    )
-  );
-  for (const owner of owners) {
-    try {
-      const customer = await runWithDataOwnerAsync(owner, () =>
-        findBottleCustomerForRestore(query)
-      );
-      if (customer) return { customer, owner };
-    } catch {
-      // try next silo
-    }
-  }
-  return null;
-}
-
 /**
- * Bottle shop restore — must stay fast and return the catalogue in-band
- * so the phone unlocks even if cookies are flaky.
+ * Fast bottle-shop restore. No silo scans, no migrations.
+ * Returns catalogue in-band so the phone unlocks in one round-trip.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -70,6 +38,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ownerEmail = getBottleShopOwnerEmail();
     const variants = restoreQueryVariants(query);
     const users = await readUsersFast();
     let user = null as ReturnType<typeof matchUserForRestore>;
@@ -79,9 +48,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (user && user.status === "approved" && user.permissions?.bottleShop) {
-      const products = await runWithDataOwnerAsync(
-        getBottleShopOwnerEmail(),
-        () => listBottleProducts({ activeOnly: true })
+      const products = await runWithDataOwnerAsync(ownerEmail, () =>
+        listBottleProducts({ activeOnly: true })
       );
       const res = NextResponse.json({
         success: true,
@@ -93,10 +61,12 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
-    const found = await findCustomerAnywhere(query);
-    if (found) {
+    const customer = await runWithDataOwnerAsync(ownerEmail, () =>
+      findBottleCustomerForRestore(query)
+    );
+    if (customer) {
       const login =
-        bottleCustomerLogin(found.customer) ||
+        bottleCustomerLogin(customer) ||
         variants.find((v) => v.includes("@")) ||
         "";
       if (!login) {
@@ -104,19 +74,18 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             error:
-              "This ledger entry has no username. Re-add them with a restore username like jsmith@ozintel.",
+              "This ledger entry has no username. Re-add with a restore username like jsmith@ozintel.",
           },
           { status: 400 }
         );
       }
       const next = await ensureApprovedBottleShopUser({
         email: login,
-        name: found.customer.name,
-        phone: found.customer.phone,
+        name: customer.name,
+        phone: customer.phone,
       });
-      const products = await runWithDataOwnerAsync(
-        getBottleShopOwnerEmail(),
-        () => listBottleProducts({ activeOnly: true })
+      const products = await runWithDataOwnerAsync(ownerEmail, () =>
+        listBottleProducts({ activeOnly: true })
       );
       const res = NextResponse.json({
         success: true,
@@ -128,8 +97,7 @@ export async function POST(req: NextRequest) {
       return res;
     }
 
-    // Last resort for pub usernames only (*@ozintel): if the user row exists,
-    // approve Bottle Shop and open. Does not auto-grant arbitrary emails.
+    // Pub usernames only (*@ozintel): create/approve and open — one step.
     const emailLike = variants.find((v) => v.endsWith("@ozintel"));
     if (emailLike) {
       const next = await ensureApprovedBottleShopUser({
@@ -137,9 +105,8 @@ export async function POST(req: NextRequest) {
         name: user?.name || emailLike,
         phone: user?.phone,
       });
-      const products = await runWithDataOwnerAsync(
-        getBottleShopOwnerEmail(),
-        () => listBottleProducts({ activeOnly: true })
+      const products = await runWithDataOwnerAsync(ownerEmail, () =>
+        listBottleProducts({ activeOnly: true })
       );
       const res = NextResponse.json({
         success: true,
@@ -166,7 +133,7 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error:
-          "No bottle shop account for that username. In the Bottle Shop ledger, Delete them if listed, then Add customer with username exactly tbong@ozintel (use the Username field).",
+          "No bottle shop account for that username. Add them in the Bottle Shop ledger with a Username like jsmith@ozintel.",
       },
       { status: 404 }
     );
