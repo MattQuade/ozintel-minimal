@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       const customer = await addBottleCustomer({
         name: body.name,
+        login: body.login || body.username || body.email,
         phone: body.phone,
         note: body.note,
       });

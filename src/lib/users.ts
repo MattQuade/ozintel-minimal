@@ -319,6 +319,65 @@ export async function findUserForRestore(query: string) {
   return matchUserForRestore(query, users);
 }
 
+/**
+ * Ensure an approved Bottle Shop login exists (e.g. tbong@ozintel).
+ * Creates the user if missing; enables bottleShop + approves if present.
+ */
+export async function ensureApprovedBottleShopUser(input: {
+  email: string;
+  name: string;
+  phone?: string;
+}): Promise<User> {
+  const email = String(input.email || "").trim().toLowerCase();
+  const name = String(input.name || "").trim() || email;
+  const phone = String(input.phone || "").trim() || "No phone yet";
+  if (!email) throw new Error("Username / email is required");
+
+  const users = await readUsers();
+  const idx = users.findIndex(
+    (u) => u.email.trim().toLowerCase() === email
+  );
+  if (idx >= 0) {
+    const next: User = {
+      ...users[idx],
+      name: users[idx].name || name,
+      phone:
+        users[idx].phone && users[idx].phone !== "No phone yet"
+          ? users[idx].phone
+          : phone,
+      status: users[idx].status === "blocked" ? "blocked" : "approved",
+      permissions: {
+        ...users[idx].permissions,
+        bottleShop: true,
+      },
+    };
+    users[idx] = next;
+    await writeUsers(users);
+    return next;
+  }
+
+  const user: User = {
+    name,
+    email,
+    phone,
+    status: "approved",
+    smsCount: 0,
+    smsMonth: currentMonthKey(),
+    permissions: {
+      accounting: false,
+      pubOps: false,
+      forestryOps: false,
+      logisticsOps: false,
+      bottleShop: true,
+    },
+    shares: { pubOps: [], logisticsOps: [] },
+    lastAlert: null,
+  };
+  users.push(user);
+  await writeUsers(users);
+  return user;
+}
+
 const GARRY_EMAIL = "garry@ozintel.com.au";
 const GARRY_EMAIL_LEGACY = "gary@ozintel.com.au";
 /** Platform owner — admin-only Intel notes, etc. */

@@ -133,41 +133,41 @@ export default function BottleShopPage() {
   const restoreAccount = async () => {
     const query = restoreInput.trim();
     if (!query) {
-      setStatus("Enter your username (e.g. sdurnan@ozintel).");
+      setStatus("Enter your username (e.g. tbong@ozintel).");
       return;
     }
     setRestoring(true);
     setStatus("Restoring…");
     try {
-      const res = await fetch("/api/users/restore", {
+      const res = await fetch("/api/bottleshop/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ query }),
       });
       const data = await res.json();
-      if (!data.success || !data.user) {
+      if (!data.success) {
         setStatus(data.error || "No account found with those details.");
         return;
       }
-      try {
-        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      } catch {
-        // ignore
+      if (data.user) {
+        try {
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        } catch {
+          // ignore
+        }
+        setRestoreInput(data.user.email);
       }
-      if (data.user.status !== "approved") {
-        setStatus("Account found but not approved yet.");
-        return;
-      }
-      if (!data.user.permissions?.bottleShop) {
+      const code =
+        data.via === "code"
+          ? String(data.accessCode || "").trim()
+          : undefined;
+      const ok = await loadCatalogue(code);
+      if (ok) {
         setStatus(
-          "Account restored, but Bottle Shop access is not enabled yet. Ask the pub to tick Bottle Shop on your account."
+          `Welcome ${data.user?.name || data.customer?.name || query}.`
         );
-        return;
       }
-      setRestoreInput(data.user.email);
-      const ok = await loadCatalogue();
-      if (ok) setStatus(`Welcome ${data.user.name}.`);
     } catch (error) {
       console.error(error);
       setStatus("Restore failed. Please try again.");

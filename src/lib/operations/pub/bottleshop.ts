@@ -39,6 +39,8 @@ export type BottleOrder = {
 export type BottleCustomer = {
   id: string;
   name: string;
+  /** Restore username on /bottleshop, e.g. tbong@ozintel */
+  login: string;
   phone: string;
   note: string;
   accessCode: string;
@@ -81,8 +83,24 @@ function makeAccessCode(existing: Set<string>) {
   return `B${Date.now().toString(36).toUpperCase().slice(-5)}`;
 }
 
+function normalizeLogin(raw: string) {
+  return String(raw || "").trim().toLowerCase();
+}
+
+/** Prefer explicit login; fall back to name when it looks like a username. */
+export function bottleCustomerLogin(customer: {
+  login?: string;
+  name?: string;
+}): string {
+  const login = normalizeLogin(customer.login || "");
+  if (login) return login;
+  const name = normalizeLogin(customer.name || "");
+  if (name.includes("@")) return name;
+  return "";
+}
+
 function normalizeCustomer(
-  raw: Partial<BottleCustomer>
+  raw: Partial<BottleCustomer> & { login?: string }
 ): BottleCustomer | null {
   const id = String(raw.id || "").trim();
   const name = String(raw.name || "").trim();
@@ -91,6 +109,7 @@ function normalizeCustomer(
   return {
     id,
     name,
+    login: bottleCustomerLogin(raw),
     phone: String(raw.phone || "").trim(),
     note: String(raw.note || "").trim(),
     accessCode,
@@ -228,18 +247,62 @@ export async function findBottleCustomerByCode(
   );
 }
 
+/**
+ * Match an active ledger customer by restore username, name, note, or phone.
+ * Lets people already listed in the Bottle Shop ledger unlock via Restore.
+ */
+export async function findBottleCustomerForRestore(
+  query: string
+): Promise<BottleCustomer | null> {
+  const q = normalizeLogin(query);
+  if (!q) return null;
+  const store = await readStore();
+  const qPhone = q.replace(/\D/g, "");
+  return (
+    store.customers.find((c) => {
+      if (!c.active) return false;
+      const keys = [
+        bottleCustomerLogin(c),
+        normalizeLogin(c.name),
+        normalizeLogin(c.note),
+        normalizeLogin(c.phone),
+      ].filter(Boolean);
+      if (keys.includes(q)) return true;
+      if (qPhone.length >= 8) {
+        const phoneDigits = String(c.phone || "").replace(/\D/g, "");
+        if (phoneDigits && phoneDigits === qPhone) return true;
+      }
+      return false;
+    }) || null
+  );
+}
+
 export async function addBottleCustomer(input: {
   name: string;
+  login?: string;
   phone?: string;
   note?: string;
 }): Promise<BottleCustomer> {
   const name = String(input.name || "").trim();
   if (!name) throw new Error("Customer name is required");
+  const login = bottleCustomerLogin({
+    login: input.login,
+    name,
+  });
   const store = await readStore();
+  if (login) {
+    const clash = store.customers.find(
+      (c) => c.active && bottleCustomerLogin(c) === login
+    );
+    if (clash) {
+      throw new Error(`Username ${login} is already used by ${clash.name}`);
+    }
+  }
   const existingCodes = new Set(store.customers.map((c) => c.accessCode));
   const customer: BottleCustomer = {
     id: newId("cust"),
     name,
+    login,
     phone: String(input.phone || "").trim(),
     note: String(input.note || "").trim(),
     accessCode: makeAccessCode(existingCodes),
@@ -248,6 +311,16 @@ export async function addBottleCustomer(input: {
   };
   store.customers.push(customer);
   await writeStore(store);
+
+  if (login) {
+    const { ensureApprovedBottleShopUser } = await import("@/lib/users");
+    await ensureApprovedBottleShopUser({
+      email: login,
+      name,
+      phone: customer.phone,
+    });
+  }
+
   return customer;
 }
 

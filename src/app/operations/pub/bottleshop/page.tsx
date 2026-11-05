@@ -40,6 +40,7 @@ type Order = {
 type ShopCustomer = {
   id: string;
   name: string;
+  login?: string;
   phone: string;
   note: string;
   accessCode: string;
@@ -75,6 +76,7 @@ function BottleShopAdminInner() {
   const [reservedCount, setReservedCount] = useState(0);
   const [pushStatus, setPushStatus] = useState("");
   const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerLogin, setNewCustomerLogin] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerNote, setNewCustomerNote] = useState("");
   const [drafts, setDrafts] = useState<
@@ -254,6 +256,7 @@ function BottleShopAdminInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newCustomerName.trim(),
+          login: newCustomerLogin.trim(),
           phone: newCustomerPhone.trim(),
           note: newCustomerNote.trim(),
         }),
@@ -264,10 +267,14 @@ function BottleShopAdminInner() {
         return;
       }
       setNewCustomerName("");
+      setNewCustomerLogin("");
       setNewCustomerPhone("");
       setNewCustomerNote("");
+      const loginHint = data.customer.login
+        ? ` — restore with ${data.customer.login}`
+        : "";
       setStatus(
-        `Added ${data.customer.name} — code ${data.customer.accessCode}`
+        `Added ${data.customer.name}${loginHint} — code ${data.customer.accessCode}`
       );
       await load();
     } catch (error) {
@@ -398,8 +405,9 @@ function BottleShopAdminInner() {
         <>
           <h2 style={{ marginTop: 28 }}>Customers (manual invite)</h2>
           <p style={{ color: "#94a3b8", marginTop: 0 }}>
-            Add people one by one. Each gets a personal code/link for
-            /bottleshop. Auto sign-up can come later.
+            Add people one by one. Give them a username like{" "}
+            <code>tbong@ozintel</code> so they can Restore My Account on
+            /bottleshop. They also get a personal invite code/link.
           </p>
           <div
             style={{
@@ -414,6 +422,24 @@ function BottleShopAdminInner() {
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
               placeholder="Customer name"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            />
+            <input
+              value={newCustomerLogin}
+              onChange={(e) => setNewCustomerLogin(e.target.value)}
+              placeholder="Username for restore (e.g. tbong@ozintel)"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -499,6 +525,11 @@ function BottleShopAdminInner() {
                       {c.active ? "active" : "disabled"}
                     </span>
                   </div>
+                  {c.login || (c.name || "").includes("@") ? (
+                    <p style={{ margin: "6px 0", color: "#fde68a" }}>
+                      Restore as: {c.login || c.name}
+                    </p>
+                  ) : null}
                   {c.phone ? (
                     <p style={{ margin: "6px 0", color: "#94a3b8" }}>{c.phone}</p>
                   ) : null}
