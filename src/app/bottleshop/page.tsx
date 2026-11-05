@@ -469,7 +469,7 @@ export default function BottleShopPage() {
                     <div style={{ color: "#86efac", fontWeight: 600 }}>
                       {money(p.price)}
                     </div>
-                    <div style={{ color: "#94a3b8", fontSize: "0.9rem" }}>
+                    <div style={{ color: "#ef4444", fontSize: "1.26rem" }}>
                       {soldOut ? "Sold out" : `${p.quantity} available`}
                     </div>
                   </div>
