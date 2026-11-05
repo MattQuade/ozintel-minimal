@@ -31,6 +31,31 @@ export async function syncAppBadge(count: number) {
   reg?.active?.postMessage({ type: "SET_BADGE", count: n });
 }
 
+/** Close bottle-shop tray notifications when the user opens the app. */
+export async function clearBottleShopNotifications() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const reg =
+      (await navigator.serviceWorker.getRegistration()) ||
+      (await navigator.serviceWorker.ready.catch(() => null));
+    if (!reg) return;
+
+    if (typeof reg.getNotifications === "function") {
+      const list = await reg.getNotifications({ tag: "bottleshop-order" });
+      for (const n of list) n.close();
+    }
+
+    const worker = reg.active || navigator.serviceWorker.controller;
+    worker?.postMessage({ type: "APP_OPENED" });
+    worker?.postMessage({
+      type: "CLEAR_NOTIFICATIONS",
+      tag: "bottleshop-order",
+    });
+  } catch (err) {
+    console.error("[clear notifications]", err);
+  }
+}
+
 export async function enableBottleShopPush(): Promise<string> {
   const reg = await ensureServiceWorker();
   await navigator.serviceWorker.ready;

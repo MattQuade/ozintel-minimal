@@ -21,6 +21,18 @@ async function setBadge(count) {
   }
 }
 
+/** Dismiss on-screen notifications when the app is opened. */
+async function clearShownNotifications(tag) {
+  try {
+    const list = await self.registration.getNotifications(
+      tag ? { tag } : undefined
+    );
+    for (const n of list) n.close();
+  } catch (err) {
+    console.error("[sw clear notifications]", err);
+  }
+}
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -84,5 +96,11 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "CLEAR_BADGE") {
     event.waitUntil(setBadge(0));
+  }
+  if (data.type === "CLEAR_NOTIFICATIONS") {
+    event.waitUntil(clearShownNotifications(data.tag || "bottleshop-order"));
+  }
+  if (data.type === "APP_OPENED") {
+    event.waitUntil(clearShownNotifications("bottleshop-order"));
   }
 });
