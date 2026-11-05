@@ -4,9 +4,12 @@ import sharp from "sharp";
 import {
   getBottleShopFilePath,
   getBottleShopPhotosDir,
+  getDataDir,
   getPubOpsDataDir,
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
+import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
+import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 
 export type BottleProduct = {
   id: string;
@@ -225,6 +228,20 @@ export async function loadBottleShopAdmin() {
   };
 }
 
+/** Normalize restore usernames (phones sometimes turn @ into 2). */
+export function restoreQueryVariants(query: string): string[] {
+  const q = normalizeLogin(query);
+  if (!q) return [];
+  const out = new Set<string>([q]);
+  if (!q.includes("@") && /^[a-z0-9._+-]+2[a-z0-9.-]+$/i.test(q)) {
+    out.add(q.replace(/2/, "@"));
+  }
+  if (q.includes("@")) {
+    out.add(q.replace("@", "2"));
+  }
+  return [...out];
+}
+
 /**
  * Match an active ledger customer by restore username, name, note, or phone.
  * Lets people already listed in the Bottle Shop ledger unlock via Restore.
@@ -232,10 +249,10 @@ export async function loadBottleShopAdmin() {
 export async function findBottleCustomerForRestore(
   query: string
 ): Promise<BottleCustomer | null> {
-  const q = normalizeLogin(query);
-  if (!q) return null;
+  const variants = restoreQueryVariants(query);
+  if (!variants.length) return null;
   const store = await readStore();
-  const qPhone = q.replace(/\D/g, "");
+  const qPhone = normalizeLogin(query).replace(/\D/g, "");
   return (
     store.customers.find((c) => {
       if (!c.active) return false;
@@ -245,7 +262,7 @@ export async function findBottleCustomerForRestore(
         normalizeLogin(c.note),
         normalizeLogin(c.phone),
       ].filter(Boolean);
-      if (keys.includes(q)) return true;
+      if (variants.some((v) => keys.includes(v))) return true;
       if (qPhone.length >= 8) {
         const phoneDigits = String(c.phone || "").replace(/\D/g, "");
         if (phoneDigits && phoneDigits === qPhone) return true;
@@ -253,6 +270,130 @@ export async function findBottleCustomerForRestore(
       return false;
     }) || null
   );
+}
+
+function productLooksCustom(p: BottleProduct): boolean {
+  const name = String(p.name || "");
+  const image = String(p.imageUrl || "");
+  if (image.includes("/api/bottleshop/photos/")) return true;
+  if (!/^House\s+/i.test(name)) return true;
+  return false;
+}
+
+/**
+ * Merge bottle-shop JSON from every owner silo into the configured pub owner.
+ * Fixes split-brain where ops previously wrote a different silo than /bottleshop.
+ */
+export async function consolidateBottleShopIntoOwnerSilo(): Promise<{
+  ownerEmail: string;
+  mergedProducts: number;
+  mergedCustomers: number;
+}> {
+  const ownerEmail = getBottleShopOwnerEmail();
+  const ownersRoot = path.join(getDataDir(), "owners");
+  let ownerNames: string[] = [];
+  try {
+    ownerNames = await fs.readdir(ownersRoot);
+  } catch {
+    ownerNames = [];
+  }
+
+  const primary = await runWithDataOwnerAsync(ownerEmail, () => readStore());
+  const productMap = new Map<string, BottleProduct>();
+  const customerMap = new Map<string, BottleCustomer>();
+  const orderMap = new Map<string, BottleOrder>();
+
+  for (const p of primary.products) productMap.set(p.id, p);
+  for (const c of primary.customers) {
+    customerMap.set(bottleCustomerLogin(c) || c.id, c);
+  }
+  for (const o of primary.orders) orderMap.set(o.id, o);
+
+  let mergedProducts = 0;
+  let mergedCustomers = 0;
+
+  for (const ownerDir of ownerNames) {
+    const email = String(ownerDir || "").trim().toLowerCase();
+    if (!email || email === ownerEmail.toLowerCase()) continue;
+    let other: BottleShopStore;
+    try {
+      other = await runWithDataOwnerAsync(email, () => readStore());
+    } catch {
+      continue;
+    }
+    for (const p of other.products) {
+      const existing = productMap.get(p.id);
+      if (!existing) {
+        productMap.set(p.id, p);
+        mergedProducts += 1;
+        continue;
+      }
+      if (productLooksCustom(p) && !productLooksCustom(existing)) {
+        productMap.set(p.id, p);
+        mergedProducts += 1;
+      } else if (productLooksCustom(p) || productLooksCustom(existing)) {
+        // Prefer uploaded photo + non-default details.
+        const next: BottleProduct = {
+          ...existing,
+          name: productLooksCustom(p) ? p.name : existing.name,
+          price: p.price || existing.price,
+          quantity: Math.max(existing.quantity, p.quantity),
+          imageUrl: productLooksCustom(p) ? p.imageUrl : existing.imageUrl,
+          active: existing.active || p.active,
+        };
+        if (
+          next.name !== existing.name ||
+          next.imageUrl !== existing.imageUrl ||
+          next.quantity !== existing.quantity
+        ) {
+          productMap.set(p.id, next);
+          mergedProducts += 1;
+        }
+      }
+    }
+    for (const c of other.customers) {
+      const key = bottleCustomerLogin(c) || c.id;
+      if (!customerMap.has(key)) {
+        customerMap.set(key, c);
+        mergedCustomers += 1;
+      }
+    }
+    for (const o of other.orders) {
+      if (!orderMap.has(o.id)) orderMap.set(o.id, o);
+    }
+
+    // Copy any uploaded photos into the owner photos dir.
+    try {
+      const otherPhotos = await runWithDataOwnerAsync(email, async () =>
+        getBottleShopPhotosDir()
+      );
+      const ownerPhotos = await runWithDataOwnerAsync(ownerEmail, async () =>
+        getBottleShopPhotosDir()
+      );
+      await fs.mkdir(ownerPhotos, { recursive: true });
+      const files = await fs.readdir(otherPhotos);
+      for (const file of files) {
+        if (!file.toLowerCase().endsWith(".jpg")) continue;
+        const from = path.join(otherPhotos, file);
+        const to = path.join(ownerPhotos, file);
+        try {
+          await fs.access(to);
+        } catch {
+          await fs.copyFile(from, to);
+        }
+      }
+    } catch {
+      // ignore photo copy failures
+    }
+  }
+
+  const merged: BottleShopStore = {
+    products: [...productMap.values()],
+    customers: [...customerMap.values()],
+    orders: [...orderMap.values()],
+  };
+  await runWithDataOwnerAsync(ownerEmail, () => writeStore(merged));
+  return { ownerEmail, mergedProducts, mergedCustomers };
 }
 
 export async function addBottleCustomer(input: {
@@ -414,6 +555,27 @@ export async function updateBottleProduct(
   store.products[idx] = next;
   await writeStore(store);
   return next;
+}
+
+export async function createBottleProduct(input: {
+  name: string;
+  price?: number;
+  quantity?: number;
+}): Promise<BottleProduct> {
+  const name = String(input.name || "").trim();
+  if (!name) throw new Error("Product name is required");
+  const store = await readStore();
+  const product: BottleProduct = {
+    id: newId("item"),
+    name,
+    price: Math.max(0, Number(input.price) || 0),
+    quantity: Math.max(0, Math.floor(Number(input.quantity) || 0)),
+    imageUrl: "/bottleshop/wine-01.svg",
+    active: true,
+  };
+  store.products.push(product);
+  await writeStore(store);
+  return product;
 }
 
 export type PlaceOrderInput = {

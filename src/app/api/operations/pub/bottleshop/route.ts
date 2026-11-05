@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  consolidateBottleShopIntoOwnerSilo,
+  createBottleProduct,
   loadBottleShopAdmin,
   setBottleOrderStatus,
   syncBottleShopCustomerLogins,
@@ -21,6 +23,7 @@ export async function GET(req: NextRequest) {
   const access = await requireOpsAccess(req, "pubOps");
   if (!access.ok) return access.response;
   try {
+    await consolidateBottleShopIntoOwnerSilo();
     const data = await withBottleShopOwner(async () => {
       await syncBottleShopCustomerLogins();
       return loadBottleShopAdmin();
@@ -35,6 +38,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { success: false, error: "Failed to load bottle shop" },
       { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
+  try {
+    const body = await req.json();
+    const product = await withBottleShopOwner(() =>
+      createBottleProduct({
+        name: body.name,
+        price: body.price,
+        quantity: body.quantity,
+      })
+    );
+    return NextResponse.json({ success: true, product });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Create failed",
+      },
+      { status: 400 }
     );
   }
 }

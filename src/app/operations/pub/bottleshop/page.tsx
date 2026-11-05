@@ -79,6 +79,9 @@ function BottleShopAdminInner() {
   const [newCustomerLogin, setNewCustomerLogin] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerNote, setNewCustomerNote] = useState("");
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductPrice, setNewProductPrice] = useState("");
+  const [newProductQty, setNewProductQty] = useState("1");
   const [drafts, setDrafts] = useState<
     Record<string, { price: string; quantity: string; name: string }>
   >({});
@@ -193,9 +196,13 @@ function BottleShopAdminInner() {
   const uploadPhoto = async (id: string, file: File) => {
     setStatus(`Uploading photo for ${id}…`);
     try {
+      const draft = drafts[id];
       const form = new FormData();
       form.set("productId", id);
       form.set("file", file);
+      if (draft?.name) form.set("name", draft.name);
+      if (draft?.price) form.set("price", draft.price);
+      if (draft?.quantity) form.set("quantity", draft.quantity);
       const res = await fetch("/api/operations/pub/bottleshop/photo", {
         method: "POST",
         body: form,
@@ -205,13 +212,45 @@ function BottleShopAdminInner() {
         setStatus(data.error || "Photo upload failed");
         return false;
       }
-      setStatus("Photo uploaded — public bottle shop will show it.");
+      setStatus("Photo + details saved — public bottle shop will show them.");
       await load();
       return true;
     } catch (error) {
       console.error(error);
       setStatus("Photo upload failed.");
       return false;
+    }
+  };
+
+  const addProduct = async () => {
+    if (!newProductName.trim()) {
+      setStatus("Product name is required.");
+      return;
+    }
+    setStatus("Adding product…");
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProductName.trim(),
+          price: Number(newProductPrice) || 0,
+          quantity: Number(newProductQty) || 0,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Could not add product");
+        return;
+      }
+      setNewProductName("");
+      setNewProductPrice("");
+      setNewProductQty("1");
+      setStatus(`Added ${data.product.name}. Upload a photo below.`);
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Could not add product.");
     }
   };
 
@@ -552,6 +591,81 @@ function BottleShopAdminInner() {
           )}
 
           <h2 style={{ marginTop: 36 }}>Stock</h2>
+          <div
+            style={{
+              background: "#1e2937",
+              border: "1px solid #334155",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 12,
+            }}
+          >
+            <p style={{ margin: "0 0 8px", color: "#94a3b8" }}>
+              Add a new item (e.g. 24pk cider), then upload its photo.
+            </p>
+            <input
+              value={newProductName}
+              onChange={(e) => setNewProductName(e.target.value)}
+              placeholder="Product name"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input
+                value={newProductPrice}
+                onChange={(e) => setNewProductPrice(e.target.value)}
+                placeholder="Price"
+                inputMode="decimal"
+                style={{
+                  flex: 1,
+                  minWidth: 100,
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #475569",
+                  background: "#0f172a",
+                  color: "white",
+                }}
+              />
+              <input
+                value={newProductQty}
+                onChange={(e) => setNewProductQty(e.target.value)}
+                placeholder="Qty"
+                inputMode="numeric"
+                style={{
+                  flex: 1,
+                  minWidth: 80,
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid #475569",
+                  background: "#0f172a",
+                  color: "white",
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void addProduct()}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#b45309",
+                  color: "white",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Add product
+              </button>
+            </div>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {products.map((p) => {
               const draft = drafts[p.id] || {

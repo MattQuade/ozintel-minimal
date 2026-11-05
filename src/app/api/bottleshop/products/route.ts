@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listBottleProducts } from "@/lib/operations/pub/bottleshop";
+import {
+  consolidateBottleShopIntoOwnerSilo,
+  listBottleProducts,
+} from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
@@ -14,24 +17,34 @@ export async function GET(req: NextRequest) {
     if (!gate.ok) {
       return NextResponse.json(
         { success: false, error: gate.error, needsAccess: true },
-        { status: 403 }
+        { status: 403, headers: { "Cache-Control": "no-store" } }
       );
     }
+
+    try {
+      await consolidateBottleShopIntoOwnerSilo();
+    } catch (error) {
+      console.error("[bottleshop products consolidate]", error);
+    }
+
     const products = await runWithDataOwnerAsync(
       getBottleShopOwnerEmail(),
       () => listBottleProducts({ activeOnly: true })
     );
-    return NextResponse.json({
-      success: true,
-      products,
-      customer: { id: gate.customerId, name: gate.displayName },
-      via: gate.via,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        products,
+        customer: { id: gate.customerId, name: gate.displayName },
+        via: gate.via,
+      },
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json(
       { success: false, error: "Failed to load bottle shop" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store" } }
     );
   }
 }

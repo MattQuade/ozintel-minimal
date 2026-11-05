@@ -102,9 +102,19 @@ export default function BottleShopPage() {
     }
   }, []);
 
+  const normalizeRestoreQuery = (raw: string) => {
+    const trimmed = raw.trim().toLowerCase();
+    if (!trimmed) return "";
+    // Some phones turn @ into 2 (tbong2ozintel → tbong@ozintel).
+    if (!trimmed.includes("@") && /^[a-z0-9._+-]+2[a-z0-9.-]+$/i.test(trimmed)) {
+      return trimmed.replace(/2/, "@");
+    }
+    return trimmed;
+  };
+
   const silentRestore = useCallback(
     async (query: string) => {
-      const trimmed = query.trim();
+      const trimmed = normalizeRestoreQuery(query);
       if (!trimmed) return false;
       try {
         const res = await fetch("/api/bottleshop/restore", {
@@ -112,6 +122,7 @@ export default function BottleShopPage() {
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({ query: trimmed }),
+          signal: AbortSignal.timeout(20000),
         });
         const data = await res.json();
         if (!data.success || !data.user?.email) {
@@ -129,7 +140,11 @@ export default function BottleShopPage() {
         return loadCatalogue();
       } catch (error) {
         console.error(error);
-        setStatus("Restore failed. Please try again.");
+        setStatus(
+          error instanceof Error && error.name === "TimeoutError"
+            ? "Restore timed out — check reception and try again."
+            : "Restore failed. Please try again."
+        );
         return false;
       }
     },
@@ -150,6 +165,20 @@ export default function BottleShopPage() {
       }
     })();
   }, [loadCatalogue, silentRestore]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void loadCatalogue();
+      }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [loadCatalogue]);
 
   const unlocked = products.length > 0 || Boolean(unlockedName);
 
@@ -175,7 +204,7 @@ export default function BottleShopPage() {
   };
 
   const restoreAccount = async () => {
-    const query = restoreInput.trim();
+    const query = normalizeRestoreQuery(restoreInput);
     if (!query) {
       setStatus("Enter your username (e.g. jsmith@ozintel).");
       return;
@@ -184,6 +213,7 @@ export default function BottleShopPage() {
     setStatus("Restoring…");
     try {
       writeStoredLogin(query);
+      setRestoreInput(query);
       const ok = await silentRestore(query);
       if (ok) {
         setStatus("Welcome — you will stay signed in on this phone.");
