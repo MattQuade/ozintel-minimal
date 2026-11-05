@@ -29,14 +29,27 @@ export type BottleOrder = {
   createdAt: string;
   customerName: string;
   customerNote: string;
+  customerId?: string;
   lines: BottleOrderLine[];
   total: number;
   status: "reserved" | "collected" | "cancelled";
 };
 
+/** Manually added customers who may open /bottleshop with their access code. */
+export type BottleCustomer = {
+  id: string;
+  name: string;
+  phone: string;
+  note: string;
+  accessCode: string;
+  active: boolean;
+  createdAt: string;
+};
+
 type BottleShopStore = {
   products: BottleProduct[];
   orders: BottleOrder[];
+  customers: BottleCustomer[];
 };
 
 function newId(prefix: string) {
@@ -46,7 +59,44 @@ function newId(prefix: string) {
 }
 
 function defaultStore(): BottleShopStore {
-  return { products: [], orders: [] };
+  return { products: [], orders: [], customers: [] };
+}
+
+function normalizeAccessCode(raw: string) {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function makeAccessCode(existing: Set<string>) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    let code = "";
+    for (let i = 0; i < 6; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    if (!existing.has(code)) return code;
+  }
+  return `B${Date.now().toString(36).toUpperCase().slice(-5)}`;
+}
+
+function normalizeCustomer(
+  raw: Partial<BottleCustomer>
+): BottleCustomer | null {
+  const id = String(raw.id || "").trim();
+  const name = String(raw.name || "").trim();
+  const accessCode = normalizeAccessCode(String(raw.accessCode || ""));
+  if (!id || !name || accessCode.length < 4) return null;
+  return {
+    id,
+    name,
+    phone: String(raw.phone || "").trim(),
+    note: String(raw.note || "").trim(),
+    accessCode,
+    active: raw.active !== false,
+    createdAt: String(raw.createdAt || new Date().toISOString()),
+  };
 }
 
 function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
@@ -114,7 +164,12 @@ async function readStore(): Promise<BottleShopStore> {
     const orders = Array.isArray(parsed.orders)
       ? (parsed.orders as BottleOrder[])
       : [];
-    return { products, orders };
+    const customers = Array.isArray(parsed.customers)
+      ? parsed.customers
+          .map((c) => normalizeCustomer(c))
+          .filter((c): c is BottleCustomer => Boolean(c))
+      : [];
+    return { products, orders, customers };
   } catch {
     return defaultStore();
   }
@@ -157,8 +212,55 @@ export async function loadBottleShopAdmin() {
   return {
     products: store.products,
     orders,
+    customers: [...store.customers].reverse(),
     reservedCount: store.orders.filter((o) => o.status === "reserved").length,
   };
+}
+
+export async function findBottleCustomerByCode(
+  accessCode: string
+): Promise<BottleCustomer | null> {
+  const code = normalizeAccessCode(accessCode);
+  if (!code) return null;
+  const store = await readStore();
+  return (
+    store.customers.find((c) => c.active && c.accessCode === code) || null
+  );
+}
+
+export async function addBottleCustomer(input: {
+  name: string;
+  phone?: string;
+  note?: string;
+}): Promise<BottleCustomer> {
+  const name = String(input.name || "").trim();
+  if (!name) throw new Error("Customer name is required");
+  const store = await readStore();
+  const existingCodes = new Set(store.customers.map((c) => c.accessCode));
+  const customer: BottleCustomer = {
+    id: newId("cust"),
+    name,
+    phone: String(input.phone || "").trim(),
+    note: String(input.note || "").trim(),
+    accessCode: makeAccessCode(existingCodes),
+    active: true,
+    createdAt: new Date().toISOString(),
+  };
+  store.customers.push(customer);
+  await writeStore(store);
+  return customer;
+}
+
+export async function setBottleCustomerActive(
+  id: string,
+  active: boolean
+): Promise<BottleCustomer> {
+  const store = await readStore();
+  const idx = store.customers.findIndex((c) => c.id === id);
+  if (idx < 0) throw new Error("Customer not found");
+  store.customers[idx] = { ...store.customers[idx], active: Boolean(active) };
+  await writeStore(store);
+  return store.customers[idx];
 }
 
 export async function saveBottleProductPhoto(
@@ -244,6 +346,7 @@ export type PlaceOrderInput = {
   items: Array<{ productId: string; quantity: number }>;
   customerName?: string;
   customerNote?: string;
+  accessCode?: string;
 };
 
 export type PlaceOrderResult = {
@@ -288,13 +391,21 @@ export async function placeBottleOrder(
   }
 
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const customerName = String(input.customerName || "").trim() || "Customer";
+  const linked = input.accessCode
+    ? await findBottleCustomerByCode(input.accessCode)
+    : null;
+  if (input.accessCode && !linked) {
+    throw new Error("Invalid or inactive bottle shop access code");
+  }
+  const customerName =
+    String(input.customerName || "").trim() || linked?.name || "Customer";
   const customerNote = String(input.customerNote || "").trim();
   const order: BottleOrder = {
     id: newId("ord"),
     createdAt: new Date().toISOString(),
     customerName,
     customerNote,
+    customerId: linked?.id,
     lines,
     total,
     status: "reserved",

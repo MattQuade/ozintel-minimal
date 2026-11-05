@@ -5,6 +5,10 @@ import {
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import {
+  readBottleShopCodeFromRequest,
+  requireBottleShopCustomer,
+} from "@/lib/operations/pub/bottleShopAccess";
+import {
   getBottleShopNotifyPhone,
   getBottleShopOwnerEmail,
   sendViaMessageMedia,
@@ -14,16 +18,31 @@ import { sendPushToOwner } from "@/lib/push/subscriptions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Public reserve/order — decrements stock, writes ops ledger, SMS + push owner. */
+/** Invited-customer reserve — stock, ledger, SMS + push owner. */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const ownerEmail = getBottleShopOwnerEmail();
+    const accessCode =
+      String(body.accessCode || body.code || "").trim() ||
+      readBottleShopCodeFromRequest(req);
+
+    const gate = await runWithDataOwnerAsync(ownerEmail, () =>
+      requireBottleShopCustomer(accessCode)
+    );
+    if (!gate.ok) {
+      return NextResponse.json(
+        { success: false, error: gate.error, needsAccessCode: true },
+        { status: 403 }
+      );
+    }
+
     const result = await runWithDataOwnerAsync(ownerEmail, () =>
       placeBottleOrder({
         items: Array.isArray(body.items) ? body.items : [],
-        customerName: body.customerName,
+        customerName: body.customerName || gate.customer.name,
         customerNote: body.customerNote,
+        accessCode,
       })
     );
 

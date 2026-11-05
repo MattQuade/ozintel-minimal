@@ -14,8 +14,27 @@ type Product = {
 
 type Cart = Record<string, number>;
 
+const CODE_KEY = "ozintel_bottleshop_code";
+
 function money(n: number) {
   return `$${Number(n || 0).toFixed(2)}`;
+}
+
+function readStoredCode() {
+  try {
+    return localStorage.getItem(CODE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredCode(code: string) {
+  try {
+    if (code) localStorage.setItem(CODE_KEY, code);
+    else localStorage.removeItem(CODE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 export default function BottleShopPage() {
@@ -23,18 +42,38 @@ export default function BottleShopPage() {
   const [cart, setCart] = useState<Cart>({});
   const [customerName, setCustomerName] = useState("");
   const [customerNote, setCustomerNote] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [unlockedName, setUnlockedName] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (code: string) => {
+    if (!code.trim()) {
+      setProducts([]);
+      setUnlockedName("");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetch("/api/bottleshop/products");
+      const res = await fetch("/api/bottleshop/products", {
+        headers: { "x-bottleshop-code": code.trim() },
+      });
       const data = await res.json();
       if (data.success) {
         setProducts(data.products || []);
+        setUnlockedName(data.customer?.name || "");
+        setAccessCode(code.trim());
+        writeStoredCode(code.trim());
+        setStatus("");
       } else {
-        setStatus(data.error || "Failed to load bottles.");
+        setProducts([]);
+        setUnlockedName("");
+        setAccessCode("");
+        writeStoredCode("");
+        setStatus(data.error || "Invalid invite code.");
       }
     } catch (error) {
       console.error(error);
@@ -45,7 +84,13 @@ export default function BottleShopPage() {
   }, []);
 
   useEffect(() => {
-    load();
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = (params.get("code") || "").trim();
+    const stored = readStoredCode();
+    const initial = fromUrl || stored;
+    setCodeInput(initial);
+    if (initial) void load(initial);
+    else setLoading(false);
   }, [load]);
 
   const lines = useMemo(() => {
@@ -69,7 +114,16 @@ export default function BottleShopPage() {
     });
   };
 
+  const unlock = async () => {
+    setStatus("Checking invite…");
+    await load(codeInput.trim());
+  };
+
   const submit = async () => {
+    if (!accessCode) {
+      setStatus("Enter your invite code first.");
+      return;
+    }
     if (!lines.length) {
       setStatus("Select at least one bottle.");
       return;
@@ -79,9 +133,13 @@ export default function BottleShopPage() {
     try {
       const res = await fetch("/api/bottleshop/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-bottleshop-code": accessCode,
+        },
         body: JSON.stringify({
-          customerName: customerName.trim() || undefined,
+          accessCode,
+          customerName: customerName.trim() || unlockedName || undefined,
           customerNote: customerNote.trim() || undefined,
           items: lines.map((l) => ({
             productId: l.product.id,
@@ -92,7 +150,7 @@ export default function BottleShopPage() {
       const data = await res.json();
       if (!data.success) {
         setStatus(data.error || "Could not reserve.");
-        await load();
+        await load(accessCode);
         return;
       }
       setProducts(data.products || []);
@@ -104,7 +162,7 @@ export default function BottleShopPage() {
             ? " (SMS mocked in this environment)"
             : "";
       setStatus(
-        `Reserved. We'll hold your bottles — pay & collect at the pub.${smsNote}`
+        `Reserved. Pay & collect at the pub.${smsNote}`
       );
     } catch (error) {
       console.error(error);
@@ -113,6 +171,87 @@ export default function BottleShopPage() {
       setSubmitting(false);
     }
   };
+
+  if (!accessCode) {
+    return (
+      <main
+        style={{
+          fontFamily: "system-ui, sans-serif",
+          background: "#0f172a",
+          color: "white",
+          minHeight: "100vh",
+          padding: "20px 16px 48px",
+        }}
+      >
+        <div style={{ maxWidth: 560, margin: "0 auto" }}>
+          <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
+            OzIntel · Pub Bottle Shop
+          </p>
+          <h1 style={{ margin: "0 0 8px", fontSize: "1.75rem", color: "#f8fafc" }}>
+            Bottle Shop
+          </h1>
+          <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
+            Invite only for now. Enter the code from the pub (or open your
+            personal link) to see stock and reserve bottles.
+          </p>
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              background: "#1e2937",
+              border: "1px solid #334155",
+            }}
+          >
+            <label style={{ display: "block", color: "#94a3b8", marginBottom: 8 }}>
+              Invite code
+              <input
+                type="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                placeholder="e.g. AB12CD"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  marginTop: 6,
+                  padding: 12,
+                  borderRadius: 8,
+                  border: "1px solid #475569",
+                  background: "#0f172a",
+                  color: "white",
+                  letterSpacing: "0.08em",
+                  fontWeight: 700,
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void unlock()}
+              style={{
+                width: "100%",
+                marginTop: 8,
+                padding: 14,
+                borderRadius: 10,
+                border: "none",
+                background: "#b45309",
+                color: "white",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Open bottle shop
+            </button>
+            {status ? (
+              <p style={{ margin: "12px 0 0", color: "#fca5a5" }}>{status}</p>
+            ) : null}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -127,16 +266,41 @@ export default function BottleShopPage() {
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
         <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
           OzIntel · Pub Bottle Shop
+          {unlockedName ? ` · ${unlockedName}` : ""}
         </p>
         <h1 style={{ margin: "0 0 8px", fontSize: "1.75rem", color: "#f8fafc" }}>
           Bottle Shop
         </h1>
         <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
-          See what&apos;s on the shelf. Reserve bottles here — pay and collect at
-          the pub. No online payment yet.
+          Reserve bottles here — pay and collect at the pub. No online payment
+          yet.
         </p>
 
         <BottleShopInstallButton />
+
+        <p style={{ margin: "0 0 16px" }}>
+          <button
+            type="button"
+            onClick={() => {
+              writeStoredCode("");
+              setAccessCode("");
+              setProducts([]);
+              setUnlockedName("");
+              setCodeInput("");
+              setStatus("");
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#38bdf8",
+              padding: 0,
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            Switch invite code
+          </button>
+        </p>
 
         {loading ? (
           <p style={{ color: "#94a3b8" }}>Loading…</p>
@@ -193,12 +357,7 @@ export default function BottleShopPage() {
                       gap: 6,
                     }}
                   >
-                    <label
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "#94a3b8",
-                      }}
-                    >
+                    <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
                       Qty
                     </label>
                     <input
@@ -255,7 +414,7 @@ export default function BottleShopPage() {
           </p>
           <input
             type="text"
-            placeholder="Your name (optional)"
+            placeholder={unlockedName ? `Name (${unlockedName})` : "Your name"}
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
             style={{

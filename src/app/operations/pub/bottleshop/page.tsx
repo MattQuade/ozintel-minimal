@@ -31,6 +31,16 @@ type Order = {
   status: "reserved" | "collected" | "cancelled";
 };
 
+type ShopCustomer = {
+  id: string;
+  name: string;
+  phone: string;
+  note: string;
+  accessCode: string;
+  active: boolean;
+  createdAt: string;
+};
+
 function money(n: number) {
   return `$${Number(n || 0).toFixed(2)}`;
 }
@@ -53,13 +63,22 @@ function formatWhen(iso: string) {
 function BottleShopAdminInner() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customers, setCustomers] = useState<ShopCustomer[]>([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [reservedCount, setReservedCount] = useState(0);
   const [pushStatus, setPushStatus] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerNote, setNewCustomerNote] = useState("");
   const [drafts, setDrafts] = useState<
     Record<string, { price: string; quantity: string; name: string }>
   >({});
+
+  const customerLink = (code: string) => {
+    if (typeof window === "undefined") return `/bottleshop?code=${code}`;
+    return `${window.location.origin}/bottleshop?code=${encodeURIComponent(code)}`;
+  };
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +91,7 @@ function BottleShopAdminInner() {
       const nextProducts: Product[] = data.products || [];
       setProducts(nextProducts);
       setOrders(data.orders || []);
+      setCustomers(data.customers || []);
       const reserved =
         typeof data.reservedCount === "number"
           ? data.reservedCount
@@ -155,6 +175,59 @@ function BottleShopAdminInner() {
     } catch (error) {
       console.error(error);
       setStatus("Photo upload failed.");
+    }
+  };
+
+  const addCustomer = async () => {
+    if (!newCustomerName.trim()) {
+      setStatus("Customer name is required.");
+      return;
+    }
+    setStatus("Adding customer…");
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCustomerName.trim(),
+          phone: newCustomerPhone.trim(),
+          note: newCustomerNote.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Could not add customer");
+        return;
+      }
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerNote("");
+      setStatus(
+        `Added ${data.customer.name} — code ${data.customer.accessCode}`
+      );
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Could not add customer.");
+    }
+  };
+
+  const toggleCustomer = async (id: string, active: boolean) => {
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop/customers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, active }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Update failed");
+        return;
+      }
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Customer update failed.");
     }
   };
 
@@ -258,7 +331,173 @@ function BottleShopAdminInner() {
         <p style={{ color: "#94a3b8" }}>Loading…</p>
       ) : (
         <>
-          <h2 style={{ marginTop: 28 }}>Stock</h2>
+          <h2 style={{ marginTop: 28 }}>Customers (manual invite)</h2>
+          <p style={{ color: "#94a3b8", marginTop: 0 }}>
+            Add people one by one. Each gets a personal code/link for
+            /bottleshop. Auto sign-up can come later.
+          </p>
+          <div
+            style={{
+              background: "#1e2937",
+              border: "1px solid #334155",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 12,
+            }}
+          >
+            <input
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+              placeholder="Customer name"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            />
+            <input
+              value={newCustomerPhone}
+              onChange={(e) => setNewCustomerPhone(e.target.value)}
+              placeholder="Phone (optional)"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            />
+            <input
+              value={newCustomerNote}
+              onChange={(e) => setNewCustomerNote(e.target.value)}
+              placeholder="Note (optional)"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void addCustomer()}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: "none",
+                background: "#b45309",
+                color: "white",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Add customer
+            </button>
+          </div>
+          {customers.length === 0 ? (
+            <p style={{ color: "#94a3b8" }}>No invited customers yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {customers.map((c) => (
+                <div
+                  key={c.id}
+                  style={{
+                    background: "#1e2937",
+                    border: "1px solid #334155",
+                    borderRadius: 12,
+                    padding: 12,
+                    opacity: c.active ? 1 : 0.55,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <strong>{c.name}</strong>
+                    <span style={{ color: c.active ? "#86efac" : "#fca5a5" }}>
+                      {c.active ? "active" : "disabled"}
+                    </span>
+                  </div>
+                  {c.phone ? (
+                    <p style={{ margin: "6px 0", color: "#94a3b8" }}>{c.phone}</p>
+                  ) : null}
+                  {c.note ? (
+                    <p style={{ margin: "6px 0", color: "#94a3b8" }}>{c.note}</p>
+                  ) : null}
+                  <p style={{ margin: "8px 0", color: "#fbbf24", fontWeight: 700 }}>
+                    Code: {c.accessCode}
+                  </p>
+                  <p
+                    style={{
+                      margin: "0 0 10px",
+                      color: "#93c5fd",
+                      fontSize: "0.85rem",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {customerLink(c.accessCode)}
+                  </p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            customerLink(c.accessCode)
+                          );
+                          setStatus(`Copied link for ${c.name}`);
+                        } catch {
+                          setStatus(customerLink(c.accessCode));
+                        }
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#1d4ed8",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void toggleCustomer(c.id, !c.active)}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: c.active ? "#7f1d1d" : "#15803d",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {c.active ? "Disable" : "Enable"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h2 style={{ marginTop: 36 }}>Stock</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {products.map((p) => {
               const draft = drafts[p.id] || {
