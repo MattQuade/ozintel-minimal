@@ -337,6 +337,34 @@ function BottleShopAdminInner() {
     }
   };
 
+  const deleteCustomer = async (id: string, label: string) => {
+    if (
+      !window.confirm(
+        `Delete ${label} from the bottle shop? They will need to be added again to restore.`
+      )
+    ) {
+      return;
+    }
+    setStatus(`Deleting ${label}…`);
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop/customers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Delete failed");
+        return;
+      }
+      setStatus(`Deleted ${label}. You can add them again with a restore username.`);
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Customer delete failed.");
+    }
+  };
+
   const setOrderStatus = async (id: string, next: Order["status"]) => {
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
@@ -583,6 +611,26 @@ function BottleShopAdminInner() {
                       }}
                     >
                       {c.active ? "Disable" : "Enable"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void deleteCustomer(
+                          c.id,
+                          c.login || c.name || "customer"
+                        )
+                      }
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#991b1b",
+                        color: "white",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>

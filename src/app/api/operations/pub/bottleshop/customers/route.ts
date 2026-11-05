@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   addBottleCustomer,
+  deleteBottleCustomer,
   setBottleCustomerActive,
 } from "@/lib/operations/pub/bottleshop";
 import { requireOpsAccess } from "@/lib/accounting/requireAccess";
@@ -63,6 +64,33 @@ export async function PATCH(req: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : "Update failed",
+      },
+      { status: 400 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const access = await requireOpsAccess(req, "pubOps");
+  if (!access.ok) return access.response;
+  try {
+    const body = await req.json().catch(() => ({}));
+    const url = new URL(req.url);
+    const id = String(body.id || url.searchParams.get("id") || "").trim();
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "id is required" },
+        { status: 400 }
+      );
+    }
+    const result = await withBottleShopOwner(() => deleteBottleCustomer(id));
+    return NextResponse.json({ success: true, ...result });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Delete failed",
       },
       { status: 400 }
     );

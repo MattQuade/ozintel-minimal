@@ -455,6 +455,43 @@ export async function setBottleCustomerActive(
   return store.customers[idx];
 }
 
+/** Permanently remove a ledger customer and revoke their Bottle Shop login. */
+export async function deleteBottleCustomer(
+  id: string
+): Promise<{ deleted: BottleCustomer }> {
+  const store = await readStore();
+  const idx = store.customers.findIndex((c) => c.id === id);
+  if (idx < 0) throw new Error("Customer not found");
+  const [deleted] = store.customers.splice(idx, 1);
+  await writeStore(store);
+
+  const login = bottleCustomerLogin(deleted);
+  if (login) {
+    const { findUserByEmail, writeUsers, readUsers } = await import(
+      "@/lib/users"
+    );
+    const user = await findUserByEmail(login);
+    if (user?.permissions?.bottleShop) {
+      const users = await readUsers();
+      const uIdx = users.findIndex(
+        (u) => u.email.trim().toLowerCase() === login
+      );
+      if (uIdx >= 0) {
+        users[uIdx] = {
+          ...users[uIdx],
+          permissions: {
+            ...users[uIdx].permissions,
+            bottleShop: false,
+          },
+        };
+        await writeUsers(users);
+      }
+    }
+  }
+
+  return { deleted };
+}
+
 /** Ensure every active ledger username has an approved Bottle Shop login. */
 export async function syncBottleShopCustomerLogins(): Promise<number> {
   const store = await readStore();
