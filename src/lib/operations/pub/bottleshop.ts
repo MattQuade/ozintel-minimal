@@ -39,7 +39,7 @@ export type BottleOrder = {
 export type BottleCustomer = {
   id: string;
   name: string;
-  /** Restore username on /bottleshop, e.g. tbong@ozintel */
+  /** Restore username on /bottleshop, e.g. jsmith@ozintel */
   login: string;
   phone: string;
   note: string;
@@ -269,7 +269,7 @@ export async function addBottleCustomer(input: {
   });
   if (!login) {
     throw new Error(
-      "Username is required (e.g. tbong@ozintel) so they can Restore My Account."
+      "Username is required (e.g. jsmith@ozintel) so they can Restore My Account."
     );
   }
   const store = await readStore();

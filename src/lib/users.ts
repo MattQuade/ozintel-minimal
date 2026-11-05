@@ -320,7 +320,7 @@ export async function findUserForRestore(query: string) {
 }
 
 /**
- * Ensure an approved Bottle Shop login exists (e.g. tbong@ozintel).
+ * Ensure an approved Bottle Shop login exists (e.g. jsmith@ozintel).
  * Creates the user if missing; enables bottleShop + approves if present.
  */
 export async function ensureApprovedBottleShopUser(input: {

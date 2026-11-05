@@ -245,7 +245,7 @@ function BottleShopAdminInner() {
       return;
     }
     if (!newCustomerLogin.trim() && !newCustomerName.includes("@")) {
-      setStatus("Username is required (e.g. tbong@ozintel).");
+      setStatus("Username is required (e.g. jsmith@ozintel).");
       return;
     }
     setStatus("Adding customer…");
@@ -402,7 +402,7 @@ function BottleShopAdminInner() {
           <h2 style={{ marginTop: 28 }}>Customers</h2>
           <p style={{ color: "#94a3b8", marginTop: 0 }}>
             Add people one by one with a restore username like{" "}
-            <code>tbong@ozintel</code>. They open /bottleshop and Restore My
+            <code>jsmith@ozintel</code>. They open /bottleshop and Restore My
             Account with that username — no invite codes.
           </p>
           <div
@@ -432,7 +432,7 @@ function BottleShopAdminInner() {
             <input
               value={newCustomerLogin}
               onChange={(e) => setNewCustomerLogin(e.target.value)}
-              placeholder="Username for restore (e.g. tbong@ozintel)"
+              placeholder="Username for restore (e.g. jsmith@ozintel)"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}

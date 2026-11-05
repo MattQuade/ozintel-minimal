@@ -7,7 +7,7 @@ export function setSessionEmailCookie(
   res: NextResponse,
   email: string
 ): void {
-  // Encode so addresses like tbong@ozintel survive Set-Cookie parsing
+  // Encode so addresses like jsmith@ozintel survive Set-Cookie parsing
   // (raw "@" is unreliable across Safari / standalone PWAs).
   const value = encodeURIComponent(String(email || "").trim());
   const expires = new Date(Date.now() + SESSION_COOKIE_MAX_AGE * 1000);

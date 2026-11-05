@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Enter your username (e.g. tbong@ozintel).",
+          error: "Enter your username (e.g. jsmith@ozintel).",
         },
         { status: 400 }
       );
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             error:
-              "This ledger entry has no username. Ask the pub to add a restore username (e.g. tbong@ozintel).",
+              "This ledger entry has no username. Ask the pub to add a restore username (e.g. jsmith@ozintel).",
           },
           { status: 400 }
         );

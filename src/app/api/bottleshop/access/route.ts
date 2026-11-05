@@ -9,7 +9,7 @@ export async function POST() {
     {
       success: false,
       error:
-        "Invite codes are no longer used. Restore with your username (e.g. tbong@ozintel).",
+        "Invite codes are no longer used. Restore with your username (e.g. jsmith@ozintel).",
     },
     { status: 410 }
   );

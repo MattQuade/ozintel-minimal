@@ -177,7 +177,7 @@ export default function BottleShopPage() {
   const restoreAccount = async () => {
     const query = restoreInput.trim();
     if (!query) {
-      setStatus("Enter your username (e.g. tbong@ozintel).");
+      setStatus("Enter your username (e.g. jsmith@ozintel).");
       return;
     }
     setRestoring(true);
