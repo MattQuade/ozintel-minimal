@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import OpsGate from "@/components/OpsGate";
+import {
+  enableBottleShopPush,
+  syncAppBadge,
+} from "@/lib/client/bottleShopPush";
 
 type Product = {
   id: string;
@@ -51,6 +55,8 @@ function BottleShopAdminInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reservedCount, setReservedCount] = useState(0);
+  const [pushStatus, setPushStatus] = useState("");
   const [drafts, setDrafts] = useState<
     Record<string, { price: string; quantity: string; name: string }>
   >({});
@@ -66,6 +72,14 @@ function BottleShopAdminInner() {
       const nextProducts: Product[] = data.products || [];
       setProducts(nextProducts);
       setOrders(data.orders || []);
+      const reserved =
+        typeof data.reservedCount === "number"
+          ? data.reservedCount
+          : (data.orders || []).filter(
+              (o: Order) => o.status === "reserved"
+            ).length;
+      setReservedCount(reserved);
+      void syncAppBadge(reserved);
       const nextDrafts: Record<
         string,
         { price: string; quantity: string; name: string }
@@ -188,6 +202,55 @@ function BottleShopAdminInner() {
         (not in git) and show on the public bottle shop. Customer reserves
         write here and text you the bottles + quantities.
       </p>
+      <div
+        style={{
+          marginTop: 12,
+          padding: 12,
+          borderRadius: 12,
+          background: "#1e2937",
+          border: "1px solid #334155",
+        }}
+      >
+        <p style={{ margin: "0 0 8px", color: "#e2e8f0" }}>
+          Phone badge alerts · reserved now:{" "}
+          <strong style={{ color: "#fbbf24" }}>{reservedCount}</strong>
+        </p>
+        <p style={{ margin: "0 0 10px", color: "#94a3b8", fontSize: "0.9rem" }}>
+          Install OzIntel to your home screen, open this ledger, then enable
+          alerts on that phone (iPhone needs iOS 16.4+ home-screen app).
+        </p>
+        <button
+          type="button"
+          onClick={async () => {
+            setPushStatus("Enabling…");
+            try {
+              await enableBottleShopPush();
+              await syncAppBadge(reservedCount);
+              setPushStatus(
+                "Enabled on this device. New orders will badge the OzIntel icon."
+              );
+            } catch (error) {
+              setPushStatus(
+                error instanceof Error ? error.message : "Could not enable push"
+              );
+            }
+          }}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "none",
+            background: "#7c3aed",
+            color: "white",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Enable phone badge alerts
+        </button>
+        {pushStatus ? (
+          <p style={{ margin: "10px 0 0", color: "#c4b5fd" }}>{pushStatus}</p>
+        ) : null}
+      </div>
       {status ? (
         <p style={{ color: "#93c5fd" }}>{status}</p>
       ) : null}

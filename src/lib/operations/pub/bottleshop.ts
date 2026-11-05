@@ -146,11 +146,18 @@ export async function listBottleOrders(limit = 50): Promise<BottleOrder[]> {
   return [...store.orders].reverse().slice(0, limit);
 }
 
+export async function countReservedBottleOrders(): Promise<number> {
+  const store = await readStore();
+  return store.orders.filter((o) => o.status === "reserved").length;
+}
+
 export async function loadBottleShopAdmin() {
   const store = await readStore();
+  const orders = [...store.orders].reverse().slice(0, 100);
   return {
     products: store.products,
-    orders: [...store.orders].reverse().slice(0, 100),
+    orders,
+    reservedCount: store.orders.filter((o) => o.status === "reserved").length,
   };
 }
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import VoiceHandsfreeDock from '@/components/VoiceHandsfreeDock';
 import ClientErrorBoundary from '@/components/ClientErrorBoundary';
+import RegisterServiceWorker from '@/components/RegisterServiceWorker';
 
 export const metadata: Metadata = {
   title: 'OzIntel Alert System',
@@ -40,6 +41,7 @@ export default function RootLayout({
         <main className="min-h-screen">
           {children}
         </main>
+        <RegisterServiceWorker />
         <ClientErrorBoundary>
           <VoiceHandsfreeDock />
         </ClientErrorBoundary>
