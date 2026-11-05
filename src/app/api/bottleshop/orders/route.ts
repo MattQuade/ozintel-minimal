@@ -15,15 +15,11 @@ import { sendPushToOwner } from "@/lib/push/subscriptions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Reserve for Bottle Shop users or invite-code customers. */
+/** Reserve for restored Bottle Shop users only. */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const ownerEmail = getBottleShopOwnerEmail();
-    const explicitCode = String(body.accessCode || body.code || "").trim();
-    const gate = await runWithDataOwnerAsync(ownerEmail, () =>
-      resolveBottleShopGate(req, explicitCode)
-    );
+    const gate = await resolveBottleShopGate(req);
     if (!gate.ok) {
       return NextResponse.json(
         { success: false, error: gate.error, needsAccess: true },
@@ -31,12 +27,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ownerEmail = getBottleShopOwnerEmail();
     const result = await runWithDataOwnerAsync(ownerEmail, () =>
       placeBottleOrder({
         items: Array.isArray(body.items) ? body.items : [],
         customerName: body.customerName || gate.displayName,
         customerNote: body.customerNote,
-        accessCode: gate.via === "code" ? gate.accessCode : undefined,
+        customerId: gate.customerId,
       })
     );
 

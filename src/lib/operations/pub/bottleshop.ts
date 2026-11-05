@@ -35,7 +35,7 @@ export type BottleOrder = {
   status: "reserved" | "collected" | "cancelled";
 };
 
-/** Manually added customers who may open /bottleshop with their access code. */
+/** Manually added customers who restore on /bottleshop with their username. */
 export type BottleCustomer = {
   id: string;
   name: string;
@@ -43,6 +43,7 @@ export type BottleCustomer = {
   login: string;
   phone: string;
   note: string;
+  /** @deprecated Invite codes removed — kept for older ledger JSON only. */
   accessCode: string;
   active: boolean;
   createdAt: string;
@@ -71,18 +72,6 @@ function normalizeAccessCode(raw: string) {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-function makeAccessCode(existing: Set<string>) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    let code = "";
-    for (let i = 0; i < 6; i += 1) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    if (!existing.has(code)) return code;
-  }
-  return `B${Date.now().toString(36).toUpperCase().slice(-5)}`;
-}
-
 function normalizeLogin(raw: string) {
   return String(raw || "").trim().toLowerCase();
 }
@@ -104,8 +93,8 @@ function normalizeCustomer(
 ): BottleCustomer | null {
   const id = String(raw.id || "").trim();
   const name = String(raw.name || "").trim();
-  const accessCode = normalizeAccessCode(String(raw.accessCode || ""));
-  if (!id || !name || accessCode.length < 4) return null;
+  if (!id || !name) return null;
+  const accessCode = normalizeAccessCode(String(raw.accessCode || "")) || "NONE";
   return {
     id,
     name,
@@ -236,17 +225,6 @@ export async function loadBottleShopAdmin() {
   };
 }
 
-export async function findBottleCustomerByCode(
-  accessCode: string
-): Promise<BottleCustomer | null> {
-  const code = normalizeAccessCode(accessCode);
-  if (!code) return null;
-  const store = await readStore();
-  return (
-    store.customers.find((c) => c.active && c.accessCode === code) || null
-  );
-}
-
 /**
  * Match an active ledger customer by restore username, name, note, or phone.
  * Lets people already listed in the Bottle Shop ledger unlock via Restore.
@@ -289,37 +267,37 @@ export async function addBottleCustomer(input: {
     login: input.login,
     name,
   });
-  const store = await readStore();
-  if (login) {
-    const clash = store.customers.find(
-      (c) => c.active && bottleCustomerLogin(c) === login
+  if (!login) {
+    throw new Error(
+      "Username is required (e.g. tbong@ozintel) so they can Restore My Account."
     );
-    if (clash) {
-      throw new Error(`Username ${login} is already used by ${clash.name}`);
-    }
   }
-  const existingCodes = new Set(store.customers.map((c) => c.accessCode));
+  const store = await readStore();
+  const clash = store.customers.find(
+    (c) => c.active && bottleCustomerLogin(c) === login
+  );
+  if (clash) {
+    throw new Error(`Username ${login} is already used by ${clash.name}`);
+  }
   const customer: BottleCustomer = {
     id: newId("cust"),
     name,
     login,
     phone: String(input.phone || "").trim(),
     note: String(input.note || "").trim(),
-    accessCode: makeAccessCode(existingCodes),
+    accessCode: "NONE",
     active: true,
     createdAt: new Date().toISOString(),
   };
   store.customers.push(customer);
   await writeStore(store);
 
-  if (login) {
-    const { ensureApprovedBottleShopUser } = await import("@/lib/users");
-    await ensureApprovedBottleShopUser({
-      email: login,
-      name,
-      phone: customer.phone,
-    });
-  }
+  const { ensureApprovedBottleShopUser } = await import("@/lib/users");
+  await ensureApprovedBottleShopUser({
+    email: login,
+    name,
+    phone: customer.phone,
+  });
 
   return customer;
 }
@@ -334,6 +312,29 @@ export async function setBottleCustomerActive(
   store.customers[idx] = { ...store.customers[idx], active: Boolean(active) };
   await writeStore(store);
   return store.customers[idx];
+}
+
+/** Ensure every active ledger username has an approved Bottle Shop login. */
+export async function syncBottleShopCustomerLogins(): Promise<number> {
+  const store = await readStore();
+  const { ensureApprovedBottleShopUser } = await import("@/lib/users");
+  let synced = 0;
+  for (const customer of store.customers) {
+    if (!customer.active) continue;
+    const login = bottleCustomerLogin(customer);
+    if (!login) continue;
+    if (!customer.login && login) {
+      customer.login = login;
+    }
+    await ensureApprovedBottleShopUser({
+      email: login,
+      name: customer.name,
+      phone: customer.phone,
+    });
+    synced += 1;
+  }
+  await writeStore(store);
+  return synced;
 }
 
 export async function saveBottleProductPhoto(
@@ -419,7 +420,7 @@ export type PlaceOrderInput = {
   items: Array<{ productId: string; quantity: number }>;
   customerName?: string;
   customerNote?: string;
-  accessCode?: string;
+  customerId?: string;
 };
 
 export type PlaceOrderResult = {
@@ -464,21 +465,15 @@ export async function placeBottleOrder(
   }
 
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
-  const linked = input.accessCode
-    ? await findBottleCustomerByCode(input.accessCode)
-    : null;
-  if (input.accessCode && !linked) {
-    throw new Error("Invalid or inactive bottle shop access code");
-  }
   const customerName =
-    String(input.customerName || "").trim() || linked?.name || "Customer";
+    String(input.customerName || "").trim() || "Customer";
   const customerNote = String(input.customerNote || "").trim();
   const order: BottleOrder = {
     id: newId("ord"),
     createdAt: new Date().toISOString(),
     customerName,
     customerNote,
-    customerId: linked?.id,
+    customerId: String(input.customerId || "").trim() || undefined,
     lines,
     total,
     status: "reserved",

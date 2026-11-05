@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   bottleCustomerLogin,
   findBottleCustomerForRestore,
+  syncBottleShopCustomerLogins,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import {
@@ -15,11 +16,21 @@ import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function jsonUser(user: ReturnType<typeof publicUser>) {
+  const res = NextResponse.json({
+    success: true,
+    via: "user",
+    user,
+  });
+  setSessionEmailCookie(res, user.email);
+  return res;
+}
+
 /**
- * Restore for /bottleshop:
- * 1) Existing OzIntel user with Bottle Shop permission, or
- * 2) Active Bottle Shop ledger customer (username / name / note / phone),
- *    which also provisions an approved Bottle Shop login when possible.
+ * Restore for /bottleshop (username only — no invite codes):
+ * 1) Existing approved user with Bottle Shop permission, or
+ * 2) Active ledger customer with a matching username/name/note/phone —
+ *    provisions an approved Bottle Shop login.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -39,90 +50,74 @@ export async function POST(req: NextRequest) {
 
     let user = await findUserForRestore(query);
     if (user && user.status === "approved" && user.permissions?.bottleShop) {
-      const res = NextResponse.json({
-        success: true,
-        via: "user",
-        user: publicUser(user),
-      });
-      setSessionEmailCookie(res, user.email);
-      return res;
+      return jsonUser(publicUser(user));
     }
 
-    // Ledger customers live in the pub owner's silo.
+    // Ledger customers live in the configured pub bottle-shop owner silo.
     const customer = await runWithDataOwnerAsync(
       getBottleShopOwnerEmail(),
-      () => findBottleCustomerForRestore(query)
-    );
-    if (!customer) {
-      if (user && user.status !== "approved") {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Account found but not approved yet.",
-            user: publicUser(user),
-          },
-          { status: 403 }
-        );
+      async () => {
+        await syncBottleShopCustomerLogins();
+        return findBottleCustomerForRestore(query);
       }
-      if (user && !user.permissions?.bottleShop) {
+    );
+
+    if (customer) {
+      const login =
+        bottleCustomerLogin(customer) ||
+        (String(customer.name || "").includes("@")
+          ? customer.name.trim().toLowerCase()
+          : query.includes("@")
+            ? query.trim().toLowerCase()
+            : "");
+      if (!login) {
         return NextResponse.json(
           {
             success: false,
             error:
-              "Account restored, but Bottle Shop access is not enabled yet. Ask the pub to tick Bottle Shop on your account — or add you in the Bottle Shop ledger with a username.",
-            user: publicUser(user),
+              "This ledger entry has no username. Ask the pub to add a restore username (e.g. tbong@ozintel).",
           },
-          { status: 403 }
+          { status: 400 }
         );
       }
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "No bottle shop account found. Use the username from the pub ledger (e.g. tbong@ozintel), or an invite code.",
-        },
-        { status: 404 }
-      );
-    }
-
-    const login =
-      bottleCustomerLogin(customer) ||
-      (customer.name.includes("@")
-        ? customer.name.trim().toLowerCase()
-        : "");
-
-    if (login) {
       user = await ensureApprovedBottleShopUser({
         email: login,
         name: customer.name,
         phone: customer.phone,
       });
-      const res = NextResponse.json({
-        success: true,
-        via: "user",
-        user: publicUser(user),
-        accessCode: customer.accessCode,
-        customer: {
-          id: customer.id,
-          name: customer.name,
-          login,
-        },
-      });
-      setSessionEmailCookie(res, user.email);
-      return res;
+      return jsonUser(publicUser(user));
     }
 
-    // Name-only ledger entry — unlock with invite code this session.
-    return NextResponse.json({
-      success: true,
-      via: "code",
-      accessCode: customer.accessCode,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        login: "",
+    if (user && user.status !== "approved") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Account found but not approved yet.",
+          user: publicUser(user),
+        },
+        { status: 403 }
+      );
+    }
+    if (user && !user.permissions?.bottleShop) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Account found, but Bottle Shop is not enabled yet. Ask the pub to tick Bottle Shop on your account.",
+          user: publicUser(user),
+        },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "No bottle shop account found for that username. Ask the pub to add you with a restore username.",
       },
-    });
+      { status: 404 }
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json(

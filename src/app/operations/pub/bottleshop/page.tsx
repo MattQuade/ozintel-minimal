@@ -104,11 +104,6 @@ function BottleShopAdminInner() {
     setCropSaving(false);
   };
 
-  const customerLink = (code: string) => {
-    if (typeof window === "undefined") return `/bottleshop?code=${code}`;
-    return `${window.location.origin}/bottleshop?code=${encodeURIComponent(code)}`;
-  };
-
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/operations/pub/bottleshop");
@@ -249,6 +244,10 @@ function BottleShopAdminInner() {
       setStatus("Customer name is required.");
       return;
     }
+    if (!newCustomerLogin.trim() && !newCustomerName.includes("@")) {
+      setStatus("Username is required (e.g. tbong@ozintel).");
+      return;
+    }
     setStatus("Adding customer…");
     try {
       const res = await fetch("/api/operations/pub/bottleshop/customers", {
@@ -270,11 +269,8 @@ function BottleShopAdminInner() {
       setNewCustomerLogin("");
       setNewCustomerPhone("");
       setNewCustomerNote("");
-      const loginHint = data.customer.login
-        ? ` — restore with ${data.customer.login}`
-        : "";
       setStatus(
-        `Added ${data.customer.name}${loginHint} — code ${data.customer.accessCode}`
+        `Added ${data.customer.name} — they restore with ${data.customer.login}`
       );
       await load();
     } catch (error) {
@@ -403,11 +399,11 @@ function BottleShopAdminInner() {
         <p style={{ color: "#94a3b8" }}>Loading…</p>
       ) : (
         <>
-          <h2 style={{ marginTop: 28 }}>Customers (manual invite)</h2>
+          <h2 style={{ marginTop: 28 }}>Customers</h2>
           <p style={{ color: "#94a3b8", marginTop: 0 }}>
-            Add people one by one. Give them a username like{" "}
-            <code>tbong@ozintel</code> so they can Restore My Account on
-            /bottleshop. They also get a personal invite code/link.
+            Add people one by one with a restore username like{" "}
+            <code>tbong@ozintel</code>. They open /bottleshop and Restore My
+            Account with that username — no invite codes.
           </p>
           <div
             style={{
@@ -498,7 +494,7 @@ function BottleShopAdminInner() {
             </button>
           </div>
           {customers.length === 0 ? (
-            <p style={{ color: "#94a3b8" }}>No invited customers yet.</p>
+            <p style={{ color: "#94a3b8" }}>No customers yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {customers.map((c) => (
@@ -525,54 +521,16 @@ function BottleShopAdminInner() {
                       {c.active ? "active" : "disabled"}
                     </span>
                   </div>
-                  {c.login || (c.name || "").includes("@") ? (
-                    <p style={{ margin: "6px 0", color: "#fde68a" }}>
-                      Restore as: {c.login || c.name}
-                    </p>
-                  ) : null}
+                  <p style={{ margin: "6px 0", color: "#fde68a" }}>
+                    Restore as: {c.login || c.name}
+                  </p>
                   {c.phone ? (
                     <p style={{ margin: "6px 0", color: "#94a3b8" }}>{c.phone}</p>
                   ) : null}
                   {c.note ? (
                     <p style={{ margin: "6px 0", color: "#94a3b8" }}>{c.note}</p>
                   ) : null}
-                  <p style={{ margin: "8px 0", color: "#fbbf24", fontWeight: 700 }}>
-                    Code: {c.accessCode}
-                  </p>
-                  <p
-                    style={{
-                      margin: "0 0 10px",
-                      color: "#93c5fd",
-                      fontSize: "0.85rem",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {customerLink(c.accessCode)}
-                  </p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(
-                            customerLink(c.accessCode)
-                          );
-                          setStatus(`Copied link for ${c.name}`);
-                        } catch {
-                          setStatus(customerLink(c.accessCode));
-                        }
-                      }}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 8,
-                        border: "none",
-                        background: "#1d4ed8",
-                        color: "white",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Copy link
-                    </button>
                     <button
                       type="button"
                       onClick={() => void toggleCustomer(c.id, !c.active)}

@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
+import {
+  clearSessionEmailCookie,
+  persistSessionEmailCookie,
+} from "@/lib/client/sessionEmail";
 
 type Product = {
   id: string;
@@ -14,29 +18,12 @@ type Product = {
 
 type Cart = Record<string, number>;
 
-const CODE_KEY = "ozintel_bottleshop_code";
 const LOGIN_KEY = "ozintel_bottleshop_login";
 const USER_KEY = "ozintel_current_user";
+const LEGACY_CODE_KEY = "ozintel_bottleshop_code";
 
 function money(n: number) {
   return `$${Number(n || 0).toFixed(2)}`;
-}
-
-function readStoredCode() {
-  try {
-    return localStorage.getItem(CODE_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-function writeStoredCode(code: string) {
-  try {
-    if (code) localStorage.setItem(CODE_KEY, code);
-    else localStorage.removeItem(CODE_KEY);
-  } catch {
-    // ignore
-  }
 }
 
 function readStoredLogin() {
@@ -68,29 +55,30 @@ function readStoredUserEmail() {
   }
 }
 
+function clearLegacyInviteCode() {
+  try {
+    localStorage.removeItem(LEGACY_CODE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function BottleShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<Cart>({});
   const [customerName, setCustomerName] = useState("");
   const [customerNote, setCustomerNote] = useState("");
-  const [accessCode, setAccessCode] = useState("");
-  const [codeInput, setCodeInput] = useState("");
   const [restoreInput, setRestoreInput] = useState("");
   const [unlockedName, setUnlockedName] = useState("");
-  const [viaUser, setViaUser] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
-  const loadCatalogue = useCallback(async (code?: string) => {
+  const loadCatalogue = useCallback(async () => {
     setLoading(true);
     try {
-      const headers: HeadersInit = {};
-      const trimmed = (code || readStoredCode() || "").trim();
-      if (trimmed) headers["x-bottleshop-code"] = trimmed;
       const res = await fetch("/api/bottleshop/products", {
-        headers,
         credentials: "include",
         cache: "no-store",
       });
@@ -98,18 +86,12 @@ export default function BottleShopPage() {
       if (data.success) {
         setProducts(data.products || []);
         setUnlockedName(data.customer?.name || "");
-        setViaUser(data.via === "user");
-        if (trimmed) {
-          setAccessCode(trimmed);
-          writeStoredCode(trimmed);
-        }
         setStatus("");
         return true;
       }
       setProducts([]);
       setUnlockedName("");
-      setViaUser(false);
-      setStatus(data.error || "Access required.");
+      setStatus(data.error || "Restore your account to open the bottle shop.");
       return false;
     } catch (error) {
       console.error(error);
@@ -120,59 +102,53 @@ export default function BottleShopPage() {
     }
   }, []);
 
-  const silentRestore = useCallback(async (query: string) => {
-    const trimmed = query.trim();
-    if (!trimmed) return false;
-    try {
-      const res = await fetch("/api/bottleshop/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ query: trimmed }),
-      });
-      const data = await res.json();
-      if (!data.success) return false;
-      if (data.user) {
+  const silentRestore = useCallback(
+    async (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) return false;
+      try {
+        const res = await fetch("/api/bottleshop/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ query: trimmed }),
+        });
+        const data = await res.json();
+        if (!data.success || !data.user?.email) {
+          setStatus(data.error || "No bottle shop account found.");
+          return false;
+        }
         try {
           localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         } catch {
           // ignore
         }
-        writeStoredLogin(data.user.email || trimmed);
-        setRestoreInput(data.user.email || trimmed);
-      } else {
-        writeStoredLogin(trimmed);
+        writeStoredLogin(data.user.email);
+        persistSessionEmailCookie(data.user.email);
+        setRestoreInput(data.user.email);
+        return loadCatalogue();
+      } catch (error) {
+        console.error(error);
+        setStatus("Restore failed. Please try again.");
+        return false;
       }
-      const code = String(data.accessCode || "").trim();
-      if (code) writeStoredCode(code);
-      return loadCatalogue(code || undefined);
-    } catch (error) {
-      console.error(error);
-      return false;
-    }
-  }, [loadCatalogue]);
+    },
+    [loadCatalogue]
+  );
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const fromUrl = (params.get("code") || "").trim();
-    const storedCode = readStoredCode();
-    const initialCode = fromUrl || storedCode;
-    const storedLogin =
-      readStoredLogin() || readStoredUserEmail() || restoreInput;
-    if (initialCode) setCodeInput(initialCode);
+    clearLegacyInviteCode();
+    const storedLogin = readStoredLogin() || readStoredUserEmail();
     if (storedLogin) setRestoreInput(storedLogin);
     void (async () => {
-      let ok = await loadCatalogue(initialCode || undefined);
+      let ok = await loadCatalogue();
       if (!ok && storedLogin) {
         ok = await silentRestore(storedLogin);
       }
-      if (!ok && initialCode && initialCode === storedCode) {
-        writeStoredCode("");
-        setAccessCode("");
+      if (!ok && !storedLogin) {
+        setStatus("Restore your account to open the bottle shop.");
       }
     })();
-    // Boot once on open — do not re-run when restoreInput changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadCatalogue, silentRestore]);
 
   const unlocked = products.length > 0 || Boolean(unlockedName);
@@ -209,19 +185,27 @@ export default function BottleShopPage() {
     try {
       writeStoredLogin(query);
       const ok = await silentRestore(query);
-      if (!ok) {
-        setStatus(
-          "No bottle shop account found. Check the username with the pub."
-        );
-        return;
+      if (ok) {
+        setStatus("Welcome — you will stay signed in on this phone.");
       }
-      setStatus(`Welcome — you will stay signed in on this phone.`);
-    } catch (error) {
-      console.error(error);
-      setStatus("Restore failed. Please try again.");
     } finally {
       setRestoring(false);
     }
+  };
+
+  const signOut = () => {
+    writeStoredLogin("");
+    clearLegacyInviteCode();
+    clearSessionEmailCookie();
+    try {
+      localStorage.removeItem(USER_KEY);
+    } catch {
+      // ignore
+    }
+    setProducts([]);
+    setUnlockedName("");
+    setCart({});
+    setStatus("Signed out. Restore your account to open the bottle shop again.");
   };
 
   const submit = async () => {
@@ -236,17 +220,11 @@ export default function BottleShopPage() {
     setSubmitting(true);
     setStatus("Reserving…");
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-      const codeForOrder = accessCode || readStoredCode();
-      if (codeForOrder) headers["x-bottleshop-code"] = codeForOrder;
       const res = await fetch("/api/bottleshop/orders", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          accessCode: codeForOrder || undefined,
           customerName: customerName.trim() || unlockedName || undefined,
           customerNote: customerNote.trim() || undefined,
           items: lines.map((l) => ({
@@ -258,7 +236,7 @@ export default function BottleShopPage() {
       const data = await res.json();
       if (!data.success) {
         setStatus(data.error || "Could not reserve.");
-        await loadCatalogue(accessCode || undefined);
+        await loadCatalogue();
         return;
       }
       setProducts(data.products || []);
@@ -314,6 +292,9 @@ export default function BottleShopPage() {
               placeholder="e.g. jsmith@ozintel"
               value={restoreInput}
               onChange={(e) => setRestoreInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void restoreAccount();
+              }}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -344,58 +325,8 @@ export default function BottleShopPage() {
             </button>
           </div>
 
-          <details style={{ color: "#94a3b8" }}>
-            <summary style={{ cursor: "pointer", marginBottom: 8 }}>
-              Have an invite code instead?
-            </summary>
-            <div
-              style={{
-                padding: 16,
-                borderRadius: 12,
-                background: "#1e2937",
-                border: "1px solid #334155",
-              }}
-            >
-              <input
-                type="text"
-                autoCapitalize="characters"
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                placeholder="Invite code"
-                style={{
-                  width: "100%",
-                  boxSizing: "border-box",
-                  marginBottom: 10,
-                  padding: 12,
-                  borderRadius: 8,
-                  border: "1px solid #475569",
-                  background: "#0f172a",
-                  color: "white",
-                  letterSpacing: "0.08em",
-                  fontWeight: 700,
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => void loadCatalogue(codeInput.trim())}
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "none",
-                  background: "#b45309",
-                  color: "white",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Open with code
-              </button>
-            </div>
-          </details>
-
           {status ? (
-            <p style={{ margin: "16px 0 0", color: "#fca5a5" }}>{status}</p>
+            <p style={{ margin: "0", color: "#fca5a5" }}>{status}</p>
           ) : null}
           {loading ? (
             <p style={{ marginTop: 16, color: "#94a3b8" }}>Checking access…</p>
@@ -432,15 +363,7 @@ export default function BottleShopPage() {
         <p style={{ margin: "0 0 16px" }}>
           <button
             type="button"
-            onClick={() => {
-              writeStoredCode("");
-              setAccessCode("");
-              setProducts([]);
-              setUnlockedName("");
-              setViaUser(false);
-              setCodeInput("");
-              setStatus("");
-            }}
+            onClick={signOut}
             style={{
               background: "transparent",
               border: "none",
@@ -452,11 +375,6 @@ export default function BottleShopPage() {
           >
             Sign out of bottle shop
           </button>
-          {viaUser ? (
-            <span style={{ color: "#64748b", marginLeft: 8 }}>
-              (account access)
-            </span>
-          ) : null}
         </p>
 
         {loading ? (
@@ -603,7 +521,7 @@ export default function BottleShopPage() {
           />
           <button
             type="button"
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={submitting || !lines.length}
             style={{
               width: "100%",
