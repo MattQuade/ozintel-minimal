@@ -15,6 +15,7 @@ type Product = {
 type Cart = Record<string, number>;
 
 const CODE_KEY = "ozintel_bottleshop_code";
+const LOGIN_KEY = "ozintel_bottleshop_login";
 const USER_KEY = "ozintel_current_user";
 
 function money(n: number) {
@@ -38,6 +39,35 @@ function writeStoredCode(code: string) {
   }
 }
 
+function readStoredLogin() {
+  try {
+    return (localStorage.getItem(LOGIN_KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredLogin(login: string) {
+  try {
+    const trimmed = String(login || "").trim();
+    if (trimmed) localStorage.setItem(LOGIN_KEY, trimmed);
+    else localStorage.removeItem(LOGIN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function readStoredUserEmail() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return "";
+    const parsed = JSON.parse(raw) as { email?: string };
+    return String(parsed?.email || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 export default function BottleShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<Cart>({});
@@ -57,7 +87,7 @@ export default function BottleShopPage() {
     setLoading(true);
     try {
       const headers: HeadersInit = {};
-      const trimmed = (code || "").trim();
+      const trimmed = (code || readStoredCode() || "").trim();
       if (trimmed) headers["x-bottleshop-code"] = trimmed;
       const res = await fetch("/api/bottleshop/products", {
         headers,
@@ -69,11 +99,9 @@ export default function BottleShopPage() {
         setProducts(data.products || []);
         setUnlockedName(data.customer?.name || "");
         setViaUser(data.via === "user");
-        if (data.via === "code" && trimmed) {
+        if (trimmed) {
           setAccessCode(trimmed);
           writeStoredCode(trimmed);
-        } else {
-          setAccessCode("");
         }
         setStatus("");
         return true;
@@ -92,20 +120,60 @@ export default function BottleShopPage() {
     }
   }, []);
 
+  const silentRestore = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return false;
+    try {
+      const res = await fetch("/api/bottleshop/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ query: trimmed }),
+      });
+      const data = await res.json();
+      if (!data.success) return false;
+      if (data.user) {
+        try {
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        } catch {
+          // ignore
+        }
+        writeStoredLogin(data.user.email || trimmed);
+        setRestoreInput(data.user.email || trimmed);
+      } else {
+        writeStoredLogin(trimmed);
+      }
+      const code = String(data.accessCode || "").trim();
+      if (code) writeStoredCode(code);
+      return loadCatalogue(code || undefined);
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }, [loadCatalogue]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const fromUrl = (params.get("code") || "").trim();
-    const stored = readStoredCode();
-    const initialCode = fromUrl || stored;
-    setCodeInput(initialCode);
+    const storedCode = readStoredCode();
+    const initialCode = fromUrl || storedCode;
+    const storedLogin =
+      readStoredLogin() || readStoredUserEmail() || restoreInput;
+    if (initialCode) setCodeInput(initialCode);
+    if (storedLogin) setRestoreInput(storedLogin);
     void (async () => {
-      const ok = await loadCatalogue(initialCode || undefined);
-      if (!ok && initialCode) {
+      let ok = await loadCatalogue(initialCode || undefined);
+      if (!ok && storedLogin) {
+        ok = await silentRestore(storedLogin);
+      }
+      if (!ok && initialCode && initialCode === storedCode) {
         writeStoredCode("");
         setAccessCode("");
       }
     })();
-  }, [loadCatalogue]);
+    // Boot once on open — do not re-run when restoreInput changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadCatalogue, silentRestore]);
 
   const unlocked = products.length > 0 || Boolean(unlockedName);
 
@@ -139,35 +207,15 @@ export default function BottleShopPage() {
     setRestoring(true);
     setStatus("Restoring…");
     try {
-      const res = await fetch("/api/bottleshop/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ query }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setStatus(data.error || "No account found with those details.");
+      writeStoredLogin(query);
+      const ok = await silentRestore(query);
+      if (!ok) {
+        setStatus(
+          "No bottle shop account found. Check the username with the pub."
+        );
         return;
       }
-      if (data.user) {
-        try {
-          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        } catch {
-          // ignore
-        }
-        setRestoreInput(data.user.email);
-      }
-      const code =
-        data.via === "code"
-          ? String(data.accessCode || "").trim()
-          : undefined;
-      const ok = await loadCatalogue(code);
-      if (ok) {
-        setStatus(
-          `Welcome ${data.user?.name || data.customer?.name || query}.`
-        );
-      }
+      setStatus(`Welcome — you will stay signed in on this phone.`);
     } catch (error) {
       console.error(error);
       setStatus("Restore failed. Please try again.");
@@ -191,13 +239,14 @@ export default function BottleShopPage() {
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       };
-      if (accessCode) headers["x-bottleshop-code"] = accessCode;
+      const codeForOrder = accessCode || readStoredCode();
+      if (codeForOrder) headers["x-bottleshop-code"] = codeForOrder;
       const res = await fetch("/api/bottleshop/orders", {
         method: "POST",
         headers,
         credentials: "include",
         body: JSON.stringify({
-          accessCode: accessCode || undefined,
+          accessCode: codeForOrder || undefined,
           customerName: customerName.trim() || unlockedName || undefined,
           customerNote: customerNote.trim() || undefined,
           items: lines.map((l) => ({
