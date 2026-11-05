@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 
 type Product = {
   id: string;
@@ -130,10 +131,12 @@ export default function BottleShopPage() {
         <h1 style={{ margin: "0 0 8px", fontSize: "1.75rem", color: "#f8fafc" }}>
           Bottle Shop
         </h1>
-        <p style={{ margin: "0 0 20px", color: "#94a3b8", lineHeight: 1.45 }}>
+        <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
           See what&apos;s on the shelf. Reserve bottles here — pay and collect at
           the pub. No online payment yet.
         </p>
+
+        <BottleShopInstallButton />
 
         {loading ? (
           <p style={{ color: "#94a3b8" }}>Loading…</p>

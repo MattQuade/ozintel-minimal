@@ -628,6 +628,8 @@ export default function VoiceHandsfreeDock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Customer bottle-shop PWA must not show OzIntel voice/accounting chrome.
+  if (pathname?.startsWith('/bottleshop')) return null;
   if (!supported || !visible) return null;
 
   return (
