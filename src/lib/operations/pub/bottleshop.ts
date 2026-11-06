@@ -7,6 +7,12 @@ import {
   getPubOpsDataDir,
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
+import {
+  normalizeBottleCategory,
+  type BottleCategory,
+} from "@/lib/operations/pub/bottleShopCategories";
+
+export type { BottleCategory };
 
 export type BottleProduct = {
   id: string;
@@ -15,6 +21,7 @@ export type BottleProduct = {
   quantity: number;
   imageUrl: string;
   active: boolean;
+  category: BottleCategory;
 };
 
 export type BottleOrderLine = {
@@ -118,6 +125,7 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
     quantity: Math.max(0, Math.floor(Number(raw.quantity) || 0)),
     imageUrl: String(raw.imageUrl || `/bottleshop/${id}.svg`).trim(),
     active: raw.active !== false,
+    category: normalizeBottleCategory(raw.category, { id, name }),
   };
 }
 
@@ -195,11 +203,13 @@ async function writeStore(store: BottleShopStore) {
 export async function listBottleProducts(opts?: {
   activeOnly?: boolean;
   inStockOnly?: boolean;
+  category?: BottleCategory;
 }): Promise<BottleProduct[]> {
   const store = await readStore();
   return store.products.filter((p) => {
     if (opts?.activeOnly && !p.active) return false;
     if (opts?.inStockOnly && p.quantity <= 0) return false;
+    if (opts?.category && p.category !== opts.category) return false;
     return true;
   });
 }
@@ -415,16 +425,22 @@ export async function readBottleProductPhoto(
 
 export async function updateBottleProduct(
   id: string,
-  patch: Partial<Pick<BottleProduct, "name" | "price" | "quantity" | "imageUrl" | "active">>
+  patch: Partial<
+    Pick<
+      BottleProduct,
+      "name" | "price" | "quantity" | "imageUrl" | "active" | "category"
+    >
+  >
 ): Promise<BottleProduct> {
   const store = await readStore();
   const idx = store.products.findIndex((p) => p.id === id);
   if (idx < 0) throw new Error("Product not found");
   const current = store.products[idx];
+  const nextName =
+    patch.name != null ? String(patch.name).trim() || current.name : current.name;
   const next: BottleProduct = {
     ...current,
-    name:
-      patch.name != null ? String(patch.name).trim() || current.name : current.name,
+    name: nextName,
     price:
       patch.price != null
         ? Math.max(0, Number(patch.price) || 0)
@@ -438,6 +454,13 @@ export async function updateBottleProduct(
         ? String(patch.imageUrl).trim() || current.imageUrl
         : current.imageUrl,
     active: patch.active != null ? Boolean(patch.active) : current.active,
+    category:
+      patch.category != null
+        ? normalizeBottleCategory(patch.category, {
+            id: current.id,
+            name: nextName,
+          })
+        : current.category,
   };
   store.products[idx] = next;
   await writeStore(store);
@@ -448,17 +471,20 @@ export async function createBottleProduct(input: {
   name: string;
   price?: number;
   quantity?: number;
+  category?: BottleCategory | string;
 }): Promise<BottleProduct> {
   const name = String(input.name || "").trim();
   if (!name) throw new Error("Product name is required");
   const store = await readStore();
+  const id = newId("item");
   const product: BottleProduct = {
-    id: newId("item"),
+    id,
     name,
     price: Math.max(0, Number(input.price) || 0),
     quantity: Math.max(0, Math.floor(Number(input.quantity) || 0)),
     imageUrl: "/bottleshop/wine-01.svg",
     active: true,
+    category: normalizeBottleCategory(input.category, { id, name }),
   };
   store.products.push(product);
   await writeStore(store);

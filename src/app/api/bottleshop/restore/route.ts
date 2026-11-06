@@ -14,6 +14,10 @@ import {
 } from "@/lib/users";
 import { setSessionEmailCookie } from "@/lib/sessionCookie";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
+import {
+  isBottleCategory,
+  type BottleCategory,
+} from "@/lib/operations/pub/bottleShopCategories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +42,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const categoryRaw = String(body.category || "")
+      .trim()
+      .toLowerCase();
+    const category: BottleCategory | undefined = isBottleCategory(categoryRaw)
+      ? categoryRaw
+      : undefined;
+
     const ownerEmail = getBottleShopOwnerEmail();
     const variants = restoreQueryVariants(query);
     const users = await readUsersFast();
@@ -49,7 +60,7 @@ export async function POST(req: NextRequest) {
 
     if (user && user.status === "approved" && user.permissions?.bottleShop) {
       const products = await runWithDataOwnerAsync(ownerEmail, () =>
-        listBottleProducts({ activeOnly: true })
+        listBottleProducts({ activeOnly: true, category })
       );
       const res = NextResponse.json({
         success: true,
@@ -85,7 +96,7 @@ export async function POST(req: NextRequest) {
         phone: customer.phone,
       });
       const products = await runWithDataOwnerAsync(ownerEmail, () =>
-        listBottleProducts({ activeOnly: true })
+        listBottleProducts({ activeOnly: true, category })
       );
       const res = NextResponse.json({
         success: true,
@@ -106,7 +117,7 @@ export async function POST(req: NextRequest) {
         phone: user?.phone,
       });
       const products = await runWithDataOwnerAsync(ownerEmail, () =>
-        listBottleProducts({ activeOnly: true })
+        listBottleProducts({ activeOnly: true, category })
       );
       const res = NextResponse.json({
         success: true,

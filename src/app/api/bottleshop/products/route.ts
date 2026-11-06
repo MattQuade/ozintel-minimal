@@ -3,6 +3,10 @@ import { listBottleProducts } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
+import {
+  isBottleCategory,
+  type BottleCategory,
+} from "@/lib/operations/pub/bottleShopCategories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +22,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const categoryRaw = String(req.nextUrl.searchParams.get("category") || "")
+      .trim()
+      .toLowerCase();
+    const category: BottleCategory | undefined = isBottleCategory(categoryRaw)
+      ? categoryRaw
+      : undefined;
+
     const products = await runWithDataOwnerAsync(
       getBottleShopOwnerEmail(),
-      () => listBottleProducts({ activeOnly: true })
+      () => listBottleProducts({ activeOnly: true, category })
     );
     return NextResponse.json(
       {

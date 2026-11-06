@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
         name: body.name,
         price: body.price,
         quantity: body.quantity,
+        category: body.category,
       })
     );
     return NextResponse.json({ success: true, product });
@@ -97,6 +98,7 @@ export async function PATCH(req: NextRequest) {
         quantity: body.quantity,
         imageUrl: body.imageUrl,
         active: body.active,
+        category: body.category,
       })
     );
     return NextResponse.json({ success: true, product });

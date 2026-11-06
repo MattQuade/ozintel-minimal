@@ -12,6 +12,10 @@ import {
   FULL_CROP,
   type CropRectNorm,
 } from "@/lib/client/cropImage";
+import {
+  BOTTLE_SHOP_CATEGORIES,
+  type BottleCategory,
+} from "@/lib/operations/pub/bottleShopCategories";
 
 type Product = {
   id: string;
@@ -20,6 +24,7 @@ type Product = {
   quantity: number;
   imageUrl: string;
   active: boolean;
+  category: BottleCategory;
 };
 
 type Order = {
@@ -82,8 +87,13 @@ function BottleShopAdminInner() {
   const [newProductName, setNewProductName] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [newProductQty, setNewProductQty] = useState("1");
+  const [newProductCategory, setNewProductCategory] =
+    useState<BottleCategory>("beer");
   const [drafts, setDrafts] = useState<
-    Record<string, { price: string; quantity: string; name: string }>
+    Record<
+      string,
+      { price: string; quantity: string; name: string; category: BottleCategory }
+    >
   >({});
   const [photoCrop, setPhotoCrop] = useState<{
     productId: string;
@@ -129,13 +139,19 @@ function BottleShopAdminInner() {
       void syncAppBadge(reserved);
       const nextDrafts: Record<
         string,
-        { price: string; quantity: string; name: string }
+        {
+          price: string;
+          quantity: string;
+          name: string;
+          category: BottleCategory;
+        }
       > = {};
       for (const p of nextProducts) {
         nextDrafts[p.id] = {
           name: p.name,
           price: String(p.price),
           quantity: String(p.quantity),
+          category: p.category || "beer",
         };
       }
       setDrafts(nextDrafts);
@@ -166,6 +182,7 @@ function BottleShopAdminInner() {
           name: draft.name,
           price: Number(draft.price),
           quantity: Number(draft.quantity),
+          category: draft.category,
         }),
       });
       const data = await res.json();
@@ -236,6 +253,7 @@ function BottleShopAdminInner() {
           name: newProductName.trim(),
           price: Number(newProductPrice) || 0,
           quantity: Number(newProductQty) || 0,
+          category: newProductCategory,
         }),
       });
       const data = await res.json();
@@ -246,6 +264,7 @@ function BottleShopAdminInner() {
       setNewProductName("");
       setNewProductPrice("");
       setNewProductQty("1");
+      setNewProductCategory("beer");
       setStatus(`Added ${data.product.name}. Upload a photo below.`);
       await load();
     } catch (error) {
@@ -666,6 +685,28 @@ function BottleShopAdminInner() {
                 color: "white",
               }}
             />
+            <select
+              value={newProductCategory}
+              onChange={(e) =>
+                setNewProductCategory(e.target.value as BottleCategory)
+              }
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                marginBottom: 8,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid #475569",
+                background: "#0f172a",
+                color: "white",
+              }}
+            >
+              {BOTTLE_SHOP_CATEGORIES.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
                 value={newProductPrice}
@@ -720,6 +761,7 @@ function BottleShopAdminInner() {
                 name: p.name,
                 price: String(p.price),
                 quantity: String(p.quantity),
+                category: p.category || "beer",
               };
               return (
                 <div
@@ -821,6 +863,37 @@ function BottleShopAdminInner() {
                             color: "white",
                           }}
                         />
+                      </label>
+                      <label style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
+                        Shelf
+                        <select
+                          value={draft.category}
+                          onChange={(e) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: {
+                                ...draft,
+                                category: e.target.value as BottleCategory,
+                              },
+                            }))
+                          }
+                          style={{
+                            display: "block",
+                            width: 120,
+                            marginTop: 4,
+                            padding: 8,
+                            borderRadius: 8,
+                            border: "1px solid #475569",
+                            background: "#0f172a",
+                            color: "white",
+                          }}
+                        >
+                          {BOTTLE_SHOP_CATEGORIES.map((c) => (
+                            <option key={c.slug} value={c.slug}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <button
                         type="button"
