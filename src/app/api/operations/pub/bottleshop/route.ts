@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createBottleProduct,
+  deleteBottleOrder,
   loadBottleShopAdmin,
   setBottleOrderStatus,
   updateBottleProduct,
@@ -69,10 +70,20 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const kind = String(body.kind || "product").trim();
 
-    if (kind === "order") {
+    if (kind === "order" || kind === "deleteOrder") {
       const id = String(body.id || "").trim();
+      if (!id) {
+        return NextResponse.json(
+          { success: false, error: "id is required" },
+          { status: 400 }
+        );
+      }
+      if (kind === "deleteOrder") {
+        await withBottleShopOwner(() => deleteBottleOrder(id));
+        return NextResponse.json({ success: true });
+      }
       const status = String(body.status || "").trim() as BottleOrder["status"];
-      if (!id || !["reserved", "collected", "cancelled"].includes(status)) {
+      if (!["reserved", "collected", "cancelled"].includes(status)) {
         return NextResponse.json(
           { success: false, error: "id and valid status required" },
           { status: 400 }

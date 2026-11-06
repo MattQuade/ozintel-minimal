@@ -595,3 +595,19 @@ export async function setBottleOrderStatus(
   await writeStore(store);
   return store.orders[idx];
 }
+
+/** Remove an order from the ledger. Restocks if it was still reserved. */
+export async function deleteBottleOrder(id: string): Promise<void> {
+  const store = await readStore();
+  const idx = store.orders.findIndex((o) => o.id === id);
+  if (idx < 0) throw new Error("Order not found");
+  const current = store.orders[idx];
+  if (current.status === "reserved") {
+    for (const line of current.lines) {
+      const product = store.products.find((p) => p.id === line.productId);
+      if (product) product.quantity += line.quantity;
+    }
+  }
+  store.orders.splice(idx, 1);
+  await writeStore(store);
+}

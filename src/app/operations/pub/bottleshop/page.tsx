@@ -403,6 +403,34 @@ function BottleShopAdminInner() {
     }
   };
 
+  const deleteOrder = async (id: string, label: string) => {
+    if (
+      !window.confirm(
+        `Delete order for ${label}? This clears it from the ledger.`
+      )
+    ) {
+      return;
+    }
+    setStatus("Deleting order…");
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "deleteOrder", id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Delete failed");
+        return;
+      }
+      setStatus("Order deleted.");
+      await load();
+    } catch (error) {
+      console.error(error);
+      setStatus("Order delete failed.");
+    }
+  };
+
   return (
     <main
       style={{
@@ -992,12 +1020,13 @@ function BottleShopAdminInner() {
                       type="button"
                       onClick={() => setOrderStatus(o.id, "collected")}
                       style={{
-                        padding: "8px 12px",
+                        padding: "6px 9px",
                         borderRadius: 8,
                         border: "none",
                         background: "#15803d",
                         color: "white",
                         cursor: "pointer",
+                        fontSize: "0.75rem",
                       }}
                     >
                       Collected
@@ -1006,12 +1035,13 @@ function BottleShopAdminInner() {
                       type="button"
                       onClick={() => setOrderStatus(o.id, "cancelled")}
                       style={{
-                        padding: "8px 12px",
+                        padding: "6px 9px",
                         borderRadius: 8,
                         border: "none",
                         background: "#7f1d1d",
                         color: "white",
                         cursor: "pointer",
+                        fontSize: "0.75rem",
                       }}
                     >
                       Cancelled
@@ -1020,15 +1050,34 @@ function BottleShopAdminInner() {
                       type="button"
                       onClick={() => setOrderStatus(o.id, "reserved")}
                       style={{
-                        padding: "8px 12px",
+                        padding: "6px 9px",
                         borderRadius: 8,
                         border: "none",
                         background: "#334155",
                         color: "white",
                         cursor: "pointer",
+                        fontSize: "0.75rem",
                       }}
                     >
                       Reserved
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void deleteOrder(o.id, o.customerName || "customer")
+                      }
+                      style={{
+                        padding: "6px 9px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#991b1b",
+                        color: "white",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
