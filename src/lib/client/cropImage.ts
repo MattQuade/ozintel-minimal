@@ -39,6 +39,26 @@ export function loadImageFromBlobUrl(url: string): Promise<HTMLImageElement> {
   });
 }
 
+async function bitmapFromBlob(blob: Blob): Promise<{
+  source: ImageBitmap;
+  width: number;
+  height: number;
+  close: () => void;
+}> {
+  const bitmap = await createImageBitmap(
+    blob,
+    { imageOrientation: 'from-image' } as ImageBitmapOptions
+  );
+  return {
+    source: bitmap,
+    width: bitmap.width,
+    height: bitmap.height,
+    close: () => {
+      if (typeof bitmap.close === 'function') bitmap.close();
+    },
+  };
+}
+
 /**
  * Load pixels with EXIF orientation applied when the browser supports it,
  * so crop maths match what the user sees in an <img>.
@@ -51,21 +71,17 @@ export async function loadOrientedSource(src: string): Promise<{
 }> {
   if (typeof createImageBitmap === 'function') {
     try {
-      const res = await fetch(src, { credentials: 'include', cache: 'no-store' });
-      if (!res.ok) throw new Error('fetch failed');
-      const blob = await res.blob();
-      const bitmap = await createImageBitmap(
-        blob,
-        { imageOrientation: 'from-image' } as ImageBitmapOptions
+      // blob:/data: must not use credentials — Safari/iOS fails those fetches.
+      const isLocal =
+        src.startsWith('blob:') || src.startsWith('data:');
+      const res = await fetch(
+        src,
+        isLocal
+          ? { cache: 'no-store' }
+          : { credentials: 'include', cache: 'no-store' }
       );
-      return {
-        source: bitmap,
-        width: bitmap.width,
-        height: bitmap.height,
-        close: () => {
-          if (typeof bitmap.close === 'function') bitmap.close();
-        },
-      };
+      if (!res.ok) throw new Error('fetch failed');
+      return await bitmapFromBlob(await res.blob());
     } catch {
       // fall through to <img>
     }
@@ -77,6 +93,37 @@ export async function loadOrientedSource(src: string): Promise<{
     height: img.naturalHeight || img.height,
     close: () => undefined,
   };
+}
+
+/** Prefer decoding the original File/Blob — no revoked blob: URL races. */
+export async function loadOrientedBlob(blob: Blob): Promise<{
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  close: () => void;
+}> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await bitmapFromBlob(blob);
+    } catch {
+      // fall through
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImageFromBlobUrl(url);
+    return {
+      source: img,
+      width: img.naturalWidth || img.width,
+      height: img.naturalHeight || img.height,
+      close: () => {
+        URL.revokeObjectURL(url);
+      },
+    };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
 }
 
 /**
@@ -150,6 +197,33 @@ export async function exportCroppedJpegFromSrc(args: {
   quality?: number;
 }): Promise<File> {
   const loaded = await loadOrientedSource(args.src);
+  try {
+    return await exportCroppedJpeg({
+      source: loaded.source as CanvasImageSource & {
+        width?: number;
+        naturalWidth?: number;
+        height?: number;
+        naturalHeight?: number;
+      },
+      crop: args.crop,
+      fileName: args.fileName,
+      maxEdge: args.maxEdge,
+      quality: args.quality,
+    });
+  } finally {
+    loaded.close();
+  }
+}
+
+/** Crop from the original camera/gallery File — most reliable on phones. */
+export async function exportCroppedJpegFromBlob(args: {
+  blob: Blob;
+  crop: CropRectNorm;
+  fileName?: string;
+  maxEdge?: number;
+  quality?: number;
+}): Promise<File> {
+  const loaded = await loadOrientedBlob(args.blob);
   try {
     return await exportCroppedJpeg({
       source: loaded.source as CanvasImageSource & {

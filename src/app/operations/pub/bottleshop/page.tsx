@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import OpsGate from "@/components/OpsGate";
 import ReceiptCropEditor from "@/components/ReceiptCropEditor";
 import {
@@ -8,6 +8,7 @@ import {
   syncAppBadge,
 } from "@/lib/client/bottleShopPush";
 import {
+  exportCroppedJpegFromBlob,
   exportCroppedJpegFromSrc,
   FULL_CROP,
   type CropRectNorm,
@@ -99,23 +100,33 @@ function BottleShopAdminInner() {
     productId: string;
     productName: string;
     objectUrl: string;
+    file: File;
     fileName: string;
   } | null>(null);
   const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
   const [cropSaving, setCropSaving] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
-    };
-  }, [photoCrop?.objectUrl]);
+  // Keep the live object URL in a ref so React Strict Mode cleanup cannot
+  // revoke the blob the crop UI is still showing.
+  const photoObjectUrlRef = useRef<string | null>(null);
 
   const closePhotoCrop = () => {
-    if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
+    if (photoObjectUrlRef.current) {
+      URL.revokeObjectURL(photoObjectUrlRef.current);
+      photoObjectUrlRef.current = null;
+    }
     setPhotoCrop(null);
     setCrop(FULL_CROP);
     setCropSaving(false);
   };
+
+  useEffect(() => {
+    return () => {
+      if (photoObjectUrlRef.current) {
+        URL.revokeObjectURL(photoObjectUrlRef.current);
+        photoObjectUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -199,13 +210,27 @@ function BottleShopAdminInner() {
   };
 
   const beginPhotoCrop = (product: Product, file: File | null | undefined) => {
-    if (!file) return;
-    if (photoCrop?.objectUrl) URL.revokeObjectURL(photoCrop.objectUrl);
+    if (!file) {
+      setStatus("No photo selected.");
+      return;
+    }
+    if (!file.type.startsWith("image/") && file.type !== "") {
+      setStatus("That file is not an image. Take a photo or pick a JPEG/PNG.");
+      return;
+    }
+    if (photoObjectUrlRef.current) {
+      URL.revokeObjectURL(photoObjectUrlRef.current);
+      photoObjectUrlRef.current = null;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    photoObjectUrlRef.current = objectUrl;
     setCrop(FULL_CROP);
+    setCropSaving(false);
     setPhotoCrop({
       productId: product.id,
       productName: product.name,
-      objectUrl: URL.createObjectURL(file),
+      objectUrl,
+      file,
       fileName: file.name || `${product.id}.jpg`,
     });
   };
@@ -216,17 +241,22 @@ function BottleShopAdminInner() {
       const draft = drafts[id];
       const form = new FormData();
       form.set("productId", id);
-      form.set("file", file);
+      form.set("file", file, file.name || `${id}.jpg`);
       if (draft?.name) form.set("name", draft.name);
       if (draft?.price) form.set("price", draft.price);
       if (draft?.quantity) form.set("quantity", draft.quantity);
       const res = await fetch("/api/operations/pub/bottleshop/photo", {
         method: "POST",
         body: form,
+        credentials: "include",
+        cache: "no-store",
       });
-      const data = await res.json();
-      if (!data.success) {
-        setStatus(data.error || "Photo upload failed");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setStatus(
+          data.error ||
+            `Photo upload failed (${res.status}). Try a smaller photo.`
+        );
         return false;
       }
       setStatus("Photo + details saved — public bottle shop will show them.");
@@ -234,7 +264,9 @@ function BottleShopAdminInner() {
       return true;
     } catch (error) {
       console.error(error);
-      setStatus("Photo upload failed.");
+      setStatus(
+        error instanceof Error ? error.message : "Photo upload failed."
+      );
       return false;
     }
   };
@@ -274,23 +306,37 @@ function BottleShopAdminInner() {
   };
 
   const confirmPhotoCrop = async () => {
-    if (!photoCrop) return;
+    if (!photoCrop || cropSaving) return;
     setCropSaving(true);
     setStatus("Cropping photo…");
     try {
-      const cropped = await exportCroppedJpegFromSrc({
-        src: photoCrop.objectUrl,
-        crop,
-        fileName: photoCrop.fileName,
-        maxEdge: 1600,
-        quality: 0.88,
-      });
+      let cropped: File;
+      try {
+        cropped = await exportCroppedJpegFromBlob({
+          blob: photoCrop.file,
+          crop,
+          fileName: photoCrop.fileName,
+          maxEdge: 1600,
+          quality: 0.88,
+        });
+      } catch (primary) {
+        console.warn("File crop failed, retrying via preview URL", primary);
+        cropped = await exportCroppedJpegFromSrc({
+          src: photoCrop.objectUrl,
+          crop,
+          fileName: photoCrop.fileName,
+          maxEdge: 1600,
+          quality: 0.88,
+        });
+      }
       const ok = await uploadPhoto(photoCrop.productId, cropped);
       if (ok) closePhotoCrop();
     } catch (error) {
       console.error(error);
       setStatus(
-        error instanceof Error ? error.message : "Could not crop photo."
+        error instanceof Error
+          ? error.message
+          : "Could not crop photo. Try JPEG from the camera roll."
       );
     } finally {
       setCropSaving(false);

@@ -24,7 +24,17 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!(file instanceof File)) {
+    // Node/undici sometimes yields Blob, not File — accept either.
+    const blob =
+      typeof Blob !== "undefined" && file instanceof Blob
+        ? file
+        : file &&
+            typeof file === "object" &&
+            typeof (file as { arrayBuffer?: unknown }).arrayBuffer ===
+              "function"
+          ? (file as Blob)
+          : null;
+    if (!blob) {
       return NextResponse.json(
         { success: false, error: "Photo file is required (field: file)" },
         { status: 400 }
@@ -33,7 +43,13 @@ export async function POST(req: NextRequest) {
     const name = String(form.get("name") || "").trim();
     const priceRaw = String(form.get("price") || "").trim();
     const quantityRaw = String(form.get("quantity") || "").trim();
-    const arrayBuffer = await file.arrayBuffer();
+    const arrayBuffer = await blob.arrayBuffer();
+    if (!arrayBuffer.byteLength) {
+      return NextResponse.json(
+        { success: false, error: "Photo file is empty" },
+        { status: 400 }
+      );
+    }
     const product = await runWithDataOwnerAsync(
       getBottleShopOwnerEmail(),
       async () => {
