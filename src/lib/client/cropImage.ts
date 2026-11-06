@@ -34,7 +34,10 @@ export function loadImageFromBlobUrl(url: string): Promise<HTMLImageElement> {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error('Could not load image'));
-    img.crossOrigin = 'anonymous';
+    // crossOrigin on blob:/data: URLs breaks decode on iOS Safari.
+    if (!url.startsWith('blob:') && !url.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.src = url;
   });
 }
@@ -45,10 +48,17 @@ async function bitmapFromBlob(blob: Blob): Promise<{
   height: number;
   close: () => void;
 }> {
-  const bitmap = await createImageBitmap(
-    blob,
-    { imageOrientation: 'from-image' } as ImageBitmapOptions
-  );
+  // Prefer plain decode first (same as receipt compress — most reliable on phones).
+  // Orientation option is a best-effort second try for EXIF rotation.
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch {
+    bitmap = await createImageBitmap(
+      blob,
+      { imageOrientation: 'from-image' } as ImageBitmapOptions
+    );
+  }
   return {
     source: bitmap,
     width: bitmap.width,
@@ -57,6 +67,47 @@ async function bitmapFromBlob(blob: Blob): Promise<{
       if (typeof bitmap.close === 'function') bitmap.close();
     },
   };
+}
+
+async function canvasToJpegBlob(
+  canvas: HTMLCanvasElement,
+  quality: number
+): Promise<Blob> {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    try {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+    } catch {
+      resolve(null);
+    }
+  });
+  if (blob) return blob;
+
+  // iOS sometimes returns null from toBlob on large canvases — use data URL.
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  const res = await fetch(dataUrl);
+  const fallback = await res.blob();
+  if (!fallback.size) throw new Error('Crop export failed');
+  return fallback;
+}
+
+function jpegFileFromBlob(blob: Blob, fileName?: string): File {
+  const base = (fileName || 'photo').replace(/\.[^.]+$/, '') || 'photo';
+  const name = `${base}.jpg`;
+  try {
+    return new File([blob], name, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    });
+  } catch {
+    // Very old WebKit without File ctor — FormData still accepts Blob+filename.
+    const legacy = blob as Blob & { name?: string; lastModified?: number };
+    Object.defineProperty(legacy, 'name', { value: name, configurable: true });
+    Object.defineProperty(legacy, 'lastModified', {
+      value: Date.now(),
+      configurable: true,
+    });
+    return legacy as File;
+  }
 }
 
 /**
@@ -172,20 +223,8 @@ export async function exportCroppedJpeg(args: {
   ctx.drawImage(args.source, sx, sy, sw, sh, 0, 0, dw, dh);
 
   const quality = args.quality ?? RECEIPT_JPEG_QUALITY;
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('Crop export failed'))),
-      'image/jpeg',
-      quality
-    );
-  });
-
-  const base =
-    (args.fileName || 'receipt').replace(/\.[^.]+$/, '') || 'receipt';
-  return new File([blob], `${base}.jpg`, {
-    type: 'image/jpeg',
-    lastModified: Date.now(),
-  });
+  const blob = await canvasToJpegBlob(canvas, quality);
+  return jpegFileFromBlob(blob, args.fileName || 'receipt');
 }
 
 /** Crop from a URL/blob URL using orientation-aware decoding. */

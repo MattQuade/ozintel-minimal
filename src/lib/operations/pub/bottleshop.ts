@@ -388,16 +388,24 @@ export async function saveBottleProductPhoto(
   if (idx < 0) throw new Error("Product not found");
 
   await ensureDirs();
-  const jpeg = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: 900,
-      height: 1200,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .jpeg({ quality: 82 })
-    .toBuffer();
+  let jpeg: Buffer;
+  try {
+    jpeg = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: 900,
+        height: 1200,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+  } catch (error) {
+    console.error("[saveBottleProductPhoto] sharp", error);
+    throw new Error(
+      "Could not process that photo. Use a JPEG/PNG from the camera roll."
+    );
+  }
   await fs.writeFile(photoFilePath(id), jpeg);
 
   const next: BottleProduct = {

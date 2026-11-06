@@ -87,9 +87,12 @@ export default function ReceiptCropEditor({
   // Only reset crop when the image source changes — never while dragging
   // (feeding live crop back as initialCrop caused the shaky borders).
   useEffect(() => {
-    const next = clampCrop(FULL_CROP);
+    const next = clampCrop(initialCrop || FULL_CROP);
     cropRef.current = next;
     setCrop(next);
+    onCropChangeRef.current?.(next);
+    // intentionally only when src changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   useEffect(() => {

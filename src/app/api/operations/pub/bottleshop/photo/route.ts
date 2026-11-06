@@ -14,8 +14,21 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const access = await requireOpsAccess(req, "pubOps");
   if (!access.ok) return access.response;
+  let form: FormData;
   try {
-    const form = await req.formData();
+    form = await req.formData();
+  } catch (error) {
+    console.error("[bottleshop photo] formData", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Could not read the photo upload (file may be too large). Crop again or use a smaller JPEG.",
+      },
+      { status: 413 }
+    );
+  }
+  try {
     const productId = String(form.get("productId") || "").trim();
     const file = form.get("file") ?? form.get("photo");
     if (!productId) {
@@ -65,7 +78,7 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ success: true, product });
   } catch (error) {
-    console.error(error);
+    console.error("[bottleshop photo]", error);
     return NextResponse.json(
       {
         success: false,

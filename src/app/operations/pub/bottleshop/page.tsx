@@ -13,6 +13,7 @@ import {
   FULL_CROP,
   type CropRectNorm,
 } from "@/lib/client/cropImage";
+import { prepareReceiptFileForOcr } from "@/lib/client/compressReceiptImage";
 import {
   BOTTLE_SHOP_CATEGORIES,
   type BottleCategory,
@@ -104,10 +105,17 @@ function BottleShopAdminInner() {
     fileName: string;
   } | null>(null);
   const [crop, setCrop] = useState<CropRectNorm>(FULL_CROP);
+  const cropRef = useRef<CropRectNorm>(FULL_CROP);
   const [cropSaving, setCropSaving] = useState(false);
+  const [cropError, setCropError] = useState("");
   // Keep the live object URL in a ref so React Strict Mode cleanup cannot
   // revoke the blob the crop UI is still showing.
   const photoObjectUrlRef = useRef<string | null>(null);
+
+  const onCropChange = useCallback((next: CropRectNorm) => {
+    cropRef.current = next;
+    setCrop(next);
+  }, []);
 
   const closePhotoCrop = () => {
     if (photoObjectUrlRef.current) {
@@ -115,8 +123,10 @@ function BottleShopAdminInner() {
       photoObjectUrlRef.current = null;
     }
     setPhotoCrop(null);
+    cropRef.current = FULL_CROP;
     setCrop(FULL_CROP);
     setCropSaving(false);
+    setCropError("");
   };
 
   useEffect(() => {
@@ -224,8 +234,11 @@ function BottleShopAdminInner() {
     }
     const objectUrl = URL.createObjectURL(file);
     photoObjectUrlRef.current = objectUrl;
+    cropRef.current = FULL_CROP;
     setCrop(FULL_CROP);
     setCropSaving(false);
+    setCropError("");
+    setStatus("");
     setPhotoCrop({
       productId: product.id,
       productName: product.name,
@@ -235,13 +248,14 @@ function BottleShopAdminInner() {
     });
   };
 
-  const uploadPhoto = async (id: string, file: File) => {
+  const uploadPhoto = async (id: string, file: Blob, fileName?: string) => {
     setStatus(`Uploading photo for ${id}…`);
+    setCropError("");
     try {
       const draft = drafts[id];
       const form = new FormData();
       form.set("productId", id);
-      form.set("file", file, file.name || `${id}.jpg`);
+      form.set("file", file, fileName || `${id}.jpg`);
       if (draft?.name) form.set("name", draft.name);
       if (draft?.price) form.set("price", draft.price);
       if (draft?.quantity) form.set("quantity", draft.quantity);
@@ -251,12 +265,21 @@ function BottleShopAdminInner() {
         credentials: "include",
         cache: "no-store",
       });
-      const data = await res.json().catch(() => ({}));
+      const raw = await res.text();
+      let data: { success?: boolean; error?: string } = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
       if (!res.ok || !data.success) {
-        setStatus(
+        const msg =
           data.error ||
-            `Photo upload failed (${res.status}). Try a smaller photo.`
-        );
+          (res.status === 413
+            ? "Photo too large for the server. Try again — crop should shrink it."
+            : `Photo upload failed (${res.status}). Try JPEG from the camera roll.`);
+        setStatus(msg);
+        setCropError(msg);
         return false;
       }
       setStatus("Photo + details saved — public bottle shop will show them.");
@@ -264,9 +287,10 @@ function BottleShopAdminInner() {
       return true;
     } catch (error) {
       console.error(error);
-      setStatus(
-        error instanceof Error ? error.message : "Photo upload failed."
-      );
+      const msg =
+        error instanceof Error ? error.message : "Photo upload failed.";
+      setStatus(msg);
+      setCropError(msg);
       return false;
     }
   };
@@ -308,36 +332,49 @@ function BottleShopAdminInner() {
   const confirmPhotoCrop = async () => {
     if (!photoCrop || cropSaving) return;
     setCropSaving(true);
+    setCropError("");
     setStatus("Cropping photo…");
+    const liveCrop = cropRef.current || crop || FULL_CROP;
     try {
-      let cropped: File;
+      let cropped: File | null = null;
       try {
         cropped = await exportCroppedJpegFromBlob({
           blob: photoCrop.file,
-          crop,
+          crop: liveCrop,
           fileName: photoCrop.fileName,
-          maxEdge: 1600,
-          quality: 0.88,
+          maxEdge: 1280,
+          quality: 0.82,
         });
       } catch (primary) {
         console.warn("File crop failed, retrying via preview URL", primary);
-        cropped = await exportCroppedJpegFromSrc({
-          src: photoCrop.objectUrl,
-          crop,
-          fileName: photoCrop.fileName,
-          maxEdge: 1600,
-          quality: 0.88,
-        });
+        try {
+          cropped = await exportCroppedJpegFromSrc({
+            src: photoCrop.objectUrl,
+            crop: liveCrop,
+            fileName: photoCrop.fileName,
+            maxEdge: 1280,
+            quality: 0.82,
+          });
+        } catch (secondary) {
+          console.warn("Preview crop failed, compressing full photo", secondary);
+          // Last resort: same path as receipt capture — skip crop geometry.
+          cropped = await prepareReceiptFileForOcr(photoCrop.file);
+        }
       }
-      const ok = await uploadPhoto(photoCrop.productId, cropped);
+      const ok = await uploadPhoto(
+        photoCrop.productId,
+        cropped,
+        `${photoCrop.productId}.jpg`
+      );
       if (ok) closePhotoCrop();
     } catch (error) {
       console.error(error);
-      setStatus(
+      const msg =
         error instanceof Error
           ? error.message
-          : "Could not crop photo. Try JPEG from the camera roll."
-      );
+          : "Could not crop photo. Try JPEG from the camera roll.";
+      setStatus(msg);
+      setCropError(msg);
     } finally {
       setCropSaving(false);
     }
@@ -1138,12 +1175,12 @@ function BottleShopAdminInner() {
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 80,
+            zIndex: 9999,
             background: "rgba(2, 6, 23, 0.82)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: 16,
+            padding: "max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px))",
           }}
           role="dialog"
           aria-modal="true"
@@ -1154,12 +1191,13 @@ function BottleShopAdminInner() {
               width: "100%",
               maxWidth: 720,
               maxHeight: "92vh",
-              overflow: "auto",
+              display: "flex",
+              flexDirection: "column",
               background: "#0f172a",
               border: "1px solid #334155",
               borderRadius: 14,
-              padding: 16,
               color: "white",
+              overflow: "hidden",
             }}
           >
             <div
@@ -1168,7 +1206,9 @@ function BottleShopAdminInner() {
                 justifyContent: "space-between",
                 gap: 12,
                 alignItems: "flex-start",
-                marginBottom: 10,
+                padding: 16,
+                paddingBottom: 10,
+                flexShrink: 0,
               }}
             >
               <div>
@@ -1193,21 +1233,39 @@ function BottleShopAdminInner() {
                 Close
               </button>
             </div>
-            <ReceiptCropEditor
-              key={photoCrop.objectUrl}
-              src={photoCrop.objectUrl}
-              initialCrop={FULL_CROP}
-              theme="dark"
-              style={{ minHeight: 360 }}
-              onCropChange={setCrop}
-            />
+            <div style={{ flex: 1, overflow: "auto", padding: "0 16px" }}>
+              <ReceiptCropEditor
+                key={photoCrop.objectUrl}
+                src={photoCrop.objectUrl}
+                initialCrop={FULL_CROP}
+                theme="dark"
+                style={{ minHeight: 280 }}
+                onCropChange={onCropChange}
+              />
+              {cropError ? (
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    color: "#fca5a5",
+                    fontSize: 14,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {cropError}
+                </p>
+              ) : null}
+            </div>
             <div
               style={{
                 display: "flex",
                 justifyContent: "flex-end",
                 gap: 8,
-                marginTop: 14,
                 flexWrap: "wrap",
+                padding: 16,
+                paddingTop: 12,
+                borderTop: "1px solid #334155",
+                background: "#0f172a",
+                flexShrink: 0,
               }}
             >
               <button
@@ -1215,7 +1273,7 @@ function BottleShopAdminInner() {
                 disabled={cropSaving}
                 onClick={closePhotoCrop}
                 style={{
-                  padding: "10px 14px",
+                  padding: "12px 16px",
                   borderRadius: 8,
                   border: "1px solid #475569",
                   background: "transparent",
@@ -1231,12 +1289,12 @@ function BottleShopAdminInner() {
                 disabled={cropSaving}
                 onClick={() => void confirmPhotoCrop()}
                 style={{
-                  padding: "10px 14px",
+                  padding: "12px 16px",
                   borderRadius: 8,
                   border: "none",
-                  background: "#b45309",
+                  background: cropSaving ? "#475569" : "#b45309",
                   color: "white",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: cropSaving ? "not-allowed" : "pointer",
                 }}
               >
