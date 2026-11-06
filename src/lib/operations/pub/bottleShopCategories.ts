@@ -2,6 +2,7 @@
 export const BOTTLE_SHOP_CATEGORIES = [
   { slug: "beer", label: "Beer" },
   { slug: "wine", label: "Wine" },
+  { slug: "cider", label: "Cider" },
   { slug: "rtds", label: "RTDs" },
   { slug: "cruisers", label: "Cruisers" },
 ] as const;
@@ -36,6 +37,9 @@ export function normalizeBottleCategory(
 
   if (id.startsWith("wine") || /\bwine\b|shiraz|cabernet|merlot|pinot|chardonnay|sauvignon|riesling|ros[eé]|sparkling|moscato/.test(blob)) {
     return "wine";
+  }
+  if (id.startsWith("cider") || /\bcider\b/.test(blob)) {
+    return "cider";
   }
   if (id.startsWith("beer") || /\bbeer\b|lager|ale|ipa|stout|pilsner/.test(blob)) {
     return "beer";
