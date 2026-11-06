@@ -356,10 +356,17 @@ export default function BottleShopCategoryPage() {
           background: "#0f172a",
           color: "white",
           minHeight: "100vh",
-          padding: "20px 16px 48px",
+          padding:
+            "calc(20px + env(safe-area-inset-top, 0px)) 16px 48px",
         }}
       >
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
+          <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
+            OzIntel · Pub Bottle Shop
+          </p>
+          <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", color: "#f8fafc" }}>
+            {categoryLabel}
+          </h1>
           <p style={{ margin: "0 0 12px" }}>
             <a
               href="/bottleshop"
@@ -376,12 +383,6 @@ export default function BottleShopCategoryPage() {
               ← Bottle Shop
             </a>
           </p>
-          <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
-            OzIntel · Pub Bottle Shop
-          </p>
-          <h1 style={{ margin: "0 0 8px", fontSize: "1.75rem", color: "#f8fafc" }}>
-            {categoryLabel}
-          </h1>
           <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
             Restore your account to see {categoryLabel} stock and reserve bottles.
           </p>
@@ -457,10 +458,18 @@ export default function BottleShopCategoryPage() {
         background: "#0f172a",
         color: "white",
         minHeight: "100vh",
-        padding: "20px 16px 48px",
+        padding:
+          "calc(20px + env(safe-area-inset-top, 0px)) 16px 48px",
       }}
     >
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
+        <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
+          OzIntel · Pub Bottle Shop
+          {unlockedName ? ` · ${unlockedName}` : ""}
+        </p>
+        <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", color: "#f8fafc" }}>
+          {categoryLabel}
+        </h1>
         <p style={{ margin: "0 0 12px" }}>
           <a
             href="/bottleshop"
@@ -477,13 +486,6 @@ export default function BottleShopCategoryPage() {
             ← Bottle Shop
           </a>
         </p>
-        <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
-          OzIntel · Pub Bottle Shop
-          {unlockedName ? ` · ${unlockedName}` : ""}
-        </p>
-        <h1 style={{ margin: "0 0 8px", fontSize: "1.75rem", color: "#f8fafc" }}>
-          {categoryLabel}
-        </h1>
         <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
           Reserve {categoryLabel} here — pay and collect at the pub.
         </p>
