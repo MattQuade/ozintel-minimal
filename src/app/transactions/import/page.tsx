@@ -172,6 +172,51 @@ function BankImport() {
     });
   };
 
+  const clearImportBatch = async () => {
+    if (!classified.length) {
+      setStatus('Import batch is already empty.');
+      return;
+    }
+    const scoped = Boolean(windowFrom && windowTo);
+    if (
+      !confirm(
+        scoped
+          ? `Clear ${classified.length} import-batch line(s) dated ${formatAuDateRange(windowFrom!, windowTo!)}? Journal entries are not touched.`
+          : `Clear all ${classified.length} line(s) from the import batch? Journal entries are not touched.`
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
+    setStatus('Clearing import batch…');
+    try {
+      const res = await fetch('/api/import-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          scoped
+            ? { action: 'clear', from: windowFrom, to: windowTo }
+            : { action: 'clear', clearAll: true }
+        ),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setStatus(data.error || 'Could not clear import batch');
+        return;
+      }
+      const lines = Array.isArray(data.lines) ? data.lines : [];
+      setClassified(lines.map(batchToRow));
+      setLedgerSaved(false);
+      setStatus(
+        `Cleared ${data.removed ?? 0} import-batch line(s). ${lines.length} remain.`
+      );
+    } catch {
+      setStatus('Could not clear import batch');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const commitBatch = async () => {
     setSaving(true);
     setStatus('Committing coded lines to the journal…');
@@ -813,6 +858,14 @@ function BankImport() {
                     {saving ? 'Committing…' : 'Commit coded lines to the journal'}
                   </button>
                 )}
+                <button
+                  type="button"
+                  disabled={saving || classified.length === 0}
+                  onClick={() => void clearImportBatch()}
+                  className="bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white py-5 px-6 rounded-2xl text-lg font-semibold"
+                >
+                  Clear batch
+                </button>
               </div>
 
               <div className="mt-10 w-full overflow-x-auto max-h-[650px] border rounded-2xl">

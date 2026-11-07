@@ -447,4 +447,36 @@ export async function removeImportBatchLines(ids: string[]) {
   await writeBatchFile(lines.filter((line) => !drop.has(line.id)));
 }
 
+/**
+ * When journal lines are wiped, drop the matching import-batch rows too —
+ * otherwise /transactions/import still shows the CSV lines ready to re-commit.
+ */
+export async function clearImportBatchForLedgerDeletion(opts: {
+  fingerprints?: Iterable<string>;
+  dateFrom?: string;
+  dateTo?: string;
+  clearAll?: boolean;
+}): Promise<number> {
+  const lines = await readBatchFile();
+  if (!lines.length) return 0;
+  if (opts.clearAll) {
+    await writeBatchFile([]);
+    return lines.length;
+  }
+  const fingerprints = new Set(
+    [...(opts.fingerprints || [])].map((fp) => String(fp || "").trim()).filter(Boolean)
+  );
+  const from = toIsoDateInput(String(opts.dateFrom || "")) || "";
+  const to = toIsoDateInput(String(opts.dateTo || "")) || "";
+  const next = lines.filter((line) => {
+    if (fingerprints.has(line.fingerprint)) return false;
+    const iso = toIsoDateInput(line.date) || String(line.date || "").trim();
+    if (from && to && iso && iso >= from && iso <= to) return false;
+    return true;
+  });
+  const removed = lines.length - next.length;
+  if (removed > 0) await writeBatchFile(next);
+  return removed;
+}
+
 export type { LedgerEntry };

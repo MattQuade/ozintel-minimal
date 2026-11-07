@@ -7,6 +7,8 @@ import { releaseReceiptsFromLedgerEntries } from "@/lib/accounting/receipts";
 import { releasePaymentsClearedWithLedger } from "@/lib/accounting/invoices";
 import { idsWithJournalGroup } from "@/lib/accounting/doubleEntry";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
+import { clearImportBatchForLedgerDeletion } from "@/lib/accounting/importBatch";
+import { toIsoDateInput } from "@/lib/accounting/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
       }
       const ledger = await readLedger();
       const expanded = idsWithJournalGroup(ledger, requested);
+      const removing = ledger.filter((entry) => expanded.includes(entry.id));
       const deletedCount = await deleteLedgerEntries(expanded);
       if (deletedCount === 0) {
         return NextResponse.json(
@@ -39,7 +42,28 @@ export async function POST(req: Request) {
       }
       await releasePaymentsClearedWithLedger(expanded);
       await releaseReceiptsFromLedgerEntries(expanded);
-      return NextResponse.json({ success: true, deletedCount });
+
+      const fingerprints = new Set<string>();
+      for (const entry of removing) {
+        const stored = String(entry.importFingerprint || "").trim();
+        if (stored) fingerprints.add(stored);
+      }
+      const clearAll = Boolean(body.clearImportBatch);
+      const dateFrom =
+        toIsoDateInput(String(body.clearImportBatchFrom || "")) || "";
+      const dateTo = toIsoDateInput(String(body.clearImportBatchTo || "")) || "";
+      const importBatchCleared = await clearImportBatchForLedgerDeletion({
+        fingerprints,
+        dateFrom: clearAll ? undefined : dateFrom || undefined,
+        dateTo: clearAll ? undefined : dateTo || undefined,
+        clearAll,
+      });
+
+      return NextResponse.json({
+        success: true,
+        deletedCount,
+        importBatchCleared,
+      });
     } catch (err) {
       console.error(err);
       return NextResponse.json(

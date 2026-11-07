@@ -285,10 +285,20 @@ export default function JournalPage() {
     setClearingAll(true);
     try {
       const visibleIds = filtered.map((tx) => tx.id);
+      const dates = filtered
+        .map((tx) => toIsoDateInput(tx.date))
+        .filter(Boolean)
+        .sort();
       const res = await fetch('/api/ledger/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: visibleIds }),
+        body: JSON.stringify({
+          ids: visibleIds,
+          // Wipe matching CSV rows on /transactions/import for the same dates.
+          clearImportBatchFrom: dates[0] || undefined,
+          clearImportBatchTo: dates[dates.length - 1] || undefined,
+          clearImportBatch: true,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -297,7 +307,13 @@ export default function JournalPage() {
       const deletedIds = new Set(visibleIds);
       setTransactions((prev) => prev.filter((tx) => !deletedIds.has(tx.id)));
       setEditingTx(null);
-      alert(`Cleared ${data.deletedCount ?? visibleIds.length} visible journal transactions.`);
+      const batchBit =
+        data.importBatchCleared > 0
+          ? ` Also cleared ${data.importBatchCleared} line(s) from Transactions → Import.`
+          : ' Import batch cleared.';
+      alert(
+        `Cleared ${data.deletedCount ?? visibleIds.length} visible journal transactions.${batchBit}`
+      );
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to clear all transactions');
     } finally {
@@ -313,14 +329,44 @@ export default function JournalPage() {
   });
 
   const handleClearQuarter = async () => {
-    if (!selectedPeriod || entriesInPeriod.length === 0) {
-      alert('There are no ledger entries in this period.');
+    if (!selectedPeriod) return;
+    const range = formatAuDateRange(selectedPeriod.from, selectedPeriod.to);
+    if (entriesInPeriod.length === 0) {
+      if (
+        !confirm(
+          `No journal entries left in ${selectedPeriod.label} (${range}). Clear any leftover rows on Transactions → Import for these dates so you can reload the CSVs?`
+        )
+      ) {
+        return;
+      }
+      setClearingQuarter(true);
+      try {
+        const res = await fetch('/api/import-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'clear',
+            from: selectedPeriod.from,
+            to: selectedPeriod.to,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to clear import batch');
+        }
+        setNotice(
+          `Cleared ${data.removed ?? 0} Transactions → Import line(s) for ${selectedPeriod.label}. Reload the CSVs when you are ready.`
+        );
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Failed to clear import batch');
+      } finally {
+        setClearingQuarter(false);
+      }
       return;
     }
-    const range = formatAuDateRange(selectedPeriod.from, selectedPeriod.to);
     if (
       !confirm(
-        `Delete all ${entriesInPeriod.length} ledger entries from ${range} (${selectedPeriod.label})? The quarter will be empty so you can reload the CSVs. This cannot be undone.`
+        `Delete all ${entriesInPeriod.length} ledger entries from ${range} (${selectedPeriod.label})? This also clears matching rows on Transactions → Import so you can reload the CSVs. This cannot be undone.`
       )
     ) {
       return;
@@ -331,7 +377,11 @@ export default function JournalPage() {
       const res = await fetch('/api/ledger/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({
+          ids,
+          clearImportBatchFrom: selectedPeriod.from,
+          clearImportBatchTo: selectedPeriod.to,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -340,8 +390,12 @@ export default function JournalPage() {
       const deletedIds = new Set(ids);
       setTransactions((prev) => prev.filter((tx) => !deletedIds.has(tx.id)));
       setEditingTx(null);
+      const batchBit =
+        data.importBatchCleared > 0
+          ? ` Cleared ${data.importBatchCleared} matching line(s) from Transactions → Import.`
+          : '';
       setNotice(
-        `Deleted ${data.deletedCount ?? ids.length} entries for ${selectedPeriod.label}. Invoice payments from those entries are cleared. Reload the CSVs when you are ready.`
+        `Deleted ${data.deletedCount ?? ids.length} entries for ${selectedPeriod.label}. Invoice payments from those entries are cleared.${batchBit} Reload the CSVs when you are ready.`
       );
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to delete this period');

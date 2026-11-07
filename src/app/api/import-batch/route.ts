@@ -3,6 +3,7 @@ import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import {
   addRowsToImportBatch,
   batchLineToLedgerEntry,
+  clearImportBatchForLedgerDeletion,
   linesReadyToCommit,
   readImportBatch,
   removeImportBatchLines,
@@ -108,6 +109,21 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ success: true, line });
+    }
+
+    if (action === "clear") {
+      const clearAll = Boolean(body.clearAll);
+      const removed = await clearImportBatchForLedgerDeletion({
+        clearAll,
+        dateFrom: String(body.from || body.clearImportBatchFrom || ""),
+        dateTo: String(body.to || body.clearImportBatchTo || ""),
+      });
+      const lines = await readImportBatch();
+      return NextResponse.json({
+        success: true,
+        removed,
+        lines,
+      });
     }
 
     if (action === "commit") {
