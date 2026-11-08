@@ -371,6 +371,16 @@ export default function PayRunDetailPage() {
                 Post / Finalise
               </button>
             )}
+            {payRun.lines[0] && !editingId && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => startEdit(payRun.lines[0])}
+                className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                Edit payslips
+              </button>
+            )}
             <button
               type="button"
               disabled={busy}
@@ -402,8 +412,8 @@ export default function PayRunDetailPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-6">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto mb-6">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="text-left p-3 font-medium">Employee</th>
@@ -412,7 +422,7 @@ export default function PayRunDetailPage() {
                 <th className="text-right p-3 font-medium">PAYG</th>
                 <th className="text-right p-3 font-medium">Super</th>
                 <th className="text-right p-3 font-medium">Net</th>
-                <th className="p-3 w-40"></th>
+                <th className="p-3 w-48 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -436,22 +446,24 @@ export default function PayRunDetailPage() {
                     <td className="p-3 text-right align-top font-medium">
                       {money(line.net)}
                     </td>
-                    <td className="p-3 text-right align-top space-x-2 whitespace-nowrap">
-                      <Link
-                        href={`/employees/payruns/${payRun.id}/payslip/${line.employeeId}`}
-                        className="text-orange-700 hover:underline"
-                      >
-                        Payslip
-                      </Link>
-                      {!open && (
-                        <button
-                          type="button"
-                          className="text-slate-700 hover:underline"
-                          onClick={() => startEdit(line)}
+                    <td className="p-3 text-right align-top whitespace-nowrap">
+                      <div className="inline-flex flex-wrap justify-end gap-2">
+                        <Link
+                          href={`/employees/payruns/${payRun.id}/payslip/${line.employeeId}`}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-medium"
                         >
-                          Edit
-                        </button>
-                      )}
+                          Payslip
+                        </Link>
+                        {!open && (
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold"
+                            onClick={() => startEdit(line)}
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

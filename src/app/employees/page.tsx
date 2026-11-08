@@ -523,8 +523,8 @@ export default function EmployeesPage() {
           <div className="bg-white rounded-3xl shadow p-6">
             <h2 className="text-2xl font-semibold mb-2">Pay runs</h2>
             <p className="text-sm text-slate-500 mb-4">
-              Open a draft to edit each employee&apos;s payslip for the period,
-              then post when ready.
+              Open a pay run to edit each employee&apos;s payslip (draft or
+              posted). Posted edits update the ledger for BAS.
             </p>
             {payRuns.length === 0 ? (
               <p className="text-center py-12 text-gray-500">
@@ -562,16 +562,24 @@ export default function EmployeesPage() {
                       >
                         {statusLabel(run.status)}
                       </span>
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() =>
-                          void deletePayRun(run.id, run.number, run.status)
-                        }
-                        className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white text-sm font-semibold"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Link
+                          href={`/employees/payruns/${run.id}`}
+                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold"
+                        >
+                          Edit
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() =>
+                            void deletePayRun(run.id, run.number, run.status)
+                          }
+                          className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white text-sm font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
