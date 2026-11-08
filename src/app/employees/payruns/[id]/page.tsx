@@ -122,6 +122,7 @@ export default function PayRunDetailPage() {
   const id = String(params.id || '');
   const [payRun, setPayRun] = useState<PayRun | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
@@ -319,23 +320,36 @@ export default function PayRunDetailPage() {
     }
   };
 
-  const postPayRun = async () => {
+  const repostPayRun = async () => {
+    if (!payRun) return;
+    const alreadyPosted = payRun.status !== 'draft';
     if (
       !confirm(
-        'Post this pay run to the ledger? This creates wages, PAYG and super journals.'
+        alreadyPosted
+          ? `Re/Post ${payRun.number}? Journals and the ledger will be updated with the current pay period, payment date, wages, PAYG and super figures.`
+          : `Re/Post ${payRun.number}? This posts wages, PAYG and super journals to the ledger for BAS.`
       )
     ) {
       return;
     }
     setBusy(true);
     setError('');
+    setNotice('');
     try {
-      const res = await fetch(`/api/payruns/${id}/post`, { method: 'POST' });
+      const res = await fetch(`/api/payruns/${id}/post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true, repost: true }),
+      });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Post failed');
+      if (!res.ok || !data.success) throw new Error(data.error || 'Re/Post failed');
       setPayRun(data.payRun);
+      setNotice(
+        data.message ||
+          'Journals and ledger updated with the current pay run.'
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Post failed');
+      setError(err instanceof Error ? err.message : 'Re/Post failed');
     } finally {
       setBusy(false);
     }
@@ -426,16 +440,14 @@ export default function PayRunDetailPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {isDraft && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={postPayRun}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
-              >
-                Post / Finalise
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={busy || !payRun.lines.length}
+              onClick={() => void repostPayRun()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+            >
+              {busy ? 'Updating…' : 'Re/Post'}
+            </button>
             {!editingRun && (
               <button
                 type="button"
@@ -469,16 +481,23 @@ export default function PayRunDetailPage() {
 
         {isDraft ? (
           <p className="mb-4 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-            Draft pay run — use <strong>Edit pay run</strong> to fix the period /
-            pay date, and <strong>Edit payslips</strong> for hours. Post when
-            ready.
+            Draft — fix the period with <strong>Edit pay run</strong>, fix hours
+            with <strong>Edit payslips</strong>, then press{' '}
+            <strong>Re/Post</strong> to write wages / PAYG / super to the
+            journals and ledger.
           </p>
         ) : (
           <p className="mb-4 text-sm text-slate-600 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
-            Posted pay run — use <strong>Edit pay run</strong> to correct the
-            pay period or payment date. Saving rewrites payroll journal lines so
-            BAS W1/W2 stay accurate (not lodged to the ATO from here).
+            After any correction, press <strong>Re/Post</strong> so journals and
+            the ledger are updated with the current figures (BAS W1/W2). Not
+            lodged to the ATO from here.
           </p>
+        )}
+
+        {notice && (
+          <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-semibold">
+            {notice}
+          </div>
         )}
 
         {error && (

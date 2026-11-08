@@ -763,7 +763,8 @@ async function syncPostedPayRunLedger(run: PayRun): Promise<{
 }
 
 /**
- * Finalise / post pay run to ledger (idempotent if already posted).
+ * Finalise / post pay run to ledger.
+ * Pass force=true (Re/Post) to rewrite journals even when already posted.
  *
  * Dr 1965 Salaries & Wages          gross
  * Cr 909  PAYGW Payable             PAYG
@@ -771,17 +772,23 @@ async function syncPostedPayRunLedger(run: PayRun): Promise<{
  * Dr 1458 Superannuation            SG
  * Cr 805  Superannuation Payable    SG
  */
-export async function postPayRun(id: string): Promise<PayRun> {
+export async function postPayRun(
+  id: string,
+  opts?: { force?: boolean }
+): Promise<PayRun> {
   return withPayRunsLock(async () => {
     const runs = await readPayRunsUnlocked();
     const idx = runs.findIndex((r) => r.id === id);
     if (idx < 0) throw new Error("Pay run not found");
     const run = runs[idx];
+    const force = Boolean(opts?.force);
+    const alreadyPosted =
+      run.status === "posted" || run.status === "stp_submitted";
 
-    if (run.status === "posted" || run.status === "stp_submitted") {
-      return run; // idempotent
+    if (alreadyPosted && !force) {
+      return run; // idempotent unless Re/Post
     }
-    if (run.ledgerEntryIds.length > 0) {
+    if (!force && run.ledgerEntryIds.length > 0) {
       throw new Error("Pay run already has ledger entries");
     }
     if (!run.lines.length || run.totals.gross <= 0) {
@@ -792,10 +799,10 @@ export async function postPayRun(id: string): Promise<PayRun> {
     const now = new Date().toISOString();
     const next: PayRun = {
       ...run,
-      status: "posted",
+      status: alreadyPosted ? run.status : "posted",
       ledgerEntryIds: synced.ledgerEntryIds,
       journalRef: synced.journalRef,
-      postedAt: now,
+      postedAt: run.postedAt || now,
       updatedAt: now,
     };
     runs[idx] = next;

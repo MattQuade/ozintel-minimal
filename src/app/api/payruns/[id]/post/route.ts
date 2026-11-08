@@ -13,8 +13,19 @@ export async function POST(req: Request, { params }: Params) {
   return access.run(async () => {
     try {
       const { id } = await params;
-      const payRun = await postPayRun(id);
-      return NextResponse.json({ success: true, payRun });
+      const body = await req.json().catch(() => ({}));
+      const force = Boolean(
+        body?.force || body?.repost || body?.action === "repost"
+      );
+      const payRun = await postPayRun(id, { force });
+      return NextResponse.json({
+        success: true,
+        payRun,
+        reposted: force,
+        message: force
+          ? "Journals and ledger updated with the current pay run."
+          : "Pay run posted to the ledger.",
+      });
     } catch (error) {
       console.error("Pay run post error:", error);
       return NextResponse.json(
