@@ -894,26 +894,44 @@ export default function EmployeesPage() {
                         <select
                           className={inputCls}
                           value={form.taxScaleType}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const taxScaleType = e.target
+                              .value as TaxScaleType;
                             setForm({
                               ...form,
-                              taxScaleType: e.target.value as TaxScaleType,
-                            })
-                          }
+                              taxScaleType,
+                              // WHV staff are foreign residents; TFT does not apply.
+                              ...(taxScaleType === 'working_holiday_maker'
+                                ? {
+                                    residencyStatus: 'foreign' as ResidencyStatus,
+                                    taxFreeThreshold: false,
+                                  }
+                                : {}),
+                            });
+                          }}
                         >
-                          <option value="standard">Standard</option>
+                          <option value="standard">
+                            Standard (resident / foreign Schedule 1)
+                          </option>
                           <option value="working_holiday_maker">
-                            Working holiday maker
+                            Working holiday visa — flat 15%
                           </option>
                           <option value="no_tfn">No TFN</option>
                         </select>
                       )}
                     </div>
+                    {form.taxScaleType === 'working_holiday_maker' ? (
+                      <p className="text-sm text-slate-500 -mt-2">
+                        PAYG withheld at a flat 15% of whole-dollar gross each
+                        pay (WHM / WHV). Tax-free threshold is not claimed.
+                      </p>
+                    ) : null}
                     {field(
                       'Tax-free threshold',
                       <select
                         className={inputCls}
                         value={form.taxFreeThreshold ? 'yes' : 'no'}
+                        disabled={form.taxScaleType === 'working_holiday_maker'}
                         onChange={(e) =>
                           setForm({
                             ...form,

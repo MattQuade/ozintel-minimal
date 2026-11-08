@@ -321,6 +321,7 @@ export function buildPayRunLine(
     residency: emp.residencyStatus === "foreign" ? "foreign" : "resident",
     taxFreeThresholdClaimed: Boolean(emp.taxFreeThreshold),
     hasTfn: Boolean(String(emp.tfn || "").replace(/\D/g, "").length >= 8),
+    taxScaleType: emp.taxScaleType || "standard",
   });
   const net = round2(gross - paygWithheld);
 

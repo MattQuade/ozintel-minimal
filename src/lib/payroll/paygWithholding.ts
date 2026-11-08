@@ -8,14 +8,22 @@
  * Formula: y = a×x − b where x = whole dollars of weekly earnings + $0.99.
  * Result rounded to nearest dollar. Scales 1–3 and no-TFN (Scale 4) only.
  *
+ * Working holiday makers (WHM / WHV): flat 15% of whole-dollar gross for the
+ * pay period (explicit employee tax-scale choice — not Schedule 1 resident).
+ *
  * Limitations (full STP / Schedule 1 later):
  * - No Medicare levy adjustment shade-in beyond what is baked into coefficients
- * - No tax offsets, HELP/VSL, seniors, working holiday makers, leave loading extras
+ * - No tax offsets, HELP/VSL, seniors, leave loading extras
+ * - WHM progressive Schedule 15 bands not modelled — flat 15% as configured
  * - No STP Phase 2 lodgement — withholding only for payslip / ledger MVP
  */
 
 export type PayFrequency = "weekly" | "fortnightly";
 export type PaygResidency = "resident" | "foreign";
+export type PaygTaxScale = "standard" | "working_holiday_maker" | "no_tfn";
+
+/** Flat WHV / working-holiday-maker withholding rate. */
+export const WORKING_HOLIDAY_MAKER_RATE = 0.15;
 
 export type PaygWithholdingInput = {
   grossEarnings: number;
@@ -24,6 +32,8 @@ export type PaygWithholdingInput = {
   taxFreeThresholdClaimed: boolean;
   /** Empty / missing TFN → Scale 4 flat rates. */
   hasTfn: boolean;
+  /** Employee tax scale — WHV uses flat 15%. */
+  taxScaleType?: PaygTaxScale;
 };
 
 type CoeffBand = {
@@ -109,12 +119,19 @@ export function calculatePaygWithholding(input: PaygWithholdingInput): number {
   const periods = input.frequency === "fortnightly" ? 2 : 1;
   const weeklyEquivalent =
     input.frequency === "fortnightly" ? gross / 2 : gross;
+  const scale = input.taxScaleType || "standard";
 
-  // Scale 4 — no TFN
-  if (!input.hasTfn) {
+  // Scale 4 — no TFN (tax scale or missing TFN)
+  if (scale === "no_tfn" || !input.hasTfn) {
     const rate = input.residency === "foreign" ? 0.45 : 0.47;
     const base = Math.floor(gross); // ignore cents
     return Math.max(0, roundNearestDollar(base * rate));
+  }
+
+  // Working holiday visa / WHM — flat 15% of whole-dollar gross for the period
+  if (scale === "working_holiday_maker") {
+    const base = Math.floor(gross);
+    return Math.max(0, roundNearestDollar(base * WORKING_HOLIDAY_MAKER_RATE));
   }
 
   let weeklyTax: number;

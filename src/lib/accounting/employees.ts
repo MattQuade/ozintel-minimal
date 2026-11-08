@@ -44,7 +44,7 @@ export type Employee = {
   tfn: string;
   residencyStatus: ResidencyStatus;
   taxFreeThreshold: boolean;
-  /** Stored for STP/display; PAYG calc still uses residency + TFT for MVP. */
+  /** Drives PAYG: standard Schedule 1, WHV flat 15%, or no-TFN rates. */
   taxScaleType: TaxScaleType;
   payBasis: PayBasis;
   /** Default pay calendar for this employee (pay template). */
