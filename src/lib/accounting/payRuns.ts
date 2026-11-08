@@ -501,7 +501,12 @@ export async function updateDraftPayRun(
       });
     };
 
-    if (Array.isArray(patch.employeeIds) || patch.frequency) {
+    const frequencyChanged =
+      patch.frequency === "weekly" || patch.frequency === "fortnightly"
+        ? patch.frequency !== run.frequency
+        : false;
+
+    if (Array.isArray(patch.employeeIds) || frequencyChanged) {
       lines = employeeIds.map((empId) => {
         const ov = (patch.lines || []).find((l) => l.employeeId === empId);
         return rebuildLine(empId, ov);

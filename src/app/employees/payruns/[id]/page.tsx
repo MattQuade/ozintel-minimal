@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import AccountingGate from '@/components/AccountingGate';
-import { formatAuDate } from '@/lib/accounting/dates';
+import { formatAuDate, toIsoDateInput } from '@/lib/accounting/dates';
 import {
   hospitalityEmploymentKind,
   hospitalityOvertimeAmount,
@@ -125,6 +125,14 @@ export default function PayRunDetailPage() {
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
+  const [editingRun, setEditingRun] = useState(false);
+  const [runDraft, setRunDraft] = useState({
+    periodStart: '',
+    periodEnd: '',
+    paymentDate: '',
+    frequency: 'weekly',
+    notes: '',
+  });
 
   const editingLine = useMemo(
     () => payRun?.lines.find((l) => l.employeeId === editingId) || null,
@@ -161,6 +169,7 @@ export default function PayRunDetailPage() {
 
   const startEdit = (line: PayRunLine) => {
     if (!payRun) return;
+    setEditingRun(false);
     setEditingId(line.employeeId);
     setDraft(lineToDraft(line));
     setError('');
@@ -169,6 +178,62 @@ export default function PayRunDetailPage() {
   const cancelEdit = () => {
     setEditingId(null);
     setDraft(null);
+  };
+
+  const startEditRun = () => {
+    if (!payRun) return;
+    setEditingId(null);
+    setDraft(null);
+    setRunDraft({
+      periodStart: toIsoDateInput(payRun.periodStart) || payRun.periodStart,
+      periodEnd: toIsoDateInput(payRun.periodEnd) || payRun.periodEnd,
+      paymentDate: toIsoDateInput(payRun.paymentDate) || payRun.paymentDate,
+      frequency: payRun.frequency === 'fortnightly' ? 'fortnightly' : 'weekly',
+      notes: payRun.notes || '',
+    });
+    setEditingRun(true);
+    setError('');
+  };
+
+  const cancelEditRun = () => {
+    setEditingRun(false);
+  };
+
+  const savePayRunHeader = async () => {
+    if (!payRun) return;
+    if (!runDraft.periodStart || !runDraft.periodEnd || !runDraft.paymentDate) {
+      setError('Period start, period end, and payment date are required.');
+      return;
+    }
+    if (runDraft.periodStart > runDraft.periodEnd) {
+      setError('Period start must be on or before period end.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/payruns/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          periodStart: runDraft.periodStart,
+          periodEnd: runDraft.periodEnd,
+          paymentDate: runDraft.paymentDate,
+          frequency: runDraft.frequency,
+          notes: runDraft.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Save failed');
+      }
+      setPayRun(data.payRun);
+      setEditingRun(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
   };
 
   /** Recalc award rows when hours or base rate change. */
@@ -371,7 +436,17 @@ export default function PayRunDetailPage() {
                 Post / Finalise
               </button>
             )}
-            {payRun.lines[0] && !editingId && (
+            {!editingRun && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={startEditRun}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              >
+                Edit pay run
+              </button>
+            )}
+            {payRun.lines[0] && !editingId && !editingRun && (
               <button
                 type="button"
                 disabled={busy}
@@ -394,21 +469,105 @@ export default function PayRunDetailPage() {
 
         {isDraft ? (
           <p className="mb-4 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-            Draft pay run — edit each employee for weekday, Saturday, Sunday and
-            overtime hours (Hospitality Award MA000009). Save, then post when
-            every payslip looks right.
+            Draft pay run — use <strong>Edit pay run</strong> to fix the period /
+            pay date, and <strong>Edit payslips</strong> for hours. Post when
+            ready.
           </p>
         ) : (
           <p className="mb-4 text-sm text-slate-600 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
-            Posted pay run — you can still edit payslips to correct errors. Saving
-            rewrites the payroll journal lines so BAS W1/W2 stay accurate (not
-            lodged to the ATO from here).
+            Posted pay run — use <strong>Edit pay run</strong> to correct the
+            pay period or payment date. Saving rewrites payroll journal lines so
+            BAS W1/W2 stay accurate (not lodged to the ATO from here).
           </p>
         )}
 
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-sm">
             {error}
+          </div>
+        )}
+
+        {editingRun && (
+          <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50/60 p-5">
+            <h2 className="text-lg font-semibold mb-3">Edit pay run</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block text-sm">
+                <span className="text-slate-600">Period start</span>
+                <input
+                  type="date"
+                  className="mt-1 w-full border rounded-xl px-3 py-2 bg-white"
+                  value={runDraft.periodStart}
+                  onChange={(e) =>
+                    setRunDraft({ ...runDraft, periodStart: e.target.value })
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-slate-600">Period end</span>
+                <input
+                  type="date"
+                  className="mt-1 w-full border rounded-xl px-3 py-2 bg-white"
+                  value={runDraft.periodEnd}
+                  onChange={(e) =>
+                    setRunDraft({ ...runDraft, periodEnd: e.target.value })
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-slate-600">Payment date</span>
+                <input
+                  type="date"
+                  className="mt-1 w-full border rounded-xl px-3 py-2 bg-white"
+                  value={runDraft.paymentDate}
+                  onChange={(e) =>
+                    setRunDraft({ ...runDraft, paymentDate: e.target.value })
+                  }
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-slate-600">Frequency</span>
+                <select
+                  className="mt-1 w-full border rounded-xl px-3 py-2 bg-white"
+                  value={runDraft.frequency}
+                  onChange={(e) =>
+                    setRunDraft({ ...runDraft, frequency: e.target.value })
+                  }
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Fortnightly</option>
+                </select>
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-slate-600">Notes</span>
+                <input
+                  type="text"
+                  className="mt-1 w-full border rounded-xl px-3 py-2 bg-white"
+                  value={runDraft.notes}
+                  onChange={(e) =>
+                    setRunDraft({ ...runDraft, notes: e.target.value })
+                  }
+                  placeholder="Optional"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void savePayRunHeader()}
+                className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-xl text-sm font-semibold"
+              >
+                {busy ? 'Saving…' : 'Save pay run'}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={cancelEditRun}
+                className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-sm"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
