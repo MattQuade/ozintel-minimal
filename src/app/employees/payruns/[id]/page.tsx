@@ -276,8 +276,18 @@ export default function PayRunDetailPage() {
     }
   };
 
-  const deleteDraft = async () => {
-    if (!confirm('Delete this draft pay run?')) return;
+  const deletePayRun = async () => {
+    if (!payRun) return;
+    const posted = payRun.status !== 'draft';
+    if (
+      !confirm(
+        posted
+          ? `Delete pay run ${payRun.number}? This also removes its payroll journal lines from the ledger.`
+          : `Delete draft pay run ${payRun.number}?`
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch('/api/payruns', {
@@ -352,25 +362,23 @@ export default function PayRunDetailPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {isDraft && (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={postPayRun}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
-                >
-                  Post / Finalise
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={deleteDraft}
-                  className="bg-white border border-red-200 text-red-700 px-4 py-2 rounded-xl text-sm"
-                >
-                  Delete draft
-                </button>
-              </>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={postPayRun}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                Post / Finalise
+              </button>
             )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void deletePayRun()}
+              className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+            >
+              Delete
+            </button>
           </div>
         </div>
 

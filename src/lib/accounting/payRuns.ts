@@ -11,7 +11,9 @@ import {
 } from "@/lib/accounting/employees";
 import {
   appendLedgerEntries,
+  deleteLedgerEntries,
   readCoa,
+  readLedger,
   type LedgerEntry,
 } from "@/lib/accounting/store";
 import {
@@ -539,14 +541,36 @@ export async function updateDraftPayRun(
   });
 }
 
+/**
+ * Remove a pay run. Drafts are dropped as-is. Posted / STP-ready runs also
+ * remove their payroll ledger lines so BAS W1/W2 and journals stay accurate.
+ */
 export async function deletePayRun(id: string): Promise<boolean> {
   return withPayRunsLock(async () => {
     const runs = await readPayRunsUnlocked();
     const run = runs.find((r) => r.id === id);
     if (!run) return false;
-    if (run.status !== "draft") {
-      throw new Error("Only draft pay runs can be deleted");
+
+    const linkedIds = new Set(
+      (run.ledgerEntryIds || []).map((entryId) => String(entryId || "").trim()).filter(Boolean)
+    );
+    if (run.status !== "draft" || linkedIds.size > 0) {
+      const ledger = await readLedger();
+      for (const entry of ledger) {
+        if (String(entry.payRunId || "") === run.id) linkedIds.add(entry.id);
+        if (
+          run.number &&
+          String(entry.payRunNumber || "") === run.number &&
+          String(entry.source || "") === "payroll"
+        ) {
+          linkedIds.add(entry.id);
+        }
+      }
+      if (linkedIds.size > 0) {
+        await deleteLedgerEntries([...linkedIds]);
+      }
     }
+
     await writePayRunsUnlocked(runs.filter((r) => r.id !== id));
     return true;
   });

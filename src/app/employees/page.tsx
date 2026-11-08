@@ -371,8 +371,18 @@ export default function EmployeesPage() {
     }
   };
 
-  const deletePayRun = async (id: string) => {
-    if (!confirm('Delete this draft pay run?')) return;
+  const deletePayRun = async (id: string, label: string, status: string) => {
+    const posted = status !== 'draft';
+    if (
+      !confirm(
+        posted
+          ? `Delete pay run ${label}? This also removes its payroll journal lines from the ledger (needed so BAS W1/W2 stay clean).`
+          : `Delete draft pay run ${label}?`
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
     try {
       const res = await fetch('/api/payruns', {
         method: 'DELETE',
@@ -383,8 +393,11 @@ export default function EmployeesPage() {
       if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
       if (selectedRunId === id) setSelectedRunId(null);
       await load();
+      setStatus(`Deleted pay run ${label}`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -520,37 +533,47 @@ export default function EmployeesPage() {
             ) : (
               <div className="space-y-3">
                 {payRuns.map((run) => (
-                  <Link
+                  <div
                     key={run.id}
-                    href={`/employees/payruns/${run.id}`}
-                    className="block border rounded-2xl p-4 hover:bg-gray-50"
+                    className="border rounded-2xl p-4 hover:bg-gray-50 flex flex-wrap justify-between items-start gap-3"
                   >
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <p className="font-semibold">
-                          {run.number} · {run.frequency}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatAuDate(run.periodStart)} –{' '}
-                          {formatAuDate(run.periodEnd)}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Pay {formatAuDate(run.paymentDate)} ·{' '}
-                          {run.totals.employeeCount} employees
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">{money(run.totals.gross)}</p>
-                        <span
-                          className={`inline-block mt-1 px-3 py-1 rounded-full text-xs ${statusClass(
-                            run.status
-                          )}`}
-                        >
-                          {statusLabel(run.status)}
-                        </span>
-                      </div>
+                    <Link
+                      href={`/employees/payruns/${run.id}`}
+                      className="flex-1 min-w-[200px] block"
+                    >
+                      <p className="font-semibold">
+                        {run.number} · {run.frequency}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatAuDate(run.periodStart)} –{' '}
+                        {formatAuDate(run.periodEnd)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Pay {formatAuDate(run.paymentDate)} ·{' '}
+                        {run.totals.employeeCount} employees
+                      </p>
+                    </Link>
+                    <div className="text-right flex flex-col items-end gap-2">
+                      <p className="font-medium">{money(run.totals.gross)}</p>
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs ${statusClass(
+                          run.status
+                        )}`}
+                      >
+                        {statusLabel(run.status)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() =>
+                          void deletePayRun(run.id, run.number, run.status)
+                        }
+                        className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white text-sm font-semibold"
+                      >
+                        Delete
+                      </button>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}
