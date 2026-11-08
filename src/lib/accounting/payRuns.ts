@@ -425,9 +425,8 @@ export async function updateDraftPayRun(
     const idx = runs.findIndex((r) => r.id === id);
     if (idx < 0) throw new Error("Pay run not found");
     const run = runs[idx];
-    if (run.status !== "draft") {
-      throw new Error("Only draft pay runs can be edited");
-    }
+    // Draft and posted runs are editable — these are not ATO-lodged STP
+    // submissions; posted edits rewrite payroll ledger lines for BAS.
 
     const frequency: PayFrequency =
       patch.frequency === "weekly" || patch.frequency === "fortnightly"
@@ -521,7 +520,7 @@ export async function updateDraftPayRun(
         .filter((l): l is PayRunLine => Boolean(l));
     }
 
-    const next: PayRun = {
+    let next: PayRun = {
       ...run,
       periodStart: String(patch.periodStart || run.periodStart).trim(),
       periodEnd: String(patch.periodEnd || run.periodEnd).trim(),
@@ -536,6 +535,17 @@ export async function updateDraftPayRun(
           : run.notes,
       updatedAt: new Date().toISOString(),
     };
+
+    if (run.status === "posted" || run.status === "stp_submitted") {
+      const synced = await syncPostedPayRunLedger(next);
+      next = {
+        ...next,
+        ledgerEntryIds: synced.ledgerEntryIds,
+        journalRef: synced.journalRef,
+        postedAt: next.postedAt || new Date().toISOString(),
+      };
+    }
+
     runs[idx] = next;
     await writePayRunsUnlocked(runs);
     return next;
@@ -552,24 +562,9 @@ export async function deletePayRun(id: string): Promise<boolean> {
     const run = runs.find((r) => r.id === id);
     if (!run) return false;
 
-    const linkedIds = new Set(
-      (run.ledgerEntryIds || []).map((entryId) => String(entryId || "").trim()).filter(Boolean)
-    );
-    if (run.status !== "draft" || linkedIds.size > 0) {
-      const ledger = await readLedger();
-      for (const entry of ledger) {
-        if (String(entry.payRunId || "") === run.id) linkedIds.add(entry.id);
-        if (
-          run.number &&
-          String(entry.payRunNumber || "") === run.number &&
-          String(entry.source || "") === "payroll"
-        ) {
-          linkedIds.add(entry.id);
-        }
-      }
-      if (linkedIds.size > 0) {
-        await deleteLedgerEntries([...linkedIds]);
-      }
+    if (run.status !== "draft" || (run.ledgerEntryIds || []).length > 0) {
+      const linkedIds = await collectPayRunLedgerIds(run);
+      if (linkedIds.length > 0) await deleteLedgerEntries(linkedIds);
     }
 
     await writePayRunsUnlocked(runs.filter((r) => r.id !== id));
@@ -579,6 +574,187 @@ export async function deletePayRun(id: string): Promise<boolean> {
 
 function stampId(prefix: string, index: number): string {
   return `${prefix}-${Date.now()}-${index}`;
+}
+
+async function collectPayRunLedgerIds(run: PayRun): Promise<string[]> {
+  const linked = new Set(
+    (run.ledgerEntryIds || [])
+      .map((entryId) => String(entryId || "").trim())
+      .filter(Boolean)
+  );
+  const ledger = await readLedger();
+  for (const entry of ledger) {
+    if (String(entry.payRunId || "") === run.id) linked.add(entry.id);
+    if (
+      run.number &&
+      String(entry.payRunNumber || "") === run.number &&
+      String(entry.source || "") === "payroll"
+    ) {
+      linked.add(entry.id);
+    }
+  }
+  return [...linked];
+}
+
+async function buildPayrollJournalEntries(
+  run: PayRun
+): Promise<Partial<LedgerEntry>[]> {
+  const coa = await readCoa();
+  const byCode = new Map(coa.map((a) => [a.code, a]));
+  const wagesExp = byCode.get(PAYROLL_COA.wagesExpense);
+  const superExp = byCode.get(PAYROLL_COA.superExpense);
+  const wagesPay = byCode.get(PAYROLL_COA.wagesPayable);
+  const superPay = byCode.get(PAYROLL_COA.superPayable);
+  const paygw = byCode.get(PAYROLL_COA.paygwPayable);
+
+  const journalRef = `PAY-${run.number}`;
+  const desc = `Pay run ${run.number} (${run.periodStart} – ${run.periodEnd})`;
+  const ts = new Date().toISOString();
+  const date = run.paymentDate || run.periodEnd;
+
+  const entries: Partial<LedgerEntry>[] = [];
+  let i = 0;
+
+  // Dr Salaries & Wages (gross)
+  entries.push({
+    id: stampId("pay-wages", i++),
+    date,
+    description: desc,
+    amount: run.totals.gross,
+    type: wagesExp?.type || "Expense",
+    account: `${PAYROLL_COA.wagesExpense} - ${wagesExp?.name || "Salaries & Wages"}`,
+    accountCode: PAYROLL_COA.wagesExpense,
+    accountName: wagesExp?.name || "Salaries & Wages",
+    hasGST: false,
+    noGST: true,
+    taxCode: "N-T",
+    reconciled: false,
+    source: "payroll",
+    payRunId: run.id,
+    payRunNumber: run.number,
+    journalRef,
+    timestamp: ts,
+  });
+
+  // Cr PAYGW Payable
+  if (run.totals.paygWithheld > 0.009) {
+    entries.push({
+      id: stampId("pay-payg", i++),
+      date,
+      description: desc,
+      amount: -run.totals.paygWithheld,
+      type: paygw?.type || "Liability",
+      account: `${PAYROLL_COA.paygwPayable} - ${paygw?.name || "PAYGW Payable"}`,
+      accountCode: PAYROLL_COA.paygwPayable,
+      accountName: paygw?.name || "PAYGW Payable",
+      hasGST: false,
+      noGST: true,
+      taxCode: "N-T",
+      reconciled: false,
+      source: "payroll",
+      payRunId: run.id,
+      payRunNumber: run.number,
+      journalRef,
+      timestamp: ts,
+    });
+  }
+
+  // Cr Wages Payable (net)
+  if (run.totals.net > 0.009) {
+    entries.push({
+      id: stampId("pay-net", i++),
+      date,
+      description: desc,
+      amount: -run.totals.net,
+      type: wagesPay?.type || "Liability",
+      account: `${PAYROLL_COA.wagesPayable} - ${wagesPay?.name || "Wages Payable"}`,
+      accountCode: PAYROLL_COA.wagesPayable,
+      accountName: wagesPay?.name || "Wages Payable",
+      hasGST: false,
+      noGST: true,
+      taxCode: "N-T",
+      reconciled: false,
+      source: "payroll",
+      payRunId: run.id,
+      payRunNumber: run.number,
+      journalRef,
+      timestamp: ts,
+    });
+  }
+
+  // Dr Super expense + Cr Super payable
+  if (run.totals.superAmount > 0.009) {
+    entries.push({
+      id: stampId("pay-sg-exp", i++),
+      date,
+      description: desc,
+      amount: run.totals.superAmount,
+      type: superExp?.type || "Expense",
+      account: `${PAYROLL_COA.superExpense} - ${superExp?.name || "Superannuation"}`,
+      accountCode: PAYROLL_COA.superExpense,
+      accountName: superExp?.name || "Superannuation",
+      hasGST: false,
+      noGST: true,
+      taxCode: "N-T",
+      reconciled: false,
+      source: "payroll",
+      payRunId: run.id,
+      payRunNumber: run.number,
+      journalRef,
+      timestamp: ts,
+    });
+    entries.push({
+      id: stampId("pay-sg-liab", i++),
+      date,
+      description: desc,
+      amount: -run.totals.superAmount,
+      type: superPay?.type || "Liability",
+      account: `${PAYROLL_COA.superPayable} - ${superPay?.name || "Superannuation Payable"}`,
+      accountCode: PAYROLL_COA.superPayable,
+      accountName: superPay?.name || "Superannuation Payable",
+      hasGST: false,
+      noGST: true,
+      taxCode: "N-T",
+      reconciled: false,
+      source: "payroll",
+      payRunId: run.id,
+      payRunNumber: run.number,
+      journalRef,
+      timestamp: ts,
+    });
+  }
+
+  const debit = entries
+    .filter((e) => (e.amount || 0) > 0)
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const credit = entries
+    .filter((e) => (e.amount || 0) < 0)
+    .reduce((s, e) => s + Math.abs(e.amount || 0), 0);
+  if (Math.abs(debit - credit) > 0.02) {
+    throw new Error(
+      `Unbalanced payroll journal (Dr ${debit} vs Cr ${credit})`
+    );
+  }
+  return entries;
+}
+
+/** Drop old payroll journal lines and rewrite from current pay-run totals. */
+async function syncPostedPayRunLedger(run: PayRun): Promise<{
+  ledgerEntryIds: string[];
+  journalRef: string;
+}> {
+  const journalRef = `PAY-${run.number}`;
+  const oldIds = await collectPayRunLedgerIds(run);
+  if (oldIds.length) await deleteLedgerEntries(oldIds);
+  if (!run.lines.length || run.totals.gross <= 0) {
+    return { ledgerEntryIds: [], journalRef };
+  }
+  const entries = await buildPayrollJournalEntries(run);
+  const result = await appendLedgerEntries(entries);
+  return {
+    ledgerEntryIds: result.savedEntries.map((e) => e.id),
+    journalRef,
+  };
 }
 
 /**
@@ -607,150 +783,13 @@ export async function postPayRun(id: string): Promise<PayRun> {
       throw new Error("Pay run has no amount to post");
     }
 
-    const coa = await readCoa();
-    const byCode = new Map(coa.map((a) => [a.code, a]));
-    const wagesExp = byCode.get(PAYROLL_COA.wagesExpense);
-    const superExp = byCode.get(PAYROLL_COA.superExpense);
-    const wagesPay = byCode.get(PAYROLL_COA.wagesPayable);
-    const superPay = byCode.get(PAYROLL_COA.superPayable);
-    const paygw = byCode.get(PAYROLL_COA.paygwPayable);
-
-    const journalRef = `PAY-${run.number}`;
-    const desc = `Pay run ${run.number} (${run.periodStart} – ${run.periodEnd})`;
-    const ts = new Date().toISOString();
-    const date = run.paymentDate || run.periodEnd;
-
-    const entries: Partial<LedgerEntry>[] = [];
-    let i = 0;
-
-    // Dr Salaries & Wages (gross)
-    entries.push({
-      id: stampId("pay-wages", i++),
-      date,
-      description: desc,
-      amount: run.totals.gross,
-      type: wagesExp?.type || "Expense",
-      account: `${PAYROLL_COA.wagesExpense} - ${wagesExp?.name || "Salaries & Wages"}`,
-      accountCode: PAYROLL_COA.wagesExpense,
-      accountName: wagesExp?.name || "Salaries & Wages",
-      hasGST: false,
-      noGST: true,
-      taxCode: "N-T",
-      reconciled: false,
-      source: "payroll",
-      payRunId: run.id,
-      payRunNumber: run.number,
-      journalRef,
-      timestamp: ts,
-    });
-
-    // Cr PAYGW Payable
-    if (run.totals.paygWithheld > 0.009) {
-      entries.push({
-        id: stampId("pay-payg", i++),
-        date,
-        description: desc,
-        amount: -run.totals.paygWithheld,
-        type: paygw?.type || "Liability",
-        account: `${PAYROLL_COA.paygwPayable} - ${paygw?.name || "PAYGW Payable"}`,
-        accountCode: PAYROLL_COA.paygwPayable,
-        accountName: paygw?.name || "PAYGW Payable",
-        hasGST: false,
-        noGST: true,
-      taxCode: "N-T",
-        reconciled: false,
-        source: "payroll",
-        payRunId: run.id,
-        payRunNumber: run.number,
-        journalRef,
-        timestamp: ts,
-      });
-    }
-
-    // Cr Wages Payable (net)
-    if (run.totals.net > 0.009) {
-      entries.push({
-        id: stampId("pay-net", i++),
-        date,
-        description: desc,
-        amount: -run.totals.net,
-        type: wagesPay?.type || "Liability",
-        account: `${PAYROLL_COA.wagesPayable} - ${wagesPay?.name || "Wages Payable"}`,
-        accountCode: PAYROLL_COA.wagesPayable,
-        accountName: wagesPay?.name || "Wages Payable",
-        hasGST: false,
-        noGST: true,
-      taxCode: "N-T",
-        reconciled: false,
-        source: "payroll",
-        payRunId: run.id,
-        payRunNumber: run.number,
-        journalRef,
-        timestamp: ts,
-      });
-    }
-
-    // Dr Super expense + Cr Super payable
-    if (run.totals.superAmount > 0.009) {
-      entries.push({
-        id: stampId("pay-sg-exp", i++),
-        date,
-        description: desc,
-        amount: run.totals.superAmount,
-        type: superExp?.type || "Expense",
-        account: `${PAYROLL_COA.superExpense} - ${superExp?.name || "Superannuation"}`,
-        accountCode: PAYROLL_COA.superExpense,
-        accountName: superExp?.name || "Superannuation",
-        hasGST: false,
-        noGST: true,
-      taxCode: "N-T",
-        reconciled: false,
-        source: "payroll",
-        payRunId: run.id,
-        payRunNumber: run.number,
-        journalRef,
-        timestamp: ts,
-      });
-      entries.push({
-        id: stampId("pay-sg-liab", i++),
-        date,
-        description: desc,
-        amount: -run.totals.superAmount,
-        type: superPay?.type || "Liability",
-        account: `${PAYROLL_COA.superPayable} - ${superPay?.name || "Superannuation Payable"}`,
-        accountCode: PAYROLL_COA.superPayable,
-        accountName: superPay?.name || "Superannuation Payable",
-        hasGST: false,
-        noGST: true,
-      taxCode: "N-T",
-        reconciled: false,
-        source: "payroll",
-        payRunId: run.id,
-        payRunNumber: run.number,
-        journalRef,
-        timestamp: ts,
-      });
-    }
-
-    const debit = entries
-      .filter((e) => (e.amount || 0) > 0)
-      .reduce((s, e) => s + (e.amount || 0), 0);
-    const credit = entries
-      .filter((e) => (e.amount || 0) < 0)
-      .reduce((s, e) => s + Math.abs(e.amount || 0), 0);
-    if (Math.abs(debit - credit) > 0.02) {
-      throw new Error(
-        `Unbalanced payroll journal (Dr ${debit} vs Cr ${credit})`
-      );
-    }
-
-    const result = await appendLedgerEntries(entries);
+    const synced = await syncPostedPayRunLedger(run);
     const now = new Date().toISOString();
     const next: PayRun = {
       ...run,
       status: "posted",
-      ledgerEntryIds: result.savedEntries.map((e) => e.id),
-      journalRef,
+      ledgerEntryIds: synced.ledgerEntryIds,
+      journalRef: synced.journalRef,
       postedAt: now,
       updatedAt: now,
     };

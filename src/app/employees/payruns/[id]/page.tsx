@@ -160,7 +160,7 @@ export default function PayRunDetailPage() {
   }, [load]);
 
   const startEdit = (line: PayRunLine) => {
-    if (payRun?.status !== 'draft') return;
+    if (!payRun) return;
     setEditingId(line.employeeId);
     setDraft(lineToDraft(line));
     setError('');
@@ -382,11 +382,17 @@ export default function PayRunDetailPage() {
           </div>
         </div>
 
-        {isDraft && (
+        {isDraft ? (
           <p className="mb-4 text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
             Draft pay run — edit each employee for weekday, Saturday, Sunday and
             overtime hours (Hospitality Award MA000009). Save, then post when
             every payslip looks right.
+          </p>
+        ) : (
+          <p className="mb-4 text-sm text-slate-600 bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
+            Posted pay run — you can still edit payslips to correct errors. Saving
+            rewrites the payroll journal lines so BAS W1/W2 stay accurate (not
+            lodged to the ATO from here).
           </p>
         )}
 
@@ -437,7 +443,7 @@ export default function PayRunDetailPage() {
                       >
                         Payslip
                       </Link>
-                      {isDraft && !open && (
+                      {!open && (
                         <button
                           type="button"
                           className="text-slate-700 hover:underline"
