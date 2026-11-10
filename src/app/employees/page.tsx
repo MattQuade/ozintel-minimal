@@ -173,6 +173,23 @@ function weekDefaults() {
   };
 }
 
+function addDaysIsoClient(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + days);
+  return toIsoDateInput(d);
+}
+
+function nextPeriodPreview(run: PayRun) {
+  const step = run.frequency === 'fortnightly' ? 14 : 7;
+  return {
+    periodStart: addDaysIsoClient(run.periodStart, step),
+    periodEnd: addDaysIsoClient(run.periodEnd, step),
+    paymentDate: addDaysIsoClient(run.paymentDate, step),
+    frequency: run.frequency,
+  };
+}
+
 export default function EmployeesPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'employees' | 'payruns' | 'payslips'>(
@@ -192,6 +209,10 @@ export default function EmployeesPage() {
   const [payForm, setPayForm] = useState(weekDefaults);
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [fromPayRunId, setFromPayRunId] = useState('');
+  const [payCreateMode, setPayCreateMode] = useState<'from-previous' | 'blank'>(
+    'from-previous'
+  );
 
   const load = useCallback(async () => {
     try {
@@ -306,6 +327,13 @@ export default function EmployeesPage() {
   const openPayRunModal = () => {
     setPayForm(weekDefaults());
     setSelectedEmpIds(activeEmployees.map((e) => e.id));
+    const latest = [...payRuns].sort((a, b) =>
+      String(b.paymentDate || b.periodEnd || '').localeCompare(
+        String(a.paymentDate || a.periodEnd || '')
+      )
+    )[0];
+    setFromPayRunId(latest?.id || '');
+    setPayCreateMode(latest ? 'from-previous' : 'blank');
     setShowPayRunModal(true);
   };
 
@@ -329,6 +357,37 @@ export default function EmployeesPage() {
       if (!res.ok || !data.success) throw new Error(data.error || 'Create failed');
       setShowPayRunModal(false);
       setStatus(`Pay run ${data.payRun.number} created (draft)`);
+      router.push(`/employees/payruns/${data.payRun.id}`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Create failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createPayRunFromPrevious = async (id?: string) => {
+    const sourceId = String(id || fromPayRunId || '').trim();
+    if (!sourceId && payRuns.length === 0) {
+      setStatus('No previous pay run to copy from — start blank instead');
+      setPayCreateMode('blank');
+      return;
+    }
+    setSaving(true);
+    setStatus('');
+    try {
+      const res = await fetch('/api/payruns/from-previous', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sourceId ? { fromPayRunId: sourceId } : {}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not copy previous pay run');
+      }
+      setShowPayRunModal(false);
+      setStatus(
+        `Draft ${data.payRun.number} created from ${data.fromPayRunNumber}`
+      );
       router.push(`/employees/payruns/${data.payRun.id}`);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Create failed');
@@ -569,6 +628,15 @@ export default function EmployeesPage() {
                         >
                           Edit
                         </Link>
+                        <button
+                          type="button"
+                          disabled={saving || !run.lines?.length}
+                          onClick={() => void createPayRunFromPrevious(run.id)}
+                          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:bg-gray-400 text-white text-sm font-semibold"
+                          title="Create the next draft from this pay run"
+                        >
+                          Create next
+                        </button>
                         <button
                           type="button"
                           disabled={saving}
@@ -1112,93 +1180,188 @@ export default function EmployeesPage() {
         {showPayRunModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-3xl p-8 w-full max-w-lg max-h-[90vh] overflow-auto">
-              <h2 className="text-2xl font-bold mb-6">Create Pay Run</h2>
-              <div className="space-y-4">
-                {field(
-                  'Frequency',
-                  <select
-                    className={inputCls}
-                    value={payForm.frequency}
-                    onChange={(e) =>
-                      setPayForm({
-                        ...payForm,
-                        frequency: e.target.value as PayFrequency,
-                      })
-                    }
+              <h2 className="text-2xl font-bold mb-2">Create Pay Run</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Same idea as invoices — copy a previous draft/posted run, or
+                start blank.
+              </p>
+
+              {payRuns.length > 0 && (
+                <div className="flex gap-2 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setPayCreateMode('from-previous')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                      payCreateMode === 'from-previous'
+                        ? 'bg-orange-600 text-white'
+                        : 'border hover:bg-gray-50'
+                    }`}
                   >
-                    <option value="weekly">Weekly</option>
-                    <option value="fortnightly">Fortnightly</option>
-                  </select>
-                )}
-                {field(
-                  'Period start',
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={payForm.periodStart}
-                    onChange={(e) =>
-                      setPayForm({ ...payForm, periodStart: e.target.value })
-                    }
-                  />
-                )}
-                {field(
-                  'Period end',
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={payForm.periodEnd}
-                    onChange={(e) =>
-                      setPayForm({ ...payForm, periodEnd: e.target.value })
-                    }
-                  />
-                )}
-                {field(
-                  'Payment date',
-                  <input
-                    type="date"
-                    className={inputCls}
-                    value={payForm.paymentDate}
-                    onChange={(e) =>
-                      setPayForm({ ...payForm, paymentDate: e.target.value })
-                    }
-                  />
-                )}
-                <div>
-                  <p className="text-sm text-gray-600 mb-2">Employees</p>
-                  <div className="max-h-48 overflow-auto border rounded-xl p-3 space-y-2">
-                    {activeEmployees.length === 0 ? (
-                      <p className="text-sm text-gray-500">No active employees</p>
-                    ) : (
-                      activeEmployees.map((emp) => (
-                        <label key={emp.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={selectedEmpIds.includes(emp.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedEmpIds([...selectedEmpIds, emp.id]);
-                              } else {
-                                setSelectedEmpIds(
-                                  selectedEmpIds.filter((id) => id !== emp.id)
-                                );
-                              }
-                            }}
-                          />
-                          {displayName(emp)}
-                        </label>
-                      ))
-                    )}
-                  </div>
+                    From previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayCreateMode('blank')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                      payCreateMode === 'blank'
+                        ? 'bg-blue-600 text-white'
+                        : 'border hover:bg-gray-50'
+                    }`}
+                  >
+                    Start blank
+                  </button>
                 </div>
-              </div>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={createPayRun}
-                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-semibold mt-6 disabled:opacity-50"
-              >
-                {saving ? 'Creating…' : 'Create draft pay run'}
-              </button>
+              )}
+
+              {payCreateMode === 'from-previous' && payRuns.length > 0 ? (
+                <div className="space-y-4">
+                  {field(
+                    'Previous pay run',
+                    <select
+                      className={inputCls}
+                      value={fromPayRunId}
+                      onChange={(e) => setFromPayRunId(e.target.value)}
+                      disabled={saving}
+                    >
+                      {payRuns.map((run) => (
+                        <option key={run.id} value={run.id}>
+                          {run.number} · {formatAuDate(run.periodStart)} –{' '}
+                          {formatAuDate(run.periodEnd)} · {statusLabel(run.status)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {(() => {
+                    const source = payRuns.find((r) => r.id === fromPayRunId);
+                    if (!source) return null;
+                    const next = nextPeriodPreview(source);
+                    return (
+                      <div className="rounded-xl bg-orange-50 border border-orange-100 px-4 py-3 text-sm text-slate-700 space-y-1">
+                        <p>
+                          Copies employees and hours/rates from{' '}
+                          <strong>{source.number}</strong>.
+                        </p>
+                        <p>
+                          New period:{' '}
+                          <strong>
+                            {formatAuDate(next.periodStart)} –{' '}
+                            {formatAuDate(next.periodEnd)}
+                          </strong>
+                        </p>
+                        <p>
+                          Payment date:{' '}
+                          <strong>{formatAuDate(next.paymentDate)}</strong> ·{' '}
+                          {next.frequency}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Opens as a draft so you can edit before Re/Post.
+                        </p>
+                      </div>
+                    );
+                  })()}
+                  <button
+                    type="button"
+                    disabled={saving || !fromPayRunId}
+                    onClick={() => void createPayRunFromPrevious()}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-semibold disabled:opacity-50"
+                  >
+                    {saving
+                      ? 'Creating draft…'
+                      : 'Create draft from previous pay run'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {field(
+                    'Frequency',
+                    <select
+                      className={inputCls}
+                      value={payForm.frequency}
+                      onChange={(e) =>
+                        setPayForm({
+                          ...payForm,
+                          frequency: e.target.value as PayFrequency,
+                        })
+                      }
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="fortnightly">Fortnightly</option>
+                    </select>
+                  )}
+                  {field(
+                    'Period start',
+                    <input
+                      type="date"
+                      className={inputCls}
+                      value={payForm.periodStart}
+                      onChange={(e) =>
+                        setPayForm({ ...payForm, periodStart: e.target.value })
+                      }
+                    />
+                  )}
+                  {field(
+                    'Period end',
+                    <input
+                      type="date"
+                      className={inputCls}
+                      value={payForm.periodEnd}
+                      onChange={(e) =>
+                        setPayForm({ ...payForm, periodEnd: e.target.value })
+                      }
+                    />
+                  )}
+                  {field(
+                    'Payment date',
+                    <input
+                      type="date"
+                      className={inputCls}
+                      value={payForm.paymentDate}
+                      onChange={(e) =>
+                        setPayForm({ ...payForm, paymentDate: e.target.value })
+                      }
+                    />
+                  )}
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">Employees</p>
+                    <div className="max-h-48 overflow-auto border rounded-xl p-3 space-y-2">
+                      {activeEmployees.length === 0 ? (
+                        <p className="text-sm text-gray-500">No active employees</p>
+                      ) : (
+                        activeEmployees.map((emp) => (
+                          <label
+                            key={emp.id}
+                            className="flex items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedEmpIds.includes(emp.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedEmpIds([...selectedEmpIds, emp.id]);
+                                } else {
+                                  setSelectedEmpIds(
+                                    selectedEmpIds.filter((id) => id !== emp.id)
+                                  );
+                                }
+                              }}
+                            />
+                            {displayName(emp)}
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void createPayRun()}
+                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-semibold disabled:opacity-50"
+                  >
+                    {saving ? 'Creating…' : 'Create blank draft pay run'}
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowPayRunModal(false)}

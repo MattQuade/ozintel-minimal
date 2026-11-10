@@ -320,6 +320,32 @@ export default function PayRunDetailPage() {
     }
   };
 
+  const createNextFromThis = async () => {
+    if (!payRun) return;
+    if (!payRun.lines.length) {
+      setError('This pay run has no payslip lines to copy');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await fetch('/api/payruns/from-previous', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromPayRunId: payRun.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not create next draft');
+      }
+      router.push(`/employees/payruns/${data.payRun.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Create next failed');
+      setBusy(false);
+    }
+  };
+
   const repostPayRun = async () => {
     if (!payRun) return;
     const alreadyPosted = payRun.status !== 'draft';
@@ -468,6 +494,15 @@ export default function PayRunDetailPage() {
                 Edit payslips
               </button>
             )}
+            <button
+              type="button"
+              disabled={busy || !payRun.lines.length}
+              onClick={() => void createNextFromThis()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+              title="Create the next draft period from this pay run"
+            >
+              Create next
+            </button>
             <button
               type="button"
               disabled={busy}

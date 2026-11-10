@@ -16,6 +16,7 @@ import {
   readLedger,
   type LedgerEntry,
 } from "@/lib/accounting/store";
+import { parseFlexibleDate, toIsoDateInput } from "@/lib/accounting/dates";
 import {
   PAYROLL_COA,
   SUPER_GUARANTEE_RATE,
@@ -412,6 +413,144 @@ export async function createPayRun(input: CreatePayRunInput): Promise<PayRun> {
     await writePayRunsUnlocked(runs);
     return payRun;
   });
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = parseFlexibleDate(iso);
+  if (!d) return "";
+  d.setDate(d.getDate() + days);
+  return toIsoDateInput(d);
+}
+
+/** Next weekly/fortnightly period after a template pay run. */
+export function nextPayPeriodFrom(run: Pick<
+  PayRun,
+  "periodStart" | "periodEnd" | "paymentDate" | "frequency"
+>): {
+  periodStart: string;
+  periodEnd: string;
+  paymentDate: string;
+  frequency: PayFrequency;
+} {
+  const frequency: PayFrequency =
+    run.frequency === "fortnightly" ? "fortnightly" : "weekly";
+  const step = frequency === "fortnightly" ? 14 : 7;
+  const periodStart = addDaysIso(run.periodStart, step);
+  const periodEnd = addDaysIso(run.periodEnd, step);
+  const paymentDate = addDaysIso(run.paymentDate, step);
+  if (!periodStart || !periodEnd || !paymentDate) {
+    throw new Error("Previous pay run has invalid period or payment dates");
+  }
+  return { periodStart, periodEnd, paymentDate, frequency };
+}
+
+function lineOverridesFromPayRun(run: PayRun): Record<string, PayLineOverride> {
+  const out: Record<string, PayLineOverride> = {};
+  for (const line of run.lines || []) {
+    out[line.employeeId] = {
+      hours: line.hours,
+      ordinaryRate: line.ordinaryRate,
+      ordinaryEarnings: line.ordinaryEarnings,
+      saturdayHours: line.saturdayHours,
+      saturdayEarnings: line.saturdayEarnings,
+      sundayHours: line.sundayHours,
+      sundayEarnings: line.sundayEarnings,
+      overtimeHours: line.overtimeHours,
+      overtime: line.overtime,
+      allowances: line.allowances,
+    };
+  }
+  return out;
+}
+
+/** Most recent pay run usable as a template (prefers posted / STP-ready). */
+export async function getPreviousPayRunTemplate(
+  fromPayRunId?: string
+): Promise<PayRun | null> {
+  const runs = await readPayRuns();
+  const id = String(fromPayRunId || "").trim();
+  if (id) {
+    return runs.find((r) => r.id === id) || null;
+  }
+  const withLines = runs.filter((r) => (r.lines || []).length > 0);
+  if (!withLines.length) return null;
+  const posted = withLines.filter(
+    (r) => r.status === "posted" || r.status === "stp_submitted"
+  );
+  const pool = posted.length ? posted : withLines;
+  pool.sort((a, b) => {
+    const byPay = String(b.paymentDate || "").localeCompare(
+      String(a.paymentDate || "")
+    );
+    if (byPay !== 0) return byPay;
+    const byEnd = String(b.periodEnd || "").localeCompare(
+      String(a.periodEnd || "")
+    );
+    if (byEnd !== 0) return byEnd;
+    return String(b.updatedAt || b.createdAt || "").localeCompare(
+      String(a.updatedAt || a.createdAt || "")
+    );
+  });
+  return pool[0];
+}
+
+/**
+ * Create a new draft pay run from a previous one (same idea as invoice
+ * “draft from last”). Copies employees + hours/rates, advances the period
+ * by one week or fortnight, leaves status as draft for review.
+ */
+export async function createDraftFromPreviousPayRun(fromPayRunId?: string): Promise<{
+  payRun: PayRun;
+  fromPayRunNumber: string;
+}> {
+  const template = await getPreviousPayRunTemplate(fromPayRunId);
+  if (!template) {
+    throw new Error(
+      fromPayRunId
+        ? "Previous pay run not found"
+        : "No previous pay run to copy from"
+    );
+  }
+  if (!(template.lines || []).length) {
+    throw new Error(
+      `Pay run ${template.number} has no payslip lines to copy`
+    );
+  }
+
+  const next = nextPayPeriodFrom(template);
+  const allEmployees = await readEmployees();
+  const byId = new Map(allEmployees.map((e) => [e.id, e]));
+  const employeeIds = (template.employeeIds?.length
+    ? template.employeeIds
+    : template.lines.map((l) => l.employeeId)
+  ).filter((id) => {
+    const emp = byId.get(id);
+    return emp && emp.employmentStatus !== "terminated";
+  });
+
+  if (!employeeIds.length) {
+    throw new Error(
+      "None of the employees from the previous pay run are still active"
+    );
+  }
+
+  const allOverrides = lineOverridesFromPayRun(template);
+  const lineOverrides: Record<string, PayLineOverride> = {};
+  for (const id of employeeIds) {
+    if (allOverrides[id]) lineOverrides[id] = allOverrides[id];
+  }
+
+  const payRun = await createPayRun({
+    ...next,
+    employeeIds,
+    lineOverrides,
+    notes: template.notes || "",
+  });
+
+  return {
+    payRun,
+    fromPayRunNumber: template.number,
+  };
 }
 
 export async function updateDraftPayRun(
