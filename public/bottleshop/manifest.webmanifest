@@ -3,7 +3,7 @@
   "name": "Pub Bottle Shop",
   "short_name": "Bottle Shop",
   "description": "See what's on the shelf and reserve bottles for pickup at the pub.",
-  "start_url": "/bottleshop?source=pwa",
+  "start_url": "/bottleshop?source=pwa&v=2",
   "scope": "/bottleshop",
   "display": "standalone",
   "orientation": "portrait-primary",

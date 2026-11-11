@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import BottleShopPhoneBoot from "@/components/BottleShopPhoneBoot";
 
 export const metadata: Metadata = {
   title: "Pub Bottle Shop",
   description:
     "See what's on the shelf and reserve bottles for pickup at the pub.",
   applicationName: "Bottle Shop",
-  manifest: "/bottleshop/manifest.webmanifest?v=1",
+  manifest: "/bottleshop/manifest.webmanifest?v=2",
   appleWebApp: {
     capable: true,
     title: "Bottle Shop",
@@ -36,5 +37,10 @@ export default function BottleShopLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <>
+      <BottleShopPhoneBoot />
+      {children}
+    </>
+  );
 }

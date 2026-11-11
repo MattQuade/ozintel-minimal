@@ -1,5 +1,6 @@
 "use client";
 
+import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import {
   BOTTLE_SHOP_CATEGORIES,
 } from "@/lib/operations/pub/bottleShopCategories";
@@ -37,6 +38,7 @@ export default function BottleShopHubPage() {
       <p style={{ color: "#94a3b8", margin: "0 0 24px" }}>
         Pick a shelf, then restore to see stock and reserve.
       </p>
+      <BottleShopInstallButton />
 
       <div
         style={{
