@@ -4,6 +4,7 @@ import {
   deleteBottleOrder,
   loadBottleShopAdmin,
   setBottleOrderStatus,
+  updateBottleHubButtonLabel,
   updateBottleProduct,
   type BottleOrder,
 } from "@/lib/operations/pub/bottleshop";
@@ -69,6 +70,13 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     const kind = String(body.kind || "product").trim();
+
+    if (kind === "hubButton") {
+      const button = await withBottleShopOwner(() =>
+        updateBottleHubButtonLabel(body.id, body.label)
+      );
+      return NextResponse.json({ success: true, button });
+    }
 
     if (kind === "order" || kind === "deleteOrder") {
       const id = String(body.id || "").trim();

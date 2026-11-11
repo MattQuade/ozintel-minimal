@@ -55,6 +55,11 @@ type ShopCustomer = {
   createdAt: string;
 };
 
+type HubButton = {
+  id: string;
+  label: string;
+};
+
 function money(n: number) {
   return `$${Number(n || 0).toFixed(2)}`;
 }
@@ -78,6 +83,14 @@ function BottleShopAdminInner() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<ShopCustomer[]>([]);
+  const [hubButtons, setHubButtons] = useState<HubButton[]>([
+    { id: "tue-draw", label: "Tue Nite Draw $2,500" },
+    { id: "fri-raffles", label: "Fri Nite Meat Raffles" },
+  ]);
+  const [hubDrafts, setHubDrafts] = useState<Record<string, string>>({
+    "tue-draw": "Tue Nite Draw $2,500",
+    "fri-raffles": "Fri Nite Meat Raffles",
+  });
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [reservedCount, setReservedCount] = useState(0);
@@ -150,6 +163,15 @@ function BottleShopAdminInner() {
       setProducts(nextProducts);
       setOrders(data.orders || []);
       setCustomers(data.customers || []);
+      const nextHub: HubButton[] = Array.isArray(data.hubButtons)
+        ? data.hubButtons
+        : [];
+      if (nextHub.length) {
+        setHubButtons(nextHub);
+        const nextHubDrafts: Record<string, string> = {};
+        for (const b of nextHub) nextHubDrafts[b.id] = b.label;
+        setHubDrafts(nextHubDrafts);
+      }
       const reserved =
         typeof data.reservedCount === "number"
           ? data.reservedCount
@@ -188,6 +210,34 @@ function BottleShopAdminInner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const saveHubButton = async (id: string) => {
+    const label = String(hubDrafts[id] || "").trim();
+    if (!label) {
+      setStatus("Hub button label cannot be empty");
+      return;
+    }
+    setStatus("Saving hub button…");
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "hubButton", id, label }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Save failed");
+        return;
+      }
+      setHubButtons((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, label } : b))
+      );
+      setStatus("Hub button label saved — public /bottleshop updated.");
+    } catch (error) {
+      console.error(error);
+      setStatus("Hub button save failed.");
+    }
+  };
 
   const saveProduct = async (id: string) => {
     const draft = drafts[id];
@@ -596,6 +646,71 @@ function BottleShopAdminInner() {
         <p style={{ color: "#94a3b8" }}>Loading…</p>
       ) : (
         <>
+          <h2 style={{ marginTop: 28 }}>Public hub buttons</h2>
+          <p style={{ color: "#94a3b8", marginTop: 0 }}>
+            These brown buttons sit under Cruisers on{" "}
+            <a href="/bottleshop" style={{ color: "#fbbf24" }}>
+              /bottleshop
+            </a>
+            . Edit the labels anytime.
+          </p>
+          <div
+            style={{
+              background: "#1e2937",
+              border: "1px solid #334155",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 12,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            {hubButtons.map((btn) => (
+              <div
+                key={btn.id}
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  value={hubDrafts[btn.id] ?? btn.label}
+                  onChange={(e) =>
+                    setHubDrafts((prev) => ({
+                      ...prev,
+                      [btn.id]: e.target.value,
+                    }))
+                  }
+                  style={{
+                    flex: "1 1 220px",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #475569",
+                    background: "#0f172a",
+                    color: "white",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => void saveHubButton(btn.id)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#b45309",
+                    color: "white",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            ))}
+          </div>
+
           <h2 style={{ marginTop: 28 }}>Customers</h2>
           <p style={{ color: "#94a3b8", marginTop: 0 }}>
             Add people one by one with a restore username like{" "}

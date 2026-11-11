@@ -1,3 +1,4 @@
+import BottleShopHubPromos from "@/components/BottleShopHubPromos";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
 
@@ -63,6 +64,7 @@ export default function BottleShopHubPage() {
             {cat.label}
           </a>
         ))}
+        <BottleShopHubPromos />
       </div>
     </main>
   );

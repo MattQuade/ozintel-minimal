@@ -56,10 +56,22 @@ export type BottleCustomer = {
   createdAt: string;
 };
 
+/** Brown hub buttons under the shelves (labels editable in Pub Ops). */
+export type BottleHubButton = {
+  id: string;
+  label: string;
+};
+
+const DEFAULT_HUB_BUTTONS: BottleHubButton[] = [
+  { id: "tue-draw", label: "Tue Nite Draw $2,500" },
+  { id: "fri-raffles", label: "Fri Nite Meat Raffles" },
+];
+
 type BottleShopStore = {
   products: BottleProduct[];
   orders: BottleOrder[];
   customers: BottleCustomer[];
+  hubButtons: BottleHubButton[];
 };
 
 function newId(prefix: string) {
@@ -69,7 +81,29 @@ function newId(prefix: string) {
 }
 
 function defaultStore(): BottleShopStore {
-  return { products: [], orders: [], customers: [] };
+  return {
+    products: [],
+    orders: [],
+    customers: [],
+    hubButtons: DEFAULT_HUB_BUTTONS.map((b) => ({ ...b })),
+  };
+}
+
+function normalizeHubButtons(raw: unknown): BottleHubButton[] {
+  const byId = new Map<string, string>();
+  if (Array.isArray(raw)) {
+    for (const row of raw) {
+      if (!row || typeof row !== "object") continue;
+      const id = String((row as { id?: unknown }).id || "").trim();
+      const label = String((row as { label?: unknown }).label || "").trim();
+      if (!id || !label) continue;
+      byId.set(id, label);
+    }
+  }
+  return DEFAULT_HUB_BUTTONS.map((fallback) => ({
+    id: fallback.id,
+    label: byId.get(fallback.id) || fallback.label,
+  }));
 }
 
 function normalizeAccessCode(raw: string) {
@@ -185,7 +219,10 @@ async function readStore(): Promise<BottleShopStore> {
           .map((c) => normalizeCustomer(c))
           .filter((c): c is BottleCustomer => Boolean(c))
       : [];
-    return { products, orders, customers };
+    const hubButtons = normalizeHubButtons(
+      (parsed as { hubButtons?: unknown }).hubButtons
+    );
+    return { products, orders, customers, hubButtons };
   } catch {
     return defaultStore();
   }
@@ -231,8 +268,33 @@ export async function loadBottleShopAdmin() {
     products: store.products,
     orders,
     customers: [...store.customers].reverse(),
+    hubButtons: store.hubButtons,
     reservedCount: store.orders.filter((o) => o.status === "reserved").length,
   };
+}
+
+export async function listBottleHubButtons(): Promise<BottleHubButton[]> {
+  const store = await readStore();
+  return store.hubButtons;
+}
+
+export async function updateBottleHubButtonLabel(
+  id: string,
+  label: string
+): Promise<BottleHubButton> {
+  const buttonId = String(id || "").trim();
+  const nextLabel = String(label || "").trim();
+  if (!buttonId) throw new Error("Button id is required");
+  if (!nextLabel) throw new Error("Button label is required");
+
+  const store = await readStore();
+  const idx = store.hubButtons.findIndex((b) => b.id === buttonId);
+  if (idx < 0) throw new Error("Unknown hub button");
+  const next: BottleHubButton = { id: buttonId, label: nextLabel };
+  const hubButtons = [...store.hubButtons];
+  hubButtons[idx] = next;
+  await writeStore({ ...store, hubButtons });
+  return next;
 }
 
 /** Normalize restore usernames (phones sometimes turn @ into 2). */
