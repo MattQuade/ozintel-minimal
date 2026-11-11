@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   publicUser,
   readUsers,
+  readUsersFast,
   writeUsers,
   type User,
   type UserPermissions,
@@ -11,7 +12,8 @@ import { ensureOwnerAccountingSilo } from "@/lib/accounting/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET() {
-  const users = await readUsers();
+  // Hot path: never bootstrap/migrate on every phone/admin poll.
+  const users = await readUsersFast();
   return NextResponse.json({
     success: true,
     users: users.map(publicUser),

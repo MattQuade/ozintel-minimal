@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import VoiceHandsfreeDock from '@/components/VoiceHandsfreeDock';
+import DeferredVoiceHandsfreeDock from '@/components/DeferredVoiceHandsfreeDock';
 import ClientErrorBoundary from '@/components/ClientErrorBoundary';
 import RegisterServiceWorker from '@/components/RegisterServiceWorker';
 
@@ -43,7 +43,7 @@ export default function RootLayout({
         </main>
         <RegisterServiceWorker />
         <ClientErrorBoundary>
-          <VoiceHandsfreeDock />
+          <DeferredVoiceHandsfreeDock />
         </ClientErrorBoundary>
       </body>
     </html>

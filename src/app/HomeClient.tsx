@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
-import VoiceNavBar from '@/components/VoiceNavBar';
-import HomeReceiptCapture from '@/components/HomeReceiptCapture';
+
+const VoiceNavBar = dynamic(() => import('@/components/VoiceNavBar'), {
+  ssr: false,
+});
+const HomeReceiptCapture = dynamic(
+  () => import('@/components/HomeReceiptCapture'),
+  { ssr: false }
+);
 
 type Contact = {
   name: string;
@@ -264,20 +271,12 @@ export default function HomePage({
       });
       const data = await res.json();
       if (data.success && data.user) {
-        let found = data.user as UserProfile;
+        const found = data.user as UserProfile;
         setUserCookie(found.email);
-        try {
-          const meRes = await fetch(`${API_BASE}/api/me`, { cache: 'no-store' });
-          const meData = await meRes.json();
-          if (meData.success && meData.user) {
-            found = meData.user as UserProfile;
-          }
-        } catch {
-          /* cookie user from restore payload is enough */
-        }
         setCurrentUser(found);
         localStorage.setItem('ozintel_current_user', JSON.stringify(found));
-        await loadContactsFromServer();
+        // Contacts can trail restore — do not block the first paint/status.
+        void loadContactsFromServer();
         if (!silent) {
           if (found.status === 'approved') {
             setStatus("✅ Account restored – you are approved and ready to send alerts.");
@@ -335,29 +334,45 @@ export default function HomePage({
           serverEmpty &&
           (localSafe.length > 0 || localEmergency.length > 0)
         ) {
-          void (async () => {
-            for (const c of localSafe) {
-              await fetch(`${API_BASE}/api/contacts`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Accept: 'application/json',
-                },
-                body: JSON.stringify({ list: 'safe', ...c }),
-              });
+          // Migrate after idle so open stays snappy on phones.
+          const migrate = () => {
+            void (async () => {
+              for (const c of localSafe) {
+                await fetch(`${API_BASE}/api/contacts`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                  },
+                  body: JSON.stringify({ list: 'safe', ...c }),
+                });
+              }
+              for (const c of localEmergency) {
+                await fetch(`${API_BASE}/api/contacts`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                  },
+                  body: JSON.stringify({ list: 'emergency', ...c }),
+                });
+              }
+              await loadContactsFromServer();
+            })();
+          };
+          const ric = (
+            window as Window & {
+              requestIdleCallback?: (
+                cb: () => void,
+                opts?: { timeout: number }
+              ) => number;
             }
-            for (const c of localEmergency) {
-              await fetch(`${API_BASE}/api/contacts`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Accept: 'application/json',
-                },
-                body: JSON.stringify({ list: 'emergency', ...c }),
-              });
-            }
-            await loadContactsFromServer();
-          })();
+          ).requestIdleCallback;
+          if (typeof ric === 'function') {
+            ric(migrate, { timeout: 4000 });
+          } else {
+            window.setTimeout(migrate, 1500);
+          }
         }
       } else {
         const storedSafe = localStorage.getItem('ozintel_safe_contacts');
@@ -378,42 +393,11 @@ export default function HomePage({
       console.error("Storage load error:", e);
     }
 
-    fetchUsers();
-
     const cookieEmail = getUserCookie();
     if (cookieEmail && !initialUser) {
-      restoreFromServer(cookieEmail, true);
+      void restoreFromServer(cookieEmail, true);
     }
   }, []);
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/users`);
-        const data = await res.json();
-        if (data.success) {
-          const latest = data.users.find((u: UserProfile) =>
-            emailsMatch(u.email, currentUser.email)
-          );
-          if (latest) {
-            setCurrentUser(latest);
-            localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
-          } else {
-            clearUserCookie();
-            localStorage.removeItem('ozintel_current_user');
-            setCurrentUser(null);
-            setStatus("Your account no longer exists.");
-          }
-        }
-      } catch (err) {
-        console.error("Status sync error:", err);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [currentUser]);
 
   const fetchUsers = async () => {
     try {
@@ -429,6 +413,52 @@ export default function HomePage({
       console.error("Failed to load users from server:", err);
     }
   };
+
+  // Admin panel is the only home UI that needs the full user list.
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+    void fetchUsers();
+  }, [isAdminAuthenticated]);
+
+  // Lightweight status sync — /api/me, not the full users list every 5s.
+  useEffect(() => {
+    if (!currentUser?.email) return;
+
+    const syncMe = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/me`, { cache: 'no-store' });
+        if (res.status === 401) {
+          clearUserCookie();
+          localStorage.removeItem('ozintel_current_user');
+          setCurrentUser(null);
+          setStatus('Your account no longer exists.');
+          return;
+        }
+        const data = await res.json();
+        if (data.success && data.user) {
+          const latest = data.user as UserProfile;
+          setCurrentUser(latest);
+          localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
+        }
+      } catch (err) {
+        console.error('Status sync error:', err);
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      void syncMe();
+    }, 60000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void syncMe();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [currentUser?.email]);
 
   const saveContacts = (updatedSafe: Contact[], updatedEmergency: Contact[]) => {
     setSafeContacts(updatedSafe);
@@ -995,16 +1025,12 @@ export default function HomePage({
   const refreshCurrentUser = async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`${API_BASE}/api/users`);
+      const res = await fetch(`${API_BASE}/api/me`, { cache: 'no-store' });
       const data = await res.json();
-      if (data.success) {
-        const latest = data.users.find((u: UserProfile) =>
-          emailsMatch(u.email, currentUser.email)
-        );
-        if (latest) {
-          setCurrentUser(latest);
-          localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
-        }
+      if (data.success && data.user) {
+        const latest = data.user as UserProfile;
+        setCurrentUser(latest);
+        localStorage.setItem('ozintel_current_user', JSON.stringify(latest));
       }
     } catch (err) {
       console.error(err);
