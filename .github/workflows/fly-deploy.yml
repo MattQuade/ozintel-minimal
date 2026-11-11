@@ -19,3 +19,54 @@ jobs:
       - run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # Phones often prefer IPv6. If AAAA is published but TLS/routing is broken,
+      # mobile clients show "does not support a secure connection" while desktop
+      # IPv4 still works. Detect that and drop bad IPv6 so phones fall back.
+      - name: Fix broken IPv6 phone path
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -eux
+          flyctl ips list -a ozintel-syd || true
+          echo "ipv4 check"
+          curl -4 -fsS --max-time 20 -o /dev/null -w "ipv4:%{http_code}\n" https://ozintel.com.au/bottleshop
+          set +e
+          curl -6 -fsS --max-time 20 -o /dev/null -w "ipv6:%{http_code}\n" https://ozintel.com.au/bottleshop
+          v6=$?
+          set -e
+          if [ "$v6" -eq 0 ]; then
+            echo "IPv6 bottle shop OK — leaving addresses in place"
+            exit 0
+          fi
+          echo "IPv6 bottle shop FAILED — releasing IPv6 so phones use IPv4"
+          flyctl ips list -a ozintel-syd -j > /tmp/ips.json || flyctl ips list -a ozintel-syd > /tmp/ips.txt
+          if [ -f /tmp/ips.json ]; then
+            python3 - <<'PY'
+          import json, subprocess, sys
+          raw = open("/tmp/ips.json").read().strip()
+          try:
+              data = json.loads(raw)
+          except Exception:
+              print("ips json parse failed:", raw[:500])
+              sys.exit(0)
+          rows = data if isinstance(data, list) else (
+              data.get("addresses") or data.get("ips") or data.get("data") or []
+          )
+          released = 0
+          for row in rows:
+              if not isinstance(row, dict):
+                  continue
+              addr = str(row.get("address") or row.get("ip") or "").strip()
+              typ = str(row.get("type") or row.get("kind") or row.get("family") or "").lower()
+              if not addr:
+                  continue
+              if ":" in addr or "v6" in typ or typ in ("aaaa", "private_v6", "public_v6", "shared_v6"):
+                  print("releasing", addr, row)
+                  subprocess.check_call(["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"])
+                  released += 1
+          print(f"released={released}")
+          PY
+          fi
+          flyctl ips list -a ozintel-syd || true
+          dig +short ozintel.com.au A || true
+          dig +short ozintel.com.au AAAA || true
