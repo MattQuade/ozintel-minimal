@@ -32,29 +32,35 @@ jobs:
           flyctl ips list -a ozintel-syd -j > /tmp/ips.json
           python3 - <<'PY'
           import json, subprocess, sys
+
+          def pick(row, *names):
+              lower = {str(k).lower(): v for k, v in row.items()}
+              for name in names:
+                  if name.lower() in lower and lower[name.lower()] not in (None, ""):
+                      return lower[name.lower()]
+              return ""
+
           raw = open("/tmp/ips.json").read().strip()
           print("ips raw:", raw[:2000])
           data = json.loads(raw)
           rows = data if isinstance(data, list) else (
-              data.get("addresses") or data.get("ips") or data.get("data") or []
+              data.get("addresses") or data.get("Addresses")
+              or data.get("ips") or data.get("data") or []
           )
           released = 0
           for row in rows:
               if not isinstance(row, dict):
                   continue
-              addr = str(row.get("address") or row.get("ip") or "").strip()
-              typ = str(row.get("type") or row.get("kind") or row.get("family") or "").lower()
-              region = str(row.get("region") or "")
+              addr = str(pick(row, "address", "ip", "Address", "IP")).strip()
+              typ = str(pick(row, "type", "kind", "family", "Type")).lower()
+              region = str(pick(row, "region", "Region"))
               if not addr:
                   continue
               is_v6 = (":" in addr) or ("v6" in typ) or typ in (
                   "aaaa", "private_v6", "public_v6", "shared_v6"
               )
               if not is_v6:
-                  continue
-              # Keep private/machine networking; release public/shared v6 only.
-              if "private" in typ and "public" not in typ and "shared" not in typ:
-                  print("keeping private v6", addr, typ)
+                  print("keeping v4", addr, typ)
                   continue
               print("releasing", addr, typ, region, row)
               subprocess.check_call(
@@ -63,16 +69,7 @@ jobs:
               released += 1
           print(f"released={released}")
           if released == 0:
-              # Fallback: release any address that looks like public IPv6 text.
-              for row in rows:
-                  addr = str((row or {}).get("address") or (row or {}).get("ip") or "")
-                  if addr.count(":") >= 2:
-                      print("fallback releasing", addr, row)
-                      subprocess.check_call(
-                          ["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"]
-                      )
-                      released += 1
-              print(f"fallback_released={released}")
+              sys.exit("No IPv6 addresses released — check ips json shape")
           PY
           flyctl ips list -a ozintel-syd
           dig +short ozintel.com.au A || true
