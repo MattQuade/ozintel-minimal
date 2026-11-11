@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - cursor/bottleshop-dedicated-ipv4-b75c
       - main
     paths:
       - ".github/workflows/fly-phone-net-fix.yml"
@@ -15,11 +14,11 @@ concurrency:
 
 jobs:
   fix:
-    name: Dedicated IPv4 + verify bottle shop
+    name: Phone-safe IPv4 only
     runs-on: ubuntu-latest
     steps:
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Allocate dedicated IPv4 if missing
+      - name: Keep dedicated IPv4 and remove public IPv6
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
@@ -28,57 +27,45 @@ jobs:
           flyctl ips list -a ozintel-syd -j > /tmp/ips.json
           python3 - <<'PY'
           import json, subprocess, sys
+
+          def pick(row, *names):
+              lower = {str(k).lower(): v for k, v in row.items()}
+              for name in names:
+                  if name.lower() in lower and lower[name.lower()] not in (None, ""):
+                      return str(lower[name.lower()])
+              return ""
+
           rows = json.load(open("/tmp/ips.json"))
           if not isinstance(rows, list):
               rows = rows.get("addresses") or rows.get("Addresses") or []
+
           has_dedicated_v4 = False
           for row in rows:
-              typ = str(row.get("Type") or row.get("type") or "").lower()
-              addr = str(row.get("Address") or row.get("address") or "")
-              print("ip:", addr, typ)
-              if typ in ("v4", "public_v4", "dedicated_v4") and "shared" not in typ:
-                  # Fly marks dedicated as Type "v4"
-                  if typ == "v4":
-                      has_dedicated_v4 = True
-          if has_dedicated_v4:
-              print("dedicated IPv4 already present")
-              sys.exit(0)
-          print("allocating dedicated IPv4")
-          subprocess.check_call(["flyctl", "ips", "allocate-v4", "-a", "ozintel-syd", "--yes"])
+              addr = pick(row, "address", "Address")
+              typ = pick(row, "type", "Type").lower()
+              print("seen", addr, typ)
+              if typ == "v4" and addr and ":" not in addr:
+                  has_dedicated_v4 = True
+              if ":" in addr or typ == "v6":
+                  print("releasing ipv6", addr)
+                  subprocess.check_call(
+                      ["flyctl", "ips", "release", "-a", "ozintel-syd", addr]
+                  )
+
+          if not has_dedicated_v4:
+              print("allocating dedicated ipv4")
+              subprocess.check_call(
+                  ["flyctl", "ips", "allocate-v4", "-a", "ozintel-syd", "--yes"]
+              )
           PY
+          echo "==== final ips ===="
           flyctl ips list -a ozintel-syd
-      - name: Re-allocate IPv6 for healthy dual-stack
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: |
-          set -eux
-          flyctl ips list -a ozintel-syd -j > /tmp/ips.json
-          python3 - <<'PY'
-          import json, subprocess, sys
-          rows = json.load(open("/tmp/ips.json"))
-          if not isinstance(rows, list):
-              rows = rows.get("addresses") or rows.get("Addresses") or []
-          has_v6 = any(":" in str(r.get("Address") or r.get("address") or "") for r in rows)
-          if has_v6:
-              print("IPv6 already present")
-              sys.exit(0)
-          print("allocating IPv6")
-          subprocess.check_call(["flyctl", "ips", "allocate-v6", "-a", "ozintel-syd"])
-          PY
-          flyctl ips list -a ozintel-syd
-      - name: Verify TLS and bottle shop
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: |
-          set -eux
-          flyctl ips list -a ozintel-syd
-          curl -4 -fsS --max-time 25 -o /dev/null -w "apex4:%{http_code}\n" https://ozintel.com.au/bottleshop
-          curl -4 -fsS --max-time 25 -o /dev/null -w "www4:%{http_code}\n" https://www.ozintel.com.au/bottleshop
-          set +e
-          curl -6 -fsS --max-time 25 -o /dev/null -w "apex6:%{http_code}\n" https://ozintel.com.au/bottleshop
-          curl -6 -fsS --max-time 25 -o /dev/null -w "www6:%{http_code}\n" https://www.ozintel.com.au/bottleshop
-          true
-          echo "==== dig ===="
+          echo "==== dns ===="
           dig +short ozintel.com.au A @1.1.1.1 || true
           dig +short ozintel.com.au AAAA @1.1.1.1 || true
           dig +short www.ozintel.com.au @1.1.1.1 || true
+          dig +short ozintel-syd.fly.dev A @1.1.1.1 || true
+          dig +short ozintel-syd.fly.dev AAAA @1.1.1.1 || true
+          echo "==== http ===="
+          curl -4 -fsS --max-time 25 -o /dev/null -w "apex:%{http_code}\n" https://ozintel.com.au/bottleshop
+          curl -4 -fsS --max-time 25 -o /dev/null -w "www:%{http_code}\n" https://www.ozintel.com.au/bottleshop
