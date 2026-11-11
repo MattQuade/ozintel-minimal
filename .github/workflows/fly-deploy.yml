@@ -64,7 +64,7 @@ jobs:
                   continue
               print("releasing", addr, typ, region, row)
               subprocess.check_call(
-                  ["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"]
+                  ["flyctl", "ips", "release", "-a", "ozintel-syd", addr]
               )
               released += 1
           print(f"released={released}")
