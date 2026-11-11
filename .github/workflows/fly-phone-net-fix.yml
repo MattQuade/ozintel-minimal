@@ -1,0 +1,84 @@
+name: Fly phone network fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cursor/bottleshop-dedicated-ipv4-b75c
+      - main
+    paths:
+      - ".github/workflows/fly-phone-net-fix.yml"
+
+concurrency:
+  group: fly-phone-net-fix
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    name: Dedicated IPv4 + verify bottle shop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Allocate dedicated IPv4 if missing
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -eux
+          flyctl ips list -a ozintel-syd
+          flyctl ips list -a ozintel-syd -j > /tmp/ips.json
+          python3 - <<'PY'
+          import json, subprocess, sys
+          rows = json.load(open("/tmp/ips.json"))
+          if not isinstance(rows, list):
+              rows = rows.get("addresses") or rows.get("Addresses") or []
+          has_dedicated_v4 = False
+          for row in rows:
+              typ = str(row.get("Type") or row.get("type") or "").lower()
+              addr = str(row.get("Address") or row.get("address") or "")
+              print("ip:", addr, typ)
+              if typ in ("v4", "public_v4", "dedicated_v4") and "shared" not in typ:
+                  # Fly marks dedicated as Type "v4"
+                  if typ == "v4":
+                      has_dedicated_v4 = True
+          if has_dedicated_v4:
+              print("dedicated IPv4 already present")
+              sys.exit(0)
+          print("allocating dedicated IPv4")
+          subprocess.check_call(["flyctl", "ips", "allocate-v4", "-a", "ozintel-syd", "--yes"])
+          PY
+          flyctl ips list -a ozintel-syd
+      - name: Re-allocate IPv6 for healthy dual-stack
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -eux
+          flyctl ips list -a ozintel-syd -j > /tmp/ips.json
+          python3 - <<'PY'
+          import json, subprocess, sys
+          rows = json.load(open("/tmp/ips.json"))
+          if not isinstance(rows, list):
+              rows = rows.get("addresses") or rows.get("Addresses") or []
+          has_v6 = any(":" in str(r.get("Address") or r.get("address") or "") for r in rows)
+          if has_v6:
+              print("IPv6 already present")
+              sys.exit(0)
+          print("allocating IPv6")
+          subprocess.check_call(["flyctl", "ips", "allocate-v6", "-a", "ozintel-syd"])
+          PY
+          flyctl ips list -a ozintel-syd
+      - name: Verify TLS and bottle shop
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -eux
+          flyctl ips list -a ozintel-syd
+          curl -4 -fsS --max-time 25 -o /dev/null -w "apex4:%{http_code}\n" https://ozintel.com.au/bottleshop
+          curl -4 -fsS --max-time 25 -o /dev/null -w "www4:%{http_code}\n" https://www.ozintel.com.au/bottleshop
+          set +e
+          curl -6 -fsS --max-time 25 -o /dev/null -w "apex6:%{http_code}\n" https://ozintel.com.au/bottleshop
+          curl -6 -fsS --max-time 25 -o /dev/null -w "www6:%{http_code}\n" https://www.ozintel.com.au/bottleshop
+          true
+          echo "==== dig ===="
+          dig +short ozintel.com.au A @1.1.1.1 || true
+          dig +short ozintel.com.au AAAA @1.1.1.1 || true
+          dig +short www.ozintel.com.au @1.1.1.1 || true
