@@ -19,36 +19,22 @@ jobs:
       - run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      # Phones often prefer IPv6. If AAAA is published but TLS/routing is broken,
-      # mobile clients show "does not support a secure connection" while desktop
-      # IPv4 still works. Detect that and drop bad IPv6 so phones fall back.
-      - name: Fix broken IPv6 phone path
+      # Phones (AU mobile especially) often prefer IPv6. Desktop Wi‑Fi can still
+      # work on IPv4 while phones hit "does not support a secure connection".
+      # Force phones onto the known-good IPv4 path by releasing public IPv6.
+      - name: Force IPv4-only public path for phones
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -eux
-          flyctl ips list -a ozintel-syd || true
-          echo "ipv4 check"
+          flyctl ips list -a ozintel-syd
           curl -4 -fsS --max-time 20 -o /dev/null -w "ipv4:%{http_code}\n" https://ozintel.com.au/bottleshop
-          set +e
-          curl -6 -fsS --max-time 20 -o /dev/null -w "ipv6:%{http_code}\n" https://ozintel.com.au/bottleshop
-          v6=$?
-          set -e
-          if [ "$v6" -eq 0 ]; then
-            echo "IPv6 bottle shop OK — leaving addresses in place"
-            exit 0
-          fi
-          echo "IPv6 bottle shop FAILED — releasing IPv6 so phones use IPv4"
-          flyctl ips list -a ozintel-syd -j > /tmp/ips.json || flyctl ips list -a ozintel-syd > /tmp/ips.txt
-          if [ -f /tmp/ips.json ]; then
-            python3 - <<'PY'
+          flyctl ips list -a ozintel-syd -j > /tmp/ips.json
+          python3 - <<'PY'
           import json, subprocess, sys
           raw = open("/tmp/ips.json").read().strip()
-          try:
-              data = json.loads(raw)
-          except Exception:
-              print("ips json parse failed:", raw[:500])
-              sys.exit(0)
+          print("ips raw:", raw[:2000])
+          data = json.loads(raw)
           rows = data if isinstance(data, list) else (
               data.get("addresses") or data.get("ips") or data.get("data") or []
           )
@@ -58,15 +44,36 @@ jobs:
                   continue
               addr = str(row.get("address") or row.get("ip") or "").strip()
               typ = str(row.get("type") or row.get("kind") or row.get("family") or "").lower()
+              region = str(row.get("region") or "")
               if not addr:
                   continue
-              if ":" in addr or "v6" in typ or typ in ("aaaa", "private_v6", "public_v6", "shared_v6"):
-                  print("releasing", addr, row)
-                  subprocess.check_call(["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"])
-                  released += 1
+              is_v6 = (":" in addr) or ("v6" in typ) or typ in (
+                  "aaaa", "private_v6", "public_v6", "shared_v6"
+              )
+              if not is_v6:
+                  continue
+              # Keep private/machine networking; release public/shared v6 only.
+              if "private" in typ and "public" not in typ and "shared" not in typ:
+                  print("keeping private v6", addr, typ)
+                  continue
+              print("releasing", addr, typ, region, row)
+              subprocess.check_call(
+                  ["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"]
+              )
+              released += 1
           print(f"released={released}")
+          if released == 0:
+              # Fallback: release any address that looks like public IPv6 text.
+              for row in rows:
+                  addr = str((row or {}).get("address") or (row or {}).get("ip") or "")
+                  if addr.count(":") >= 2:
+                      print("fallback releasing", addr, row)
+                      subprocess.check_call(
+                          ["flyctl", "ips", "release", addr, "-a", "ozintel-syd", "-y"]
+                      )
+                      released += 1
+              print(f"fallback_released={released}")
           PY
-          fi
-          flyctl ips list -a ozintel-syd || true
+          flyctl ips list -a ozintel-syd
           dig +short ozintel.com.au A || true
           dig +short ozintel.com.au AAAA || true
