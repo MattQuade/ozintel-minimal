@@ -1,11 +1,7 @@
-"use client";
-
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
-import {
-  BOTTLE_SHOP_CATEGORIES,
-} from "@/lib/operations/pub/bottleShopCategories";
+import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
 
-/** Category hub — same brown button stack as Accounting modules. */
+/** Category hub — server-rendered so phones see shelves even if JS is delayed. */
 export default function BottleShopHubPage() {
   return (
     <main
