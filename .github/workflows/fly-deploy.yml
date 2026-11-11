@@ -19,58 +19,13 @@ jobs:
       - run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      # Phones (AU mobile especially) often prefer IPv6. Desktop Wi‑Fi can still
-      # work on IPv4 while phones hit "does not support a secure connection".
-      # Force phones onto the known-good IPv4 path by releasing public IPv6.
-      - name: Force IPv4-only public path for phones
+      # Smoke-check the public IPv4 path after deploy. Apex AAAA is managed at
+      # nameserver.net.au (not Fly); keep www CNAME → fly.dev for phone IPv4.
+      - name: Verify public bottle shop over IPv4
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -eux
           flyctl ips list -a ozintel-syd
-          curl -4 -fsS --max-time 20 -o /dev/null -w "ipv4:%{http_code}\n" https://ozintel.com.au/bottleshop
-          flyctl ips list -a ozintel-syd -j > /tmp/ips.json
-          python3 - <<'PY'
-          import json, subprocess, sys
-
-          def pick(row, *names):
-              lower = {str(k).lower(): v for k, v in row.items()}
-              for name in names:
-                  if name.lower() in lower and lower[name.lower()] not in (None, ""):
-                      return lower[name.lower()]
-              return ""
-
-          raw = open("/tmp/ips.json").read().strip()
-          print("ips raw:", raw[:2000])
-          data = json.loads(raw)
-          rows = data if isinstance(data, list) else (
-              data.get("addresses") or data.get("Addresses")
-              or data.get("ips") or data.get("data") or []
-          )
-          released = 0
-          for row in rows:
-              if not isinstance(row, dict):
-                  continue
-              addr = str(pick(row, "address", "ip", "Address", "IP")).strip()
-              typ = str(pick(row, "type", "kind", "family", "Type")).lower()
-              region = str(pick(row, "region", "Region"))
-              if not addr:
-                  continue
-              is_v6 = (":" in addr) or ("v6" in typ) or typ in (
-                  "aaaa", "private_v6", "public_v6", "shared_v6"
-              )
-              if not is_v6:
-                  print("keeping v4", addr, typ)
-                  continue
-              print("releasing", addr, typ, region, row)
-              subprocess.check_call(
-                  ["flyctl", "ips", "release", "-a", "ozintel-syd", addr]
-              )
-              released += 1
-          print(f"released={released}")
-          if released == 0:
-              sys.exit("No IPv6 addresses released — check ips json shape")
-          PY
-          flyctl ips list -a ozintel-syd
-          dig +short ozintel.com.au A || true
-          dig +short ozintel.com.au AAAA || true
+          curl -4 -fsS --max-time 20 -o /dev/null -w "apex:%{http_code}\n" https://ozintel.com.au/bottleshop
+          curl -4 -fsS --max-time 20 -o /dev/null -w "www:%{http_code}\n" https://www.ozintel.com.au/bottleshop
