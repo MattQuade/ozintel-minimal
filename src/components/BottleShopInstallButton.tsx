@@ -67,9 +67,22 @@ export default function BottleShopInstallButton() {
 
   if (installed) {
     return (
-      <p style={{ margin: "0 0 16px", color: "#86efac", fontSize: "0.95rem" }}>
-        Bottle Shop is installed on this device.
-      </p>
+      <div style={{ margin: "0 0 16px", textAlign: "center" }}>
+        <p
+          style={{
+            margin: "0 0 8px",
+            color: "#86efac",
+            fontSize: "1.9rem",
+            fontWeight: 700,
+            lineHeight: 1.2,
+          }}
+        >
+          Collingullie Hotel
+        </p>
+        <p style={{ margin: 0, color: "#86efac", fontSize: "0.95rem" }}>
+          Bottle Shop is installed on this device.
+        </p>
+      </div>
     );
   }
 
