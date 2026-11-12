@@ -44,7 +44,10 @@ export type ReceiptMeta = {
   captionAmount?: number;
   /** Client id so a retried POST does not create a second receipt. */
   clientUploadId?: string;
-  /** 1..n in Textract date order. Same day keeps snap order. */
+  /**
+   * 1..n in Textract date order inside one Australian financial-year quarter.
+   * Restarts on 1 July, 1 October, 1 January and 1 April. Same day keeps snap order.
+   */
   ledgerNo?: number;
   /**
    * Hubdoc-style Textract breakdown kept with the photo in OzIntel books
@@ -479,7 +482,7 @@ export async function listReceiptsByLedgerEntry(
   return store.receipts.filter((r) => r.ledgerEntryIds.includes(id));
 }
 
-/** Chronological list. Number 1 is the earliest Textract date. */
+/** Chronological list. Number 1 restarts each Australian financial-year quarter. */
 export async function listAllReceipts(): Promise<ReceiptMeta[]> {
   await releaseReceiptsLinkedOnlyToMissingEntries();
   const store = await loadNumberedStore();

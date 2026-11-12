@@ -1,7 +1,12 @@
 /**
  * Receipt ledger order: Textract date, oldest first.
  * Same calendar day keeps snap order (uploadedAt). No receipt clock time.
+ * Numbers restart at 1 on each Australian financial-year quarter
+ * (1 July, 1 October, 1 January, 1 April).
+ * A receipt with no readable date sits after the dated receipts in the
+ * quarter of the Sydney day it was snapped.
  */
+import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -81,22 +86,88 @@ function snapMs(iso: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Oldest Textract day first. Undated receipts follow, still in snap order. */
+/** Sydney calendar day of the snap. Null when uploadedAt is not a time. */
+export function snapSydneyDay(iso: string | null | undefined): string | null {
+  const n = Date.parse(iso || "");
+  if (!Number.isFinite(n)) return null;
+  const day = sydneyTodayIso(new Date(n));
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+}
+
+/**
+ * Start of the Australian financial-year quarter containing this day.
+ * Quarters open on 1 July, 1 October, 1 January and 1 April.
+ */
+export function auFyQuarterStart(isoDay: string): string | null {
+  const m = String(isoDay || "")
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month >= 7 && month <= 9) return `${year}-07-01`;
+  if (month >= 10 && month <= 12) return `${year}-10-01`;
+  if (month >= 1 && month <= 3) return `${year}-01-01`;
+  if (month >= 4 && month <= 6) return `${year}-04-01`;
+  return null;
+}
+
+const UNKNOWN_QUARTER = "9999-99-99";
+
+type Place = {
+  quarter: string;
+  dated: boolean;
+  day: string;
+};
+
+function placeReceipt(receipt: DatedReceipt): Place {
+  const read = parseReceiptDay(receipt.docket?.date);
+  if (read) {
+    return {
+      quarter: auFyQuarterStart(read) || UNKNOWN_QUARTER,
+      dated: true,
+      day: read,
+    };
+  }
+  const snapped = snapSydneyDay(receipt.uploadedAt);
+  if (snapped) {
+    return {
+      quarter: auFyQuarterStart(snapped) || UNKNOWN_QUARTER,
+      dated: false,
+      day: snapped,
+    };
+  }
+  return { quarter: UNKNOWN_QUARTER, dated: false, day: "" };
+}
+
+/**
+ * Oldest quarter first. Inside a quarter, dated receipts (oldest Textract
+ * day, then snap order) come before undated ones (snap order).
+ */
 export function compareReceiptChronology(a: DatedReceipt, b: DatedReceipt): number {
-  const dayA = parseReceiptDay(a.docket?.date);
-  const dayB = parseReceiptDay(b.docket?.date);
-  if (dayA && dayB && dayA !== dayB) return dayA < dayB ? -1 : 1;
-  if (dayA && !dayB) return -1;
-  if (!dayA && dayB) return 1;
+  const pa = placeReceipt(a);
+  const pb = placeReceipt(b);
+  if (pa.quarter !== pb.quarter) return pa.quarter < pb.quarter ? -1 : 1;
+  if (pa.dated !== pb.dated) return pa.dated ? -1 : 1;
+  if (pa.dated && pb.dated && pa.day !== pb.day) return pa.day < pb.day ? -1 : 1;
   const snap = snapMs(a.uploadedAt) - snapMs(b.uploadedAt);
   if (snap !== 0) return snap;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 export function withLedgerNumbers<T extends DatedReceipt>(receipts: T[]): T[] {
-  return [...receipts]
-    .sort(compareReceiptChronology)
-    .map((receipt, index) => ({ ...receipt, ledgerNo: index + 1 }));
+  const sorted = [...receipts].sort(compareReceiptChronology);
+  let quarter = "";
+  let n = 0;
+  return sorted.map((receipt) => {
+    const next = placeReceipt(receipt).quarter;
+    if (next !== quarter) {
+      quarter = next;
+      n = 0;
+    }
+    n += 1;
+    return { ...receipt, ledgerNo: n };
+  });
 }
 
 /** Full receipt total. GST is left in, whether or not the docket split it out. */
