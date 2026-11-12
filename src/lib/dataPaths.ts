@@ -130,6 +130,18 @@ export function getAccountingDataDir(): string {
 }
 
 /**
+ * Practice cashbook (EFTPOS nights + cash banked) — separate from live books.
+ * Never writes ledger/COA; safe to wipe while shaping the workflow.
+ */
+export function getCashbookSandboxDir(): string {
+  return path.join(getOwnerDataRoot(ownerOrThrow()), "cashbook-sandbox");
+}
+
+export function getCashbookSandboxClosesPath(): string {
+  return path.join(getCashbookSandboxDir(), "nightly-closes.json");
+}
+
+/**
  * Decision Brief (layer-3 BI) — separate silo from accounting/ops.
  * Pulls read-only signals from accounting; stores briefs, retailer links, scans.
  */
