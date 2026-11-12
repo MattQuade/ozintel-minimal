@@ -13,6 +13,17 @@ import {
 } from "@/lib/accounting/store";
 import { parseReceiptCaption } from "@/lib/accounting/receiptCaption";
 import {
+  ledgerNumbersCurrent,
+  parseReceiptDay,
+  receiptTotalAmount,
+  withLedgerNumbers,
+} from "@/lib/accounting/receiptOrder";
+import {
+  removeSandboxCashOut,
+  upsertSandboxCashOut,
+} from "@/lib/cashbookSandbox/cashOut";
+import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
+import {
   docketHasDetail,
   normalizeReceiptDocket,
   publicReceiptDocket,
@@ -33,6 +44,8 @@ export type ReceiptMeta = {
   captionAmount?: number;
   /** Client id so a retried POST does not create a second receipt. */
   clientUploadId?: string;
+  /** 1..n in Textract date order. Same day keeps snap order. */
+  ledgerNo?: number;
   /**
    * Hubdoc-style Textract breakdown kept with the photo in OzIntel books
    * (vendor, date, GST, line items, payment — not a Xero push).
@@ -121,6 +134,36 @@ async function loadStore(): Promise<ReceiptStore> {
   }
 }
 
+async function loadNumberedStore(): Promise<ReceiptStore> {
+  const store = await loadStore();
+  if (ledgerNumbersCurrent(store.receipts)) return store;
+  store.receipts = withLedgerNumbers(store.receipts);
+  await saveStore(store);
+  return store;
+}
+
+function snapDay(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return sydneyTodayIso();
+  return sydneyTodayIso(d);
+}
+
+/** Copy the receipt total into the sandbox cash-out list. Idempotent per receipt. */
+async function syncSandboxCashOut(meta: ReceiptMeta): Promise<void> {
+  const amount = receiptTotalAmount(meta);
+  if (amount == null) {
+    await removeSandboxCashOut(meta.id);
+    return;
+  }
+  const date = parseReceiptDay(meta.docket?.date) || snapDay(meta.uploadedAt);
+  await upsertSandboxCashOut({
+    receiptId: meta.id,
+    date,
+    amount,
+    snappedAt: meta.uploadedAt,
+  });
+}
+
 async function saveStore(store: ReceiptStore) {
   await ensureStore();
   const target = getReceiptsMetaFilePath();
@@ -153,7 +196,10 @@ export async function createReceipt(args: {
   const clientUploadId = String(args.clientUploadId || "").trim();
   if (clientUploadId) {
     const existing = await findReceiptByClientUploadId(clientUploadId);
-    if (existing) return existing;
+    if (existing) {
+      await syncSandboxCashOut(existing);
+      return existing;
+    }
     const pending = inflightByUploadId.get(clientUploadId);
     if (pending) return pending;
     const created = (async () => {
@@ -257,15 +303,18 @@ async function createReceiptOnce(args: {
     ...(docketHasDetail(docket) ? { docket: docket! } : {}),
   };
 
-  store.receipts.unshift(meta);
+  store.receipts.push(meta);
+  store.receipts = withLedgerNumbers(store.receipts);
   await saveStore(store);
+  const saved = store.receipts.find((row) => row.id === id) || meta;
+  await syncSandboxCashOut(saved);
 
   for (const entryId of ledgerEntryIds) {
     await addReceiptIdToLedgerEntry(id, entryId);
-    await enrichLedgerEntryFromDocket(entryId, meta.docket);
+    await enrichLedgerEntryFromDocket(entryId, saved.docket);
   }
 
-  return meta;
+  return saved;
 }
 
 /**
@@ -430,15 +479,11 @@ export async function listReceiptsByLedgerEntry(
   return store.receipts.filter((r) => r.ledgerEntryIds.includes(id));
 }
 
-/** Newest-first list of every stored receipt (inbox + linked). */
+/** Chronological list. Number 1 is the earliest Textract date. */
 export async function listAllReceipts(): Promise<ReceiptMeta[]> {
   await releaseReceiptsLinkedOnlyToMissingEntries();
-  const store = await loadStore();
-  return [...store.receipts].sort((a, b) => {
-    const ta = Date.parse(a.uploadedAt || "") || 0;
-    const tb = Date.parse(b.uploadedAt || "") || 0;
-    return tb - ta;
-  });
+  const store = await loadNumberedStore();
+  return store.receipts;
 }
 
 /**
@@ -493,7 +538,7 @@ export async function listUnmatchedCaptionedReceipts(): Promise<ReceiptMeta[]> {
 
 export async function listInboxReceipts(): Promise<ReceiptMeta[]> {
   await releaseReceiptsLinkedOnlyToMissingEntries();
-  const store = await loadStore();
+  const store = await loadNumberedStore();
   return store.receipts.filter((r) => {
     const linked = Array.isArray(r.ledgerEntryIds) ? r.ledgerEntryIds : [];
     return linked.length === 0;
@@ -518,7 +563,9 @@ export async function deleteReceipt(id: string): Promise<boolean> {
   if (idx < 0) return false;
   const meta = store.receipts[idx];
   store.receipts.splice(idx, 1);
+  store.receipts = withLedgerNumbers(store.receipts);
   await saveStore(store);
+  await removeSandboxCashOut(id);
 
   const filePath = path.join(getReceiptFilesDir(), meta.storedFileName);
   await fs.unlink(filePath).catch(() => undefined);

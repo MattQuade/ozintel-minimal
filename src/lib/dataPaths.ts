@@ -141,6 +141,11 @@ export function getCashbookSandboxClosesPath(): string {
   return path.join(getCashbookSandboxDir(), "nightly-closes.json");
 }
 
+/** Receipt totals copied into the sandbox as cash out. Not the live ledger. */
+export function getCashbookSandboxCashOutPath(): string {
+  return path.join(getCashbookSandboxDir(), "cash-out.json");
+}
+
 /**
  * Decision Brief (layer-3 BI) — separate silo from accounting/ops.
  * Pulls read-only signals from accounting; stores briefs, retailer links, scans.

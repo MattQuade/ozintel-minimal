@@ -3,6 +3,7 @@
 import type { CSSProperties } from 'react';
 import {
   monthlyCashInOut,
+  type SandboxCashOutAmount,
   type SandboxCloseAmounts,
 } from '@/lib/cashbookSandbox/monthly';
 
@@ -40,6 +41,7 @@ function niceMax(n: number): number {
 
 type Props = {
   entries: SandboxCloseAmounts[];
+  cashOuts: SandboxCashOutAmount[];
   year: number;
   years: number[];
   onYear: (year: number) => void;
@@ -48,11 +50,12 @@ type Props = {
 /** Xero-style paired columns: cash in beside cash out, one pair per month. */
 export default function CashbookSandboxMonthChart({
   entries,
+  cashOuts,
   year,
   years,
   onYear,
 }: Props) {
-  const bars = monthlyCashInOut(entries, year);
+  const bars = monthlyCashInOut(entries, cashOuts, year);
   const peak = Math.max(...bars.map((bar) => Math.max(bar.cashIn, bar.cashOut)));
   const max = niceMax(peak);
   const yearIn = bars.reduce((sum, bar) => sum + bar.cashIn, 0);
@@ -204,7 +207,7 @@ export default function CashbookSandboxMonthChart({
 
       <p style={{ color: '#64748b', fontSize: '0.75rem', margin: '8px 0 0' }}>
         <span style={{ color: IN }}>■</span> In — EFTPOS plus cash banked.{' '}
-        <span style={{ color: OUT }}>■</span> Out — not recorded here yet.
+        <span style={{ color: OUT }}>■</span> Out — receipt totals.
       </p>
     </div>
   );

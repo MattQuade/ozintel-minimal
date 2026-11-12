@@ -40,6 +40,7 @@ type ReceiptRow = {
   linked: boolean;
   ledgerEntryIds: string[];
   url: string;
+  ledgerNo?: number;
   docket?: ReceiptDocketView | null;
 };
 
@@ -126,7 +127,7 @@ function ReceiptsLedger() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Delete failed');
       }
-      setReceipts((prev) => prev.filter((x) => x.id !== r.id));
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
     } finally {
@@ -203,8 +204,9 @@ function ReceiptsLedger() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Receipts</h1>
         <p className="text-slate-600 mt-1">
-          Photos captured from the home screen, with their captions. Use{' '}
-          <strong>Recrop</strong> on desktop to trim wasted space.
+          Numbered in the date order read off the receipt. Same day stays in
+          the order snapped. Use <strong>Recrop</strong> on desktop to trim
+          wasted space.
         </p>
       </div>
 
@@ -321,6 +323,11 @@ function ReceiptsLedger() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900 text-lg leading-tight">
+                    {r.ledgerNo != null ? (
+                      <span className="text-slate-500 tabular-nums">
+                        {r.ledgerNo}.{' '}
+                      </span>
+                    ) : null}
                     {caption}
                   </p>
                   {r.captionAmount != null ? (
@@ -334,8 +341,13 @@ function ReceiptsLedger() {
                       ) : null}
                     </p>
                   ) : null}
+                  {r.docket?.date ? (
+                    <p className="text-sm text-slate-600 mt-1">
+                      Receipt date {r.docket.date}
+                    </p>
+                  ) : null}
                   <p className="text-sm text-slate-500 mt-1">
-                    {formatWhen(r.uploadedAt)}
+                    Snapped {formatWhen(r.uploadedAt)}
                   </p>
                   <p className="text-sm mt-1">
                     {r.linked ? (

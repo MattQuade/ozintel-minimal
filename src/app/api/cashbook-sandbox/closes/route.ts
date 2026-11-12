@@ -5,6 +5,7 @@ import {
   listCashbookSandboxCloses,
   upsertCashbookSandboxClose,
 } from "@/lib/cashbookSandbox/store";
+import { listSandboxCashOuts } from "@/lib/cashbookSandbox/cashOut";
 import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
 
 export const runtime = "nodejs";
@@ -26,11 +27,13 @@ export async function GET(req: NextRequest) {
       });
     }
     const entries = await listCashbookSandboxCloses();
+    const cashOuts = await listSandboxCashOuts();
     return NextResponse.json({
       success: true,
       sandbox: true,
       today: sydneyTodayIso(),
       entries,
+      cashOuts,
     });
   });
 }

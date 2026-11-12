@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { prepareReceiptFileForOcr } from '@/lib/client/compressReceiptImage';
-import { yearsInCloses, type SandboxCloseAmounts } from '@/lib/cashbookSandbox/monthly';
+import {
+  yearsInCloses,
+  type SandboxCashOutAmount,
+  type SandboxCloseAmounts,
+} from '@/lib/cashbookSandbox/monthly';
 import {
   formatAuDayLong,
   sydneyTodayIso,
@@ -129,9 +133,11 @@ export default function CashbookSandboxNightly() {
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [entries, setEntries] = useState<SandboxCloseAmounts[]>([]);
+  const [cashOuts, setCashOuts] = useState<SandboxCashOutAmount[]>([]);
   const [chartYear, setChartYear] = useState(() =>
     Number(sydneyTodayIso().slice(0, 4))
   );
+  const [chartRefresh, setChartRefresh] = useState(0);
   const [reading, setReading] = useState<EftposSlot | null>(null);
   const readSlotRef = useRef<EftposSlot | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -146,11 +152,18 @@ export default function CashbookSandboxNightly() {
       .then((data) => {
         if (cancelled || !Array.isArray(data?.entries)) return;
         setEntries(data.entries);
+        setCashOuts(Array.isArray(data.cashOuts) ? data.cashOuts : []);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
+  }, [chartRefresh]);
+
+  useEffect(() => {
+    const onSaved = () => setChartRefresh((n) => n + 1);
+    window.addEventListener('ozintel-receipt-saved', onSaved);
+    return () => window.removeEventListener('ozintel-receipt-saved', onSaved);
   }, []);
 
   useEffect(() => {
@@ -319,14 +332,15 @@ export default function CashbookSandboxNightly() {
 
       <p style={{ ...label, marginBottom: 2 }}>Cashbook sandbox</p>
       <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 14px' }}>
-        Practice only — EFTPOS each night, cash only when you bank it. Does not
-        write the live ledger.
+        Practice only — EFTPOS and cash banked are money in. Snapped receipt
+        totals are money out. Does not write the live ledger.
       </p>
 
       <CashbookSandboxMonthChart
         entries={entries}
+        cashOuts={cashOuts}
         year={chartYear}
-        years={yearsInCloses(entries, chartYear)}
+        years={yearsInCloses(entries, cashOuts, chartYear)}
         onYear={setChartYear}
       />
 

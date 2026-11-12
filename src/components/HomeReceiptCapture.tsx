@@ -486,6 +486,7 @@ export default function HomeReceiptCapture() {
         caption: parsed.display,
         docket: docketRef.current || undefined,
       });
+      window.dispatchEvent(new Event('ozintel-receipt-saved'));
       const saved = parsed.display;
       setSavedCount((n) => n + 1);
       setStatus(`Saved ${saved} — next receipt`);

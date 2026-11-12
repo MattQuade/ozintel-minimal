@@ -28,6 +28,7 @@ function publicReceipt(r: ReceiptMeta) {
     ledgerEntryIds: linked,
     linked: linked.length > 0,
     url: receiptPublicUrl(r.id),
+    ledgerNo: r.ledgerNo,
     docket: publicReceiptDocket(r.docket),
   };
 }

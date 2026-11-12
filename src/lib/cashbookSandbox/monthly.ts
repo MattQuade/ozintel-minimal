@@ -8,6 +8,11 @@ export type SandboxCloseAmounts = {
   cashDeposit: number | null;
 };
 
+export type SandboxCashOutAmount = {
+  date: string;
+  amount: number;
+};
+
 export type MonthCashBar = {
   key: string;
   label: string;
@@ -46,11 +51,12 @@ function eftposTotal(entry: SandboxCloseAmounts): number {
 }
 
 /**
- * Twelve calendar months. Cash in is EFTPOS on the night plus cash on the day
- * it was banked. Cash out stays 0 — this sandbox does not record spending.
+ * Twelve calendar months. Cash in is EFTPOS on the night plus cash banked.
+ * Cash out is receipt totals copied into the sandbox, on the receipt date.
  */
 export function monthlyCashInOut(
   entries: SandboxCloseAmounts[],
+  cashOuts: SandboxCashOutAmount[],
   year: number
 ): MonthCashBar[] {
   const bars: MonthCashBar[] = MONTHS.map((label, i) => ({
@@ -76,11 +82,20 @@ export function monthlyCashInOut(
     }
   }
 
+  for (const spend of cashOuts) {
+    const key = monthKey(spend.date);
+    const amount = round2(Number(spend.amount) || 0);
+    if (amount <= 0 || !key || !byKey.has(key)) continue;
+    const bar = byKey.get(key)!;
+    bar.cashOut = round2(bar.cashOut + amount);
+  }
+
   return bars;
 }
 
 export function yearsInCloses(
   entries: SandboxCloseAmounts[],
+  cashOuts: SandboxCashOutAmount[],
   fallbackYear: number
 ): number[] {
   const years = new Set<number>([fallbackYear]);
@@ -89,6 +104,10 @@ export function yearsInCloses(
       if (!key) continue;
       years.add(Number(key.slice(0, 4)));
     }
+  }
+  for (const spend of cashOuts) {
+    const key = monthKey(spend.date);
+    if (key) years.add(Number(key.slice(0, 4)));
   }
   return [...years].filter((y) => Number.isFinite(y)).sort((a, b) => a - b);
 }
