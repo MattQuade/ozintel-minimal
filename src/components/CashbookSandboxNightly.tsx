@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { prepareReceiptFileForOcr } from '@/lib/client/compressReceiptImage';
+import { yearsInCloses, type SandboxCloseAmounts } from '@/lib/cashbookSandbox/monthly';
 import {
   formatAuDayLong,
   sydneyTodayIso,
 } from '@/lib/cashbookSandbox/sydneyDate';
+import CashbookSandboxMonthChart from '@/components/CashbookSandboxMonthChart';
 
 const box: CSSProperties = {
   width: '100%',
@@ -126,9 +128,30 @@ export default function CashbookSandboxNightly() {
   const [cashDeposit, setCashDeposit] = useState('');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [entries, setEntries] = useState<SandboxCloseAmounts[]>([]);
+  const [chartYear, setChartYear] = useState(() =>
+    Number(sydneyTodayIso().slice(0, 4))
+  );
   const [reading, setReading] = useState<EftposSlot | null>(null);
   const readSlotRef = useRef<EftposSlot | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/cashbook-sandbox/closes', {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.entries)) return;
+        setEntries(data.entries);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -241,6 +264,13 @@ export default function CashbookSandboxNightly() {
         setStatus(data.error || 'Could not save sandbox totals');
         return;
       }
+      if (data.entry) {
+        const saved = data.entry as SandboxCloseAmounts;
+        setEntries((prev) => [
+          ...prev.filter((row) => row.eftposDate !== saved.eftposDate),
+          saved,
+        ]);
+      }
       setStatus('Saved in cashbook sandbox (not live books)');
     } catch {
       setStatus('Could not save sandbox totals');
@@ -292,6 +322,13 @@ export default function CashbookSandboxNightly() {
         Practice only — EFTPOS each night, cash only when you bank it. Does not
         write the live ledger.
       </p>
+
+      <CashbookSandboxMonthChart
+        entries={entries}
+        year={chartYear}
+        years={yearsInCloses(entries, chartYear)}
+        onYear={setChartYear}
+      />
 
       <p style={label}>EFTPOS totals</p>
       <p style={dateLine}>{formatAuDayLong(eftposDate)}</p>

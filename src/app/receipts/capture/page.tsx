@@ -24,8 +24,8 @@ export default function CaptureReceiptPage() {
       >
         <h1 style={{ color: '#f97316', marginBottom: 8 }}>Capture Receipt</h1>
         <p style={{ color: '#94a3b8', margin: '0 0 20px' }}>
-          Nightly EFTPOS and cash banked sit in the sandbox above. Receipts snap
-          below as usual.
+          Nightly EFTPOS and cash banked sit in the sandbox above, with month
+          bars for cash in and out. Receipts snap below as usual.
         </p>
         <CashbookSandboxNightly />
         <div
