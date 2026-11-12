@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { checkAccountingAccess } from "@/lib/accounting/access";
 import AccountingPinLock from "@/components/AccountingPinLock";
-import HomeReceiptCapture from "@/components/HomeReceiptCapture";
 import VoiceNavBar from "@/components/VoiceNavBar";
 
 const previewLinks = [
+  {
+    href: "/accounting/pending?module=Accounting&section=Capture%20Receipt",
+    label: "Capture Receipt",
+  },
   { href: "/accounting/pending?module=Accounting&section=Bank", label: "Bank" },
   {
     href: "/accounting/pending?module=Accounting&section=Chart%20of%20Accounts",
@@ -51,6 +54,7 @@ const previewLinks = [
 ];
 
 const fullLinks = [
+  { href: "/receipts/capture", label: "Capture Receipt" },
   { href: "/bank/accounts", label: "Bank" },
   { href: "/coa", label: "Chart of Accounts" },
   { href: "/accounting/shops", label: "Suppliers" },
@@ -146,7 +150,6 @@ export default function AccountingHubPage() {
           marginTop: 24,
         }}
       >
-        {hasAccess ? <HomeReceiptCapture /> : null}
         {links.map((link) => (
           <a
             key={link.href}
