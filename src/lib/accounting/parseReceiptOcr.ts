@@ -167,12 +167,20 @@ function maskNonMoney(line: string): string {
     .replace(/\b0\d[\s-]?\d{4}[\s-]?\d{4}\b/g, " ");
 }
 
+/** "$1,234.56" is one amount. "65,22" stays a decimal comma for the matcher. */
+function expandThousands(line: string): string {
+  return line.replace(
+    /(\d{1,3}(?:,\d{3})+)\.(\d{2})\b/g,
+    (_m, whole: string, frac: string) => `${whole.replace(/,/g, "")}.${frac}`
+  );
+}
+
 function moneyMatchesInLine(
   line: string,
   opts?: { integerCents?: boolean; decimalsOnly?: boolean }
 ): Array<{ amount: number; index: number }> {
   const out: Array<{ amount: number; index: number }> = [];
-  const masked = maskNonMoney(line);
+  const masked = maskNonMoney(expandThousands(line));
   const re = /\$?\s*(\d{1,5})\s*[.,]\s*(\d{2})\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(masked)) !== null) {
@@ -228,6 +236,71 @@ function lastUsableMoneyFromBottom(text: string): number | null {
   };
 
   return scan(true) ?? scan(false);
+}
+
+/**
+ * Nightly terminal settlement. Prefer the settlement / grand total over a
+ * later card-scheme split. Shop receipts do not use this.
+ */
+/** Terminal close-out slip, not a customer purchase docket. */
+export function isEftposSettlementSlip(text: string): boolean {
+  const raw = normalizeOcrNoise(text).toLowerCase();
+  if (/\bsettlement\b/.test(raw)) return true;
+  if (detectMerchantFromOcr(text)) return false;
+  return /\b(end of day|terminal totals|batch total|z report)\b/.test(raw);
+}
+
+export function detectEftposSettlementAmount(text: string): number | null {
+  const lines = normalizeOcrNoise(text)
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const hits: Array<{ amount: number; rank: number; line: number }> = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const here = moneyMatchesInLine(lines[i]);
+    const below = lines[i + 1] ? moneyMatchesInLine(lines[i + 1]) : [];
+    const amounts = here.length ? here : below;
+    if (!amounts.length) continue;
+    const label = (here.length ? lines[i] : `${lines[i]} ${lines[i + 1] || ""}`)
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    let rank = 0;
+    if (
+      /\b(grand total|net total|settlement total|total sales|sales total)\b/.test(
+        label
+      )
+    ) {
+      rank = 5;
+    } else if (/\bsettlement\b/.test(label)) {
+      rank = 4;
+    } else if (
+      /\btotal\b/.test(label) &&
+      !/\bsub ?total\b/.test(label) &&
+      !/\b[a-z]+ total\b/.test(label)
+    ) {
+      rank = 4;
+    } else if (/\bpurchase\b/.test(label)) {
+      rank = 3;
+    } else if (/\btotal\b/.test(label) && !/\bsub ?total\b/.test(label)) {
+      rank = 1;
+    }
+    if (!rank) continue;
+    for (const { amount } of amounts) {
+      if (amount < 1) continue;
+      hits.push({ amount, rank, line: i });
+    }
+  }
+
+  if (!hits.length) return lastUsableMoneyFromBottom(text);
+  const top = Math.max(...hits.map((h) => h.rank));
+  const pool = hits.filter((h) => h.rank === top);
+  if (top <= 1) {
+    return pool.reduce((a, b) => (a.amount >= b.amount ? a : b)).amount;
+  }
+  const lastLine = Math.max(...pool.map((h) => h.line));
+  const onLast = pool.filter((h) => h.line === lastLine);
+  return onLast.reduce((a, b) => (a.amount >= b.amount ? a : b)).amount;
 }
 
 function chipsFromAmount(amount: number, score: number): ReceiptAmountCandidate[] {

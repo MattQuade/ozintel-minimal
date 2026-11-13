@@ -347,6 +347,28 @@ export default function HomeReceiptCapture() {
           return;
         }
 
+        const settlementAmount = Number(data.suggestion?.amount);
+        if (
+          data.eftposSettlement &&
+          Number.isFinite(settlementAmount) &&
+          settlementAmount > 0
+        ) {
+          const detail = { amount: settlementAmount, handled: false };
+          window.dispatchEvent(
+            new CustomEvent('ozintel-eftpos-settlement', { detail })
+          );
+          if (detail.handled) {
+            setHint('');
+            resetPhoto();
+            if (streamRef.current) setPhase('live');
+            else setPhase('idle');
+            setStatus(
+              `EFTPOS $${settlementAmount.toFixed(2)} added to cash in`
+            );
+            return;
+          }
+        }
+
         const choices: number[] = [];
         for (const row of data.amountCandidates || []) {
           const n = Number(row.amount ?? row);

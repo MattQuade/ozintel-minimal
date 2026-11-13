@@ -5,7 +5,10 @@
 
 import { chooseReceiptOcr, suggestionFromMerchantAndAmount } from "@/lib/accounting/ocrChoose";
 import { findLastInkRow } from "@/lib/accounting/ocrReceipt";
-import { parseReceiptOcrText } from "@/lib/accounting/parseReceiptOcr";
+import {
+  detectEftposSettlementAmount,
+  parseReceiptOcrText,
+} from "@/lib/accounting/parseReceiptOcr";
 import {
   parseTextractExpense,
   parseTextractQueries,
@@ -501,6 +504,52 @@ TOTAL $87.40
     eq("docket line 1", withLines.docket.lineItems[0]?.description, "Full cream milk 2L")
   );
   checks.push(eq("docket line 1 amount", withLines.docket.lineItems[0]?.amount, 4.5));
+
+  checks.push(
+    eq(
+      "eftpos thousands total",
+      detectEftposSettlementAmount(`
+SETTLEMENT
+PURCHASE 42 $1,234.56
+VISA TOTAL $800.00
+MASTERCARD TOTAL $434.56
+TOTAL $1,234.56
+`),
+      1234.56
+    )
+  );
+  checks.push(
+    eq(
+      "eftpos grand total before splits",
+      detectEftposSettlementAmount(`
+GRAND TOTAL $2,100.00
+VISA TOTAL $1,200.00
+MC TOTAL $900.00
+`),
+      2100
+    )
+  );
+  checks.push(
+    eq(
+      "eftpos purchase over later scheme",
+      detectEftposSettlementAmount(`
+PURCHASE $1,234.56
+VISA TOTAL $800.00
+`),
+      1234.56
+    )
+  );
+  checks.push(
+    eq(
+      "shop total still last paid line",
+      parseReceiptOcrText(`
+Woolworths
+TOTAL $1,234.56
+EFTPOS $1,234.56
+`)?.amount,
+      1234.56
+    )
+  );
 
   return checks;
 }

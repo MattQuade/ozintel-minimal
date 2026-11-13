@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAccountingAccess } from "@/lib/accounting/requireAccess";
 import { readReceiptImage } from "@/lib/accounting/ocrReceipt";
+import {
+  detectEftposSettlementAmount,
+  isEftposSettlementSlip,
+} from "@/lib/accounting/parseReceiptOcr";
 import { publicReceiptDocket } from "@/lib/accounting/receiptDocket";
 
 export const runtime = "nodejs";
@@ -54,8 +58,9 @@ export async function POST(req: NextRequest) {
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
+      const kind = String(form.get("kind") || "").toLowerCase();
       const ocrMs = 22_000;
-      const { suggestion, text, docket, engine } = await Promise.race([
+      const read = await Promise.race([
         readReceiptImage(buffer),
         new Promise<never>((_, reject) => {
           setTimeout(
@@ -69,12 +74,39 @@ export async function POST(req: NextRequest) {
           );
         }),
       ]);
+      let suggestion = read.suggestion;
+      const { text, docket, engine } = read;
+      const settled = detectEftposSettlementAmount(text);
+      const eftposSettlement =
+        isEftposSettlementSlip(text) && settled != null && settled > 0;
+      if (kind === "eftpos" || eftposSettlement) {
+        if (settled != null && settled > 0) {
+          suggestion = suggestion
+            ? {
+                ...suggestion,
+                amount: settled,
+                lockAmount: true,
+                amountCandidates: [{ amount: settled, score: 90 }],
+              }
+            : {
+                alias: "",
+                amount: settled,
+                display: "",
+                merchantLabel: "",
+                confidence: "medium",
+                lockAmount: true,
+                rawPreview: text.slice(0, 240),
+                amountCandidates: [{ amount: settled, score: 90 }],
+              };
+        }
+      }
 
       if (!suggestion) {
         return NextResponse.json({
           success: true,
           suggestion: null,
           amountCandidates: [],
+          eftposSettlement: false,
           docket: publicReceiptDocket(docket),
           engine,
           message: "Could not read merchant and total — pick from the list",
@@ -93,6 +125,7 @@ export async function POST(req: NextRequest) {
           lockAmount: Boolean(suggestion.lockAmount),
         },
         amountCandidates: suggestion.amountCandidates || [],
+        eftposSettlement,
         docket: publicReceiptDocket(docket),
         engine,
       });

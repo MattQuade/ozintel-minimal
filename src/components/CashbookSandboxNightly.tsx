@@ -162,7 +162,11 @@ export default function CashbookSandboxNightly() {
   );
   const [chartRefresh, setChartRefresh] = useState(0);
   const [reading, setReading] = useState<EftposSlot | null>(null);
+  const [cameraSlot, setCameraSlot] = useState<EftposSlot | null>(null);
   const readSlotRef = useRef<EftposSlot | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const openingRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -213,21 +217,161 @@ export default function CashbookSandboxNightly() {
     };
   }, [eftposDate]);
 
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraSlot(null);
+  };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!cameraSlot || !video || !stream) return;
+    video.srcObject = stream;
+    void video.play().catch(() => undefined);
+    video.scrollIntoView({ block: 'center' });
+  }, [cameraSlot]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
   const setSlot = (slot: EftposSlot, value: string) => {
     if (slot === 1) setEftpos1(value);
     else if (slot === 2) setEftpos2(value);
     else setEftpos3(value);
   };
 
-  const startRead = (slot: EftposSlot) => {
-    readSlotRef.current = slot;
-    setReading(slot);
+  const startRead = async (slot: EftposSlot) => {
+    if (openingRef.current || reading != null) return;
+    openingRef.current = true;
     setStatus('');
-    fileRef.current?.click();
+    try {
+      stopCamera();
+      if (navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1920 },
+            },
+          });
+          streamRef.current = stream;
+          readSlotRef.current = slot;
+          setCameraSlot(slot);
+          return;
+        } catch {
+          streamRef.current = null;
+        }
+      }
+      readSlotRef.current = slot;
+      if (fileRef.current) fileRef.current.value = '';
+      fileRef.current?.click();
+    } finally {
+      openingRef.current = false;
+    }
   };
 
-  const onReadFile = async (file: File | null) => {
-    const slot = readSlotRef.current;
+  const captureVideoFrame = async (video: HTMLVideoElement): Promise<File> => {
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 960;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not capture this photo');
+    ctx.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('Could not capture this photo'))),
+        'image/jpeg',
+        0.92
+      );
+    });
+    return new File([blob], 'eftpos.jpg', {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    });
+  };
+
+  const snapEftpos = async () => {
+    const video = videoRef.current;
+    const slot = cameraSlot;
+    if (!video || !slot || reading != null) return;
+    try {
+      const file = await captureVideoFrame(video);
+      stopCamera();
+      await onReadFile(file, slot);
+    } catch {
+      setReading(null);
+      setStatus('Could not capture this photo — type the total instead');
+    }
+  };
+
+  const saveNight = async (slots: Record<EftposSlot, string>) => {
+    const res = await fetch('/api/cashbook-sandbox/closes', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eftposDate,
+        eftpos1: parseMoney(slots[1]),
+        eftpos2: parseMoney(slots[2]),
+        eftpos3: parseMoney(slots[3]),
+        cashDepositDate: cashDeposit.trim() ? cashDate : null,
+        cashDeposit: parseMoney(cashDeposit),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Could not save sandbox totals');
+    }
+    if (data.entry) {
+      const saved = data.entry as SandboxCloseAmounts;
+      setEntries((prev) => [
+        ...prev.filter((row) => row.eftposDate !== saved.eftposDate),
+        saved,
+      ]);
+    }
+  };
+
+  useEffect(() => {
+    const onSettle = (ev: Event) => {
+      const detail = (
+        ev as CustomEvent<{ amount?: number; handled?: boolean }>
+      ).detail;
+      const amount = Number(detail?.amount);
+      if (!detail || !Number.isFinite(amount) || amount <= 0) return;
+      const slots: Record<EftposSlot, string> = {
+        1: eftpos1,
+        2: eftpos2,
+        3: eftpos3,
+      };
+      const empty = ([1, 2, 3] as EftposSlot[]).find(
+        (slot) => parseMoney(slots[slot]) == null
+      );
+      const slot: EftposSlot = empty || 3;
+      slots[slot] = moneyText(amount);
+      setSlot(slot, slots[slot]);
+      detail.handled = true;
+      void saveNight(slots)
+        .then(() =>
+          setStatus(`EFTPOS ${slot} $${amount.toFixed(2)} added to cash in`)
+        )
+        .catch(() =>
+          setStatus('Could not save the EFTPOS total — it is in the box')
+        );
+    };
+    window.addEventListener('ozintel-eftpos-settlement', onSettle);
+    return () => window.removeEventListener('ozintel-eftpos-settlement', onSettle);
+  }, [eftpos1, eftpos2, eftpos3, eftposDate, cashDate, cashDeposit]);
+
+  const onReadFile = async (file: File | null, slot: EftposSlot | null) => {
     readSlotRef.current = null;
     if (!file || !slot) {
       setReading(null);
@@ -239,6 +383,7 @@ export default function CashbookSandboxNightly() {
       const forOcr = await prepareReceiptFileForOcr(file);
       const form = new FormData();
       form.append('file', forOcr, 'eftpos.jpg');
+      form.append('kind', 'eftpos');
       const res = await fetch('/api/ledger/receipts/read', {
         method: 'POST',
         body: form,
@@ -270,8 +415,23 @@ export default function CashbookSandboxNightly() {
         setStatus('Could not read a total — type it in the box');
         return;
       }
-      setSlot(slot, moneyText(amount));
-      setStatus(`EFTPOS ${slot} set to $${amount.toFixed(2)} from photo`);
+      const slots: Record<EftposSlot, string> = {
+        1: eftpos1,
+        2: eftpos2,
+        3: eftpos3,
+      };
+      slots[slot] = moneyText(amount);
+      setSlot(slot, slots[slot]);
+      try {
+        await saveNight(slots);
+        setStatus(`EFTPOS ${slot} $${amount.toFixed(2)} added to cash in`);
+      } catch (err) {
+        setStatus(
+          err instanceof Error
+            ? `${err.message}. The total is in the box — press Save sandbox night`
+            : 'Could not save. The total is in the box — press Save sandbox night'
+        );
+      }
     } catch {
       setStatus('Could not read — type the total instead');
     } finally {
@@ -404,7 +564,7 @@ export default function CashbookSandboxNightly() {
             opacity: reading != null && reading !== slot ? 0.6 : 1,
           }}
         >
-          {reading === slot ? 'Reading…' : 'Read'}
+          {reading === slot ? 'Reading…' : 'Capture'}
         </button>
       </div>
     </div>
@@ -426,7 +586,9 @@ export default function CashbookSandboxNightly() {
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => void onReadFile(e.target.files?.[0] || null)}
+        onChange={(e) =>
+          void onReadFile(e.target.files?.[0] || null, readSlotRef.current)
+        }
         style={sr}
       />
 
@@ -447,6 +609,9 @@ export default function CashbookSandboxNightly() {
       />
 
       <p style={label}>EFTPOS totals</p>
+      <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 8px' }}>
+        Capture the settlement slip. The total is added to cash in.
+      </p>
       <p style={dateLine}>{formatAuDayLong(eftposDate)}</p>
       <label style={{ ...fieldLabel, display: 'block' }}>
         Change night
@@ -457,6 +622,46 @@ export default function CashbookSandboxNightly() {
           style={inputStyle}
         />
       </label>
+      {cameraSlot ? (
+        <div style={{ marginBottom: 12 }}>
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            style={{
+              width: '100%',
+              maxHeight: 280,
+              objectFit: 'cover',
+              borderRadius: 8,
+              background: '#020617',
+              border: '1px solid #334155',
+              marginBottom: 8,
+            }}
+          />
+          <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 8px' }}>
+            Line up the EFTPOS {cameraSlot} settlement, then snap.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={stopCamera} style={readBtn}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void snapEftpos()}
+              disabled={reading != null}
+              style={{
+                ...readBtn,
+                flex: 1,
+                background: '#ea580c',
+                opacity: reading != null ? 0.7 : 1,
+              }}
+            >
+              {reading === cameraSlot ? 'Snapping…' : 'Snap'}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {eftposField(1, eftpos1)}
       {eftposField(2, eftpos2)}
       {eftposField(3, eftpos3)}
