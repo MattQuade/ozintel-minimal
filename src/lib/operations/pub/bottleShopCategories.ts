@@ -1,7 +1,8 @@
 /** Public bottle shop shelves — keep this list tiny and fixed. */
 export const BOTTLE_SHOP_CATEGORIES = [
   { slug: "beer", label: "Beer" },
-  { slug: "wine", label: "Wine" },
+  { slug: "wine", label: "Australian Wine" },
+  { slug: "french-wine", label: "French Wine" },
   { slug: "cider", label: "Cider" },
   { slug: "rtds", label: "RTDs" },
   { slug: "cruisers", label: "Cruisers" },
@@ -15,6 +16,15 @@ export function isBottleCategory(value: string): value is BottleCategory {
 
 export function bottleCategoryLabel(slug: string): string {
   return BOTTLE_SHOP_CATEGORIES.find((c) => c.slug === slug)?.label || slug;
+}
+
+/** Médoc and Chantemerle belong on the French Wine shelf. */
+export function isFrenchShelfWine(name: string): boolean {
+  const folded = String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return folded.includes("medoc") || folded.includes("chantemerle");
 }
 
 /** Resolve category from stored value, else light name/id hints. */
@@ -35,6 +45,7 @@ export function normalizeBottleCategory(
     .toLowerCase();
   const blob = `${id} ${name}`;
 
+  if (isFrenchShelfWine(name) || isFrenchShelfWine(id)) return "french-wine";
   if (id.startsWith("wine") || /\bwine\b|shiraz|cabernet|merlot|pinot|chardonnay|sauvignon|riesling|ros[eé]|sparkling|moscato/.test(blob)) {
     return "wine";
   }

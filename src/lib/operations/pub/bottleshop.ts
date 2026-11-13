@@ -8,6 +8,7 @@ import {
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
 import {
+  isFrenchShelfWine,
   normalizeBottleCategory,
   type BottleCategory,
 } from "@/lib/operations/pub/bottleShopCategories";
@@ -200,12 +201,38 @@ async function maybeSeedFromRepo() {
   }
 }
 
+/** Move Médoc and Chantemerle off Australian Wine. Writes only while they are still there. */
+function moveFrenchWines(products: unknown): boolean {
+  if (!Array.isArray(products)) return false;
+  let changed = false;
+  for (const row of products) {
+    if (!row || typeof row !== "object") continue;
+    const product = row as { name?: unknown; category?: unknown };
+    if (!isFrenchShelfWine(String(product.name || ""))) continue;
+    const category = String(product.category || "")
+      .trim()
+      .toLowerCase();
+    if (category === "french-wine") continue;
+    if (category && category !== "wine") continue;
+    product.category = "french-wine";
+    changed = true;
+  }
+  return changed;
+}
+
 async function readStore(): Promise<BottleShopStore> {
   await ensureDirs();
   await maybeSeedFromRepo();
   try {
     const raw = await fs.readFile(getBottleShopFilePath(), "utf8");
     const parsed = JSON.parse(raw || "{}") as Partial<BottleShopStore>;
+    if (moveFrenchWines(parsed.products)) {
+      await fs.writeFile(
+        getBottleShopFilePath(),
+        JSON.stringify(parsed, null, 2),
+        "utf8"
+      );
+    }
     const products = Array.isArray(parsed.products)
       ? parsed.products
           .map((p) => normalizeProduct(p))
