@@ -115,6 +115,13 @@ type MiscPayment = {
   date: string;
 };
 
+type InvoicePayment = {
+  id: string;
+  customer: string;
+  amount: number;
+  date: string;
+};
+
 function moneyText(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '';
   return String(n);
@@ -140,7 +147,10 @@ export default function CashbookSandboxNightly() {
   const [cashDeposit, setCashDeposit] = useState('');
   const [miscPayee, setMiscPayee] = useState('');
   const [miscAmount, setMiscAmount] = useState('');
+  const [invoiceCustomer, setInvoiceCustomer] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState('');
   const [payments, setPayments] = useState<MiscPayment[]>([]);
+  const [invoices, setInvoices] = useState<InvoicePayment[]>([]);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [entries, setEntries] = useState<SandboxCloseAmounts[]>([]);
@@ -165,6 +175,7 @@ export default function CashbookSandboxNightly() {
         setEntries(data.entries);
         setCashOuts(Array.isArray(data.cashOuts) ? data.cashOuts : []);
         setPayments(Array.isArray(data.miscPayments) ? data.miscPayments : []);
+        setInvoices(Array.isArray(data.invoices) ? data.invoices : []);
       })
       .catch(() => undefined);
     return () => {
@@ -270,12 +281,22 @@ export default function CashbookSandboxNightly() {
   const save = async () => {
     const payee = miscPayee.trim();
     const paid = parseMoney(miscAmount);
+    const customer = invoiceCustomer.trim();
+    const invoiced = parseMoney(invoiceAmount);
     if (payee && (paid == null || paid <= 0)) {
       setStatus('Enter the amount paid');
       return;
     }
     if (!payee && miscAmount.trim()) {
       setStatus('Enter who was paid');
+      return;
+    }
+    if (customer && (invoiced == null || invoiced <= 0)) {
+      setStatus('Enter the invoice amount');
+      return;
+    }
+    if (!customer && invoiceAmount.trim()) {
+      setStatus('Enter the customer');
       return;
     }
     setSaving(true);
@@ -294,6 +315,8 @@ export default function CashbookSandboxNightly() {
           cashDeposit: parseMoney(cashDeposit),
           miscPayee: payee,
           miscAmount: paid,
+          invoiceCustomer: customer,
+          invoiceAmount: invoiced,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -308,15 +331,31 @@ export default function CashbookSandboxNightly() {
           saved,
         ]);
       }
+      const notes: string[] = [];
       if (data.miscPayment?.id) {
         const savedPay = data.miscPayment as MiscPayment;
         setPayments((prev) => [savedPay, ...prev.filter((row) => row.id !== savedPay.id)]);
         setMiscPayee('');
         setMiscAmount('');
-        setStatus(`${savedPay.payee} $${savedPay.amount.toFixed(2)} saved for today`);
-      } else {
-        setStatus('Saved in cashbook sandbox (not live books)');
+        notes.push(`${savedPay.payee} $${savedPay.amount.toFixed(2)} saved for today`);
       }
+      if (data.invoice?.id) {
+        const savedInvoice = data.invoice as InvoicePayment;
+        setInvoices((prev) => [
+          savedInvoice,
+          ...prev.filter((row) => row.id !== savedInvoice.id),
+        ]);
+        setInvoiceCustomer('');
+        setInvoiceAmount('');
+        notes.push(
+          `${savedInvoice.customer} $${savedInvoice.amount.toFixed(2)} invoice saved for today`
+        );
+      }
+      setStatus(
+        notes.length > 0
+          ? notes.join('. ')
+          : 'Saved in cashbook sandbox (not live books)'
+      );
     } catch {
       setStatus('Could not save sandbox totals');
     } finally {
@@ -324,20 +363,24 @@ export default function CashbookSandboxNightly() {
     }
   };
 
-  const removePayment = async (id: string) => {
+  const removeRow = async (kind: 'payment' | 'invoice', id: string) => {
     setStatus('');
     try {
       const res = await fetch(
-        `/api/cashbook-sandbox/closes?id=${encodeURIComponent(id)}`,
+        `/api/cashbook-sandbox/closes?id=${encodeURIComponent(id)}&kind=${kind}`,
         { method: 'DELETE', credentials: 'include', cache: 'no-store' }
       );
       if (!res.ok) {
-        setStatus('Could not remove that payment');
+        setStatus(kind === 'invoice' ? 'Could not remove that invoice' : 'Could not remove that payment');
         return;
       }
-      setPayments((prev) => prev.filter((row) => row.id !== id));
+      if (kind === 'invoice') {
+        setInvoices((prev) => prev.filter((row) => row.id !== id));
+      } else {
+        setPayments((prev) => prev.filter((row) => row.id !== id));
+      }
     } catch {
-      setStatus('Could not remove that payment');
+      setStatus(kind === 'invoice' ? 'Could not remove that invoice' : 'Could not remove that payment');
     }
   };
 
@@ -372,6 +415,10 @@ export default function CashbookSandboxNightly() {
     ...cashOuts,
     ...payments.map((pay) => ({ date: pay.date, amount: pay.amount })),
   ];
+  const invoiceIns = invoices.map((row) => ({
+    date: row.date,
+    amount: row.amount,
+  }));
 
   return (
     <section style={box} aria-label="Cashbook sandbox nightly totals">
@@ -386,15 +433,17 @@ export default function CashbookSandboxNightly() {
 
       <p style={{ ...label, marginBottom: 2 }}>Cashbook sandbox</p>
       <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 14px' }}>
-        Practice only — EFTPOS and cash banked are money in. Snapped receipts
-        and misc payments are money out. Does not write the live ledger.
+        Practice only — EFTPOS, cash banked, and wholesale invoices are money
+        in. Snapped receipts and misc payments are money out. Does not write
+        the live ledger.
       </p>
 
       <CashbookSandboxMonthChart
         entries={entries}
         cashOuts={moneyOut}
+        cashIns={invoiceIns}
         year={chartYear}
-        years={yearsInCloses(entries, moneyOut, chartYear)}
+        years={yearsInCloses(entries, moneyOut, chartYear, invoiceIns)}
         onYear={setChartYear}
       />
 
@@ -472,7 +521,55 @@ export default function CashbookSandboxNightly() {
               </span>
               <button
                 type="button"
-                onClick={() => void removePayment(pay.id)}
+                onClick={() => void removeRow('payment', pay.id)}
+                style={{ ...readBtn, padding: '6px 8px' }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <p style={fieldLabel}>Invoices</p>
+      <input
+        type="text"
+        placeholder="Customer"
+        value={invoiceCustomer}
+        onChange={(e) => setInvoiceCustomer(e.target.value)}
+        style={inputStyle}
+        aria-label="Invoices"
+      />
+      <p style={fieldLabel}>Amount</p>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={invoiceAmount}
+        onChange={(e) => setInvoiceAmount(e.target.value)}
+        style={inputStyle}
+        aria-label="Invoice amount"
+      />
+      {invoices.length > 0 ? (
+        <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0 }}>
+          {invoices.slice(0, 20).map((row) => (
+            <li
+              key={row.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 6,
+                color: '#e2e8f0',
+                fontSize: '0.9rem',
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                {row.customer} ${row.amount.toFixed(2)} · {formatAuDay(row.date)}
+              </span>
+              <button
+                type="button"
+                onClick={() => void removeRow('invoice', row.id)}
                 style={{ ...readBtn, padding: '6px 8px' }}
               >
                 Remove

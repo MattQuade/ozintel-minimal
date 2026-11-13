@@ -42,6 +42,7 @@ function niceMax(n: number): number {
 type Props = {
   entries: SandboxCloseAmounts[];
   cashOuts: SandboxCashOutAmount[];
+  cashIns?: SandboxCashOutAmount[];
   year: number;
   years: number[];
   onYear: (year: number) => void;
@@ -51,11 +52,12 @@ type Props = {
 export default function CashbookSandboxMonthChart({
   entries,
   cashOuts,
+  cashIns = [],
   year,
   years,
   onYear,
 }: Props) {
-  const bars = monthlyCashInOut(entries, cashOuts, year);
+  const bars = monthlyCashInOut(entries, cashOuts, year, cashIns);
   const peak = Math.max(...bars.map((bar) => Math.max(bar.cashIn, bar.cashOut)));
   const max = niceMax(peak);
   const yearIn = bars.reduce((sum, bar) => sum + bar.cashIn, 0);

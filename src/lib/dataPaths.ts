@@ -151,6 +151,11 @@ export function getCashbookSandboxMiscPaymentsPath(): string {
   return path.join(getCashbookSandboxDir(), "misc-payments.json");
 }
 
+/** Wholesale draught invoices typed in the sandbox. Not the live ledger. */
+export function getCashbookSandboxInvoicesPath(): string {
+  return path.join(getCashbookSandboxDir(), "invoices.json");
+}
+
 /**
  * Decision Brief (layer-3 BI) — separate silo from accounting/ops.
  * Pulls read-only signals from accounting; stores briefs, retailer links, scans.

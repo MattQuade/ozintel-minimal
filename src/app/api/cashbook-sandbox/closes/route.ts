@@ -11,7 +11,26 @@ import {
   listSandboxMiscPayments,
   removeSandboxMiscPayment,
 } from "@/lib/cashbookSandbox/miscPayments";
+import {
+  addSandboxInvoice,
+  listSandboxInvoices,
+  removeSandboxInvoice,
+} from "@/lib/cashbookSandbox/invoices";
 import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
+
+function pairError(
+  name: string,
+  rawAmount: unknown,
+  missingName: string,
+  missingAmount: string
+): string | null {
+  const hasAmount = rawAmount != null && String(rawAmount).trim() !== "";
+  const amount = Number(rawAmount);
+  if (!name && !hasAmount) return null;
+  if (!name) return missingName;
+  if (!hasAmount || !Number.isFinite(amount) || amount <= 0) return missingAmount;
+  return null;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +53,7 @@ export async function GET(req: NextRequest) {
     const entries = await listCashbookSandboxCloses();
     const cashOuts = await listSandboxCashOuts();
     const miscPayments = await listSandboxMiscPayments();
+    const invoices = await listSandboxInvoices();
     return NextResponse.json({
       success: true,
       sandbox: true,
@@ -41,6 +61,7 @@ export async function GET(req: NextRequest) {
       entries,
       cashOuts,
       miscPayments,
+      invoices,
     });
   });
 }
@@ -60,19 +81,22 @@ export async function POST(req: NextRequest) {
       );
     }
     const payee = String(body.miscPayee || "").trim();
-    const hasAmount =
-      body.miscAmount != null && String(body.miscAmount).trim() !== "";
-    const miscAmount = Number(body.miscAmount);
-    if (
-      (payee && !hasAmount) ||
-      (!payee && hasAmount) ||
-      (payee && hasAmount && (!Number.isFinite(miscAmount) || miscAmount <= 0))
-    ) {
+    const customer = String(body.invoiceCustomer || "").trim();
+    const payError = pairError(
+      payee,
+      body.miscAmount,
+      "Enter who was paid",
+      "Enter the amount paid"
+    );
+    const invoiceError = pairError(
+      customer,
+      body.invoiceAmount,
+      "Enter the customer",
+      "Enter the invoice amount"
+    );
+    if (payError || invoiceError) {
       return NextResponse.json(
-        {
-          success: false,
-          error: payee ? "Enter the amount paid" : "Enter who was paid",
-        },
+        { success: false, error: payError || invoiceError },
         { status: 400 }
       );
     }
@@ -84,18 +108,24 @@ export async function POST(req: NextRequest) {
       cashDepositDate: body.cashDepositDate,
       cashDeposit: body.cashDeposit,
     });
-    const miscPayment =
-      payee && hasAmount
-        ? await addSandboxMiscPayment({
-            payee,
-            amount: body.miscAmount,
-          })
-        : null;
+    const miscPayment = payee
+      ? await addSandboxMiscPayment({
+          payee,
+          amount: body.miscAmount,
+        })
+      : null;
+    const invoice = customer
+      ? await addSandboxInvoice({
+          customer,
+          amount: body.invoiceAmount,
+        })
+      : null;
     return NextResponse.json({
       success: true,
       sandbox: true,
       entry,
       miscPayment,
+      invoice,
     });
   });
 }
@@ -106,7 +136,11 @@ export async function DELETE(req: NextRequest) {
   if (!access.ok) return access.response;
   return access.run(async () => {
     const id = req.nextUrl.searchParams.get("id")?.trim() || "";
-    const removed = await removeSandboxMiscPayment(id);
+    const kind = req.nextUrl.searchParams.get("kind")?.trim() || "";
+    const removed =
+      kind === "invoice"
+        ? await removeSandboxInvoice(id)
+        : await removeSandboxMiscPayment(id);
     if (!removed) {
       return NextResponse.json(
         { success: false, error: "Payment not found" },
