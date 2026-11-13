@@ -18,13 +18,25 @@ export function bottleCategoryLabel(slug: string): string {
   return BOTTLE_SHOP_CATEGORIES.find((c) => c.slug === slug)?.label || slug;
 }
 
-/** Médoc and Chantemerle belong on the French Wine shelf. */
-export function isFrenchShelfWine(name: string): boolean {
-  const folded = String(name || "")
+function foldShelfName(name: string): string {
+  return String(name || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+/** Médoc and Chantemerle belong on the French Wine shelf. */
+export function isFrenchShelfWine(name: string): boolean {
+  const folded = foldShelfName(name);
   return folded.includes("medoc") || folded.includes("chantemerle");
+}
+
+/** The $29 Bordeaux Supérieur still filed under Australian Wine. */
+export function isBordeauxSuperieurAt29(name: string, price: unknown): boolean {
+  const folded = foldShelfName(name);
+  if (!folded.includes("bordeaux") || !folded.includes("superieur")) return false;
+  const n = Number(price);
+  return Number.isFinite(n) && Math.abs(n - 29) < 0.001;
 }
 
 /** Resolve category from stored value, else light name/id hints. */

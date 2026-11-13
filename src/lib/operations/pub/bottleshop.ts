@@ -8,6 +8,7 @@ import {
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
 import {
+  isBordeauxSuperieurAt29,
   isFrenchShelfWine,
   normalizeBottleCategory,
   type BottleCategory,
@@ -201,14 +202,15 @@ async function maybeSeedFromRepo() {
   }
 }
 
-/** Move Médoc and Chantemerle off Australian Wine. Writes only while they are still there. */
+/** Move the French bottles off Australian Wine. Writes only while they are still there. */
 function moveFrenchWines(products: unknown): boolean {
   if (!Array.isArray(products)) return false;
   let changed = false;
   for (const row of products) {
     if (!row || typeof row !== "object") continue;
-    const product = row as { name?: unknown; category?: unknown };
-    if (!isFrenchShelfWine(String(product.name || ""))) continue;
+    const product = row as { name?: unknown; category?: unknown; price?: unknown };
+    const name = String(product.name || "");
+    if (!isFrenchShelfWine(name) && !isBordeauxSuperieurAt29(name, product.price)) continue;
     const category = String(product.category || "")
       .trim()
       .toLowerCase();
