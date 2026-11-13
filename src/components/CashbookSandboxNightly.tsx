@@ -128,7 +128,9 @@ function moneyText(n: number | null | undefined): string {
 }
 
 function parseMoney(raw: string): number | null {
-  const n = Number(String(raw || '').replace(/[^0-9.]/g, ''));
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const n = Number(text.replace(/[^0-9.]/g, ''));
   if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 100) / 100;
 }
@@ -281,8 +283,9 @@ export default function CashbookSandboxNightly() {
   const save = async () => {
     const payee = miscPayee.trim();
     const paid = parseMoney(miscAmount);
-    const customer = invoiceCustomer.trim();
     const invoiced = parseMoney(invoiceAmount);
+    const customer =
+      invoiceCustomer.trim() || (invoiced != null && invoiced > 0 ? 'Invoice' : '');
     if (payee && (paid == null || paid <= 0)) {
       setStatus('Enter the amount paid');
       return;
@@ -291,12 +294,8 @@ export default function CashbookSandboxNightly() {
       setStatus('Enter who was paid');
       return;
     }
-    if (customer && (invoiced == null || invoiced <= 0)) {
+    if (invoiceCustomer.trim() && (invoiced == null || invoiced <= 0)) {
       setStatus('Enter the invoice amount');
-      return;
-    }
-    if (!customer && invoiceAmount.trim()) {
-      setStatus('Enter the customer');
       return;
     }
     setSaving(true);
@@ -348,7 +347,7 @@ export default function CashbookSandboxNightly() {
         setInvoiceCustomer('');
         setInvoiceAmount('');
         notes.push(
-          `${savedInvoice.customer} $${savedInvoice.amount.toFixed(2)} invoice saved for today`
+          `${savedInvoice.customer} $${savedInvoice.amount.toFixed(2)} added to cash in`
         );
       }
       setStatus(

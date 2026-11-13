@@ -208,8 +208,9 @@ export default function CashbookSandboxMonthChart({
       )}
 
       <p style={{ color: '#64748b', fontSize: '0.75rem', margin: '8px 0 0' }}>
-        <span style={{ color: IN }}>■</span> In — EFTPOS plus cash banked.{' '}
-        <span style={{ color: OUT }}>■</span> Out — receipt totals.
+        <span style={{ color: IN }}>■</span> In — EFTPOS, cash banked, and
+        invoices. <span style={{ color: OUT }}>■</span> Out — receipts and misc
+        payments.
       </p>
     </div>
   );

@@ -24,11 +24,12 @@ function pairError(
   missingName: string,
   missingAmount: string
 ): string | null {
-  const hasAmount = rawAmount != null && String(rawAmount).trim() !== "";
-  const amount = Number(rawAmount);
+  const text = rawAmount == null ? "" : String(rawAmount).trim();
+  const amount = Number(text);
+  const hasAmount = text !== "" && Number.isFinite(amount) && amount > 0;
   if (!name && !hasAmount) return null;
   if (!name) return missingName;
-  if (!hasAmount || !Number.isFinite(amount) || amount <= 0) return missingAmount;
+  if (!hasAmount) return missingAmount;
   return null;
 }
 
