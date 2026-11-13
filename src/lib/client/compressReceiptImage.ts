@@ -4,14 +4,14 @@ export const RECEIPT_MAX_BYTES = 18 * 1024 * 1024;
 
 /**
  * ATO-style expense proof needs merchant/date/amount/ABN legible.
- * 1280px long edge + JPEG 0.1 — settled ATO-readable size/quality trade-off.
+ * 1280px long edge + JPEG 0.2 — settled ATO-readable size/quality trade-off.
  */
 export const RECEIPT_MAX_EDGE = 1280;
-export const RECEIPT_JPEG_QUALITY = 0.1;
+export const RECEIPT_JPEG_QUALITY = 0.2;
 
 /**
  * Sharper copy used only for the Sydney Textract read before Confirm.
- * Stored upload still goes through RECEIPT_* (JPEG 0.1) via prepareReceiptFile.
+ * Stored upload still goes through RECEIPT_* (JPEG 0.2) via prepareReceiptFile.
  */
 export const RECEIPT_OCR_MAX_EDGE = 2000;
 export const RECEIPT_OCR_JPEG_QUALITY = 0.4;

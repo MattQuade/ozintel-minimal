@@ -179,7 +179,7 @@ export async function loadOrientedBlob(blob: Blob): Promise<{
 
 /**
  * Draw the normalised crop region to a canvas and return a JPEG File.
- * Defaults to stored ATO settings (1280px / JPEG 0.1). Pass higher
+ * Defaults to stored ATO settings (1280px / JPEG 0.2). Pass higher
  * maxEdge/quality for OCR preview crops (see RECEIPT_OCR_*).
  */
 export async function exportCroppedJpeg(args: {
