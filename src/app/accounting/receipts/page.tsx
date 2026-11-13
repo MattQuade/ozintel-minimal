@@ -204,10 +204,11 @@ function ReceiptsLedger() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-slate-900">Receipts</h1>
         <p className="text-slate-600 mt-1">
-          Numbered in the date order read off the receipt. The count starts
-          again at 1 on 1 July, 1 October, 1 January and 1 April. Same day
-          stays in the order snapped. Use <strong>Recrop</strong> on desktop
-          to trim wasted space.
+          Numbered by the date read off the receipt, oldest first, not by the
+          day it was snapped. The count starts again at 1 on 1 July, 1 October,
+          1 January and 1 April. Receipts with the same date stay in the order
+          they were snapped. Use <strong>Recrop</strong> on desktop to trim
+          wasted space.
         </p>
       </div>
 

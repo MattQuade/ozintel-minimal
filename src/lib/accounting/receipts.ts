@@ -45,8 +45,9 @@ export type ReceiptMeta = {
   /** Client id so a retried POST does not create a second receipt. */
   clientUploadId?: string;
   /**
-   * 1..n in Textract date order inside one Australian financial-year quarter.
-   * Restarts on 1 July, 1 October, 1 January and 1 April. Same day keeps snap order.
+   * 1..n by the date read off the receipt, inside one Australian financial-year
+   * quarter. Restarts on 1 July, 1 October, 1 January and 1 April.
+   * The same date keeps snap order.
    */
   ledgerNo?: number;
   /**
@@ -482,7 +483,7 @@ export async function listReceiptsByLedgerEntry(
   return store.receipts.filter((r) => r.ledgerEntryIds.includes(id));
 }
 
-/** Chronological list. Number 1 restarts each Australian financial-year quarter. */
+/** Date order from the receipt. Number 1 restarts each Australian financial-year quarter. */
 export async function listAllReceipts(): Promise<ReceiptMeta[]> {
   await releaseReceiptsLinkedOnlyToMissingEntries();
   const store = await loadNumberedStore();

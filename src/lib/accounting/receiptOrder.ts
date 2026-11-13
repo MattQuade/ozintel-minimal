@@ -1,10 +1,10 @@
 /**
- * Receipt ledger order: Textract date, oldest first.
- * Same calendar day keeps snap order (uploadedAt). No receipt clock time.
+ * Receipt ledger order is the date read off the receipt, oldest first.
+ * The day the photo was snapped is not the order.
+ * The same receipt date keeps the order snapped. The clock time is not read.
  * Numbers restart at 1 on each Australian financial-year quarter
  * (1 July, 1 October, 1 January, 1 April).
- * A receipt with no readable date sits after the dated receipts in the
- * quarter of the Sydney day it was snapped.
+ * A receipt with no readable date is stored after the dated ones, in snap order.
  */
 import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
 
@@ -114,45 +114,25 @@ export function auFyQuarterStart(isoDay: string): string | null {
 
 const UNKNOWN_QUARTER = "9999-99-99";
 
-type Place = {
-  quarter: string;
-  dated: boolean;
-  day: string;
-};
-
-function placeReceipt(receipt: DatedReceipt): Place {
-  const read = parseReceiptDay(receipt.docket?.date);
-  if (read) {
-    return {
-      quarter: auFyQuarterStart(read) || UNKNOWN_QUARTER,
-      dated: true,
-      day: read,
-    };
-  }
-  const snapped = snapSydneyDay(receipt.uploadedAt);
-  if (snapped) {
-    return {
-      quarter: auFyQuarterStart(snapped) || UNKNOWN_QUARTER,
-      dated: false,
-      day: snapped,
-    };
-  }
-  return { quarter: UNKNOWN_QUARTER, dated: false, day: "" };
-}
-
 /**
- * Oldest quarter first. Inside a quarter, dated receipts (oldest Textract
- * day, then snap order) come before undated ones (snap order).
+ * Oldest receipt date first. Snap day is not a sort key.
+ * The same date, and receipts with no date, keep snap order.
  */
 export function compareReceiptChronology(a: DatedReceipt, b: DatedReceipt): number {
-  const pa = placeReceipt(a);
-  const pb = placeReceipt(b);
-  if (pa.quarter !== pb.quarter) return pa.quarter < pb.quarter ? -1 : 1;
-  if (pa.dated !== pb.dated) return pa.dated ? -1 : 1;
-  if (pa.dated && pb.dated && pa.day !== pb.day) return pa.day < pb.day ? -1 : 1;
+  const dayA = parseReceiptDay(a.docket?.date);
+  const dayB = parseReceiptDay(b.docket?.date);
+  if (dayA && dayB && dayA !== dayB) return dayA < dayB ? -1 : 1;
+  if (dayA && !dayB) return -1;
+  if (!dayA && dayB) return 1;
   const snap = snapMs(a.uploadedAt) - snapMs(b.uploadedAt);
   if (snap !== 0) return snap;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function quarterOf(receipt: DatedReceipt): string | null {
+  const day = parseReceiptDay(receipt.docket?.date);
+  if (!day) return null;
+  return auFyQuarterStart(day) || UNKNOWN_QUARTER;
 }
 
 export function withLedgerNumbers<T extends DatedReceipt>(receipts: T[]): T[] {
@@ -160,8 +140,8 @@ export function withLedgerNumbers<T extends DatedReceipt>(receipts: T[]): T[] {
   let quarter = "";
   let n = 0;
   return sorted.map((receipt) => {
-    const next = placeReceipt(receipt).quarter;
-    if (next !== quarter) {
+    const next = quarterOf(receipt);
+    if (next && next !== quarter) {
       quarter = next;
       n = 0;
     }

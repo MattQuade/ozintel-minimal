@@ -121,6 +121,18 @@ function run(): Check[] {
     )
   );
 
+  const byReceiptDate = [
+    receipt("snapped-first", "02/11/2026", "2026-11-02T01:00:00.000Z"),
+    receipt("dated-earlier", "01/04/2026", "2026-11-10T01:00:00.000Z"),
+  ];
+  checks.push(
+    eq(
+      "earlier receipt date comes first even when snapped later",
+      numbers(byReceiptDate),
+      "dated-earlier:1,snapped-first:1"
+    )
+  );
+
   const undated = [
     receipt("dated-jun", "20/06/2026", "2026-06-21T01:00:00.000Z"),
     receipt("dated-jul", "02/07/2026", "2026-07-03T01:00:00.000Z"),
@@ -129,9 +141,9 @@ function run(): Check[] {
   ];
   checks.push(
     eq(
-      "undated follow dated receipts in the snap quarter",
+      "undated stay after dated receipts in snap order",
       numbers(undated),
-      "dated-jun:1,bare-jun:2,dated-jul:1,bare-jul:2"
+      "dated-jun:1,dated-jul:1,bare-jun:2,bare-jul:3"
     )
   );
 
