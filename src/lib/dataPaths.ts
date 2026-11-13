@@ -146,6 +146,11 @@ export function getCashbookSandboxCashOutPath(): string {
   return path.join(getCashbookSandboxDir(), "cash-out.json");
 }
 
+/** Payments typed in the sandbox (CUB and others). Not the live ledger. */
+export function getCashbookSandboxMiscPaymentsPath(): string {
+  return path.join(getCashbookSandboxDir(), "misc-payments.json");
+}
+
 /**
  * Decision Brief (layer-3 BI) — separate silo from accounting/ops.
  * Pulls read-only signals from accounting; stores briefs, retailer links, scans.

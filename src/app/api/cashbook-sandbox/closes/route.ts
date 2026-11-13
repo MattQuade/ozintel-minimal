@@ -6,6 +6,11 @@ import {
   upsertCashbookSandboxClose,
 } from "@/lib/cashbookSandbox/store";
 import { listSandboxCashOuts } from "@/lib/cashbookSandbox/cashOut";
+import {
+  addSandboxMiscPayment,
+  listSandboxMiscPayments,
+  removeSandboxMiscPayment,
+} from "@/lib/cashbookSandbox/miscPayments";
 import { sydneyTodayIso } from "@/lib/cashbookSandbox/sydneyDate";
 
 export const runtime = "nodejs";
@@ -28,12 +33,14 @@ export async function GET(req: NextRequest) {
     }
     const entries = await listCashbookSandboxCloses();
     const cashOuts = await listSandboxCashOuts();
+    const miscPayments = await listSandboxMiscPayments();
     return NextResponse.json({
       success: true,
       sandbox: true,
       today: sydneyTodayIso(),
       entries,
       cashOuts,
+      miscPayments,
     });
   });
 }
@@ -52,6 +59,23 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const payee = String(body.miscPayee || "").trim();
+    const hasAmount =
+      body.miscAmount != null && String(body.miscAmount).trim() !== "";
+    const miscAmount = Number(body.miscAmount);
+    if (
+      (payee && !hasAmount) ||
+      (!payee && hasAmount) ||
+      (payee && hasAmount && (!Number.isFinite(miscAmount) || miscAmount <= 0))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: payee ? "Enter the amount paid" : "Enter who was paid",
+        },
+        { status: 400 }
+      );
+    }
     const entry = await upsertCashbookSandboxClose({
       eftposDate: typeof body.eftposDate === "string" ? body.eftposDate : undefined,
       eftpos1: body.eftpos1,
@@ -60,6 +84,35 @@ export async function POST(req: NextRequest) {
       cashDepositDate: body.cashDepositDate,
       cashDeposit: body.cashDeposit,
     });
-    return NextResponse.json({ success: true, sandbox: true, entry });
+    const miscPayment =
+      payee && hasAmount
+        ? await addSandboxMiscPayment({
+            payee,
+            amount: body.miscAmount,
+          })
+        : null;
+    return NextResponse.json({
+      success: true,
+      sandbox: true,
+      entry,
+      miscPayment,
+    });
+  });
+}
+
+/** DELETE ?id= — remove one sandbox misc payment. */
+export async function DELETE(req: NextRequest) {
+  const access = await requireAccountingAccess(req);
+  if (!access.ok) return access.response;
+  return access.run(async () => {
+    const id = req.nextUrl.searchParams.get("id")?.trim() || "";
+    const removed = await removeSandboxMiscPayment(id);
+    if (!removed) {
+      return NextResponse.json(
+        { success: false, error: "Payment not found" },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, sandbox: true });
   });
 }

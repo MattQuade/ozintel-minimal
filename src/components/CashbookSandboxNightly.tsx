@@ -8,6 +8,7 @@ import {
   type SandboxCloseAmounts,
 } from '@/lib/cashbookSandbox/monthly';
 import {
+  formatAuDay,
   formatAuDayLong,
   sydneyTodayIso,
 } from '@/lib/cashbookSandbox/sydneyDate';
@@ -107,6 +108,13 @@ const sr: CSSProperties = {
 
 type EftposSlot = 1 | 2 | 3;
 
+type MiscPayment = {
+  id: string;
+  payee: string;
+  amount: number;
+  date: string;
+};
+
 function moneyText(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '';
   return String(n);
@@ -130,6 +138,9 @@ export default function CashbookSandboxNightly() {
   const [eftpos2, setEftpos2] = useState('');
   const [eftpos3, setEftpos3] = useState('');
   const [cashDeposit, setCashDeposit] = useState('');
+  const [miscPayee, setMiscPayee] = useState('');
+  const [miscAmount, setMiscAmount] = useState('');
+  const [payments, setPayments] = useState<MiscPayment[]>([]);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [entries, setEntries] = useState<SandboxCloseAmounts[]>([]);
@@ -153,6 +164,7 @@ export default function CashbookSandboxNightly() {
         if (cancelled || !Array.isArray(data?.entries)) return;
         setEntries(data.entries);
         setCashOuts(Array.isArray(data.cashOuts) ? data.cashOuts : []);
+        setPayments(Array.isArray(data.miscPayments) ? data.miscPayments : []);
       })
       .catch(() => undefined);
     return () => {
@@ -256,6 +268,16 @@ export default function CashbookSandboxNightly() {
   };
 
   const save = async () => {
+    const payee = miscPayee.trim();
+    const paid = parseMoney(miscAmount);
+    if (payee && (paid == null || paid <= 0)) {
+      setStatus('Enter the amount paid');
+      return;
+    }
+    if (!payee && miscAmount.trim()) {
+      setStatus('Enter who was paid');
+      return;
+    }
     setSaving(true);
     setStatus('');
     try {
@@ -270,6 +292,8 @@ export default function CashbookSandboxNightly() {
           eftpos3: parseMoney(eftpos3),
           cashDepositDate: cashDeposit.trim() ? cashDate : null,
           cashDeposit: parseMoney(cashDeposit),
+          miscPayee: payee,
+          miscAmount: paid,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -284,11 +308,36 @@ export default function CashbookSandboxNightly() {
           saved,
         ]);
       }
-      setStatus('Saved in cashbook sandbox (not live books)');
+      if (data.miscPayment?.id) {
+        const savedPay = data.miscPayment as MiscPayment;
+        setPayments((prev) => [savedPay, ...prev.filter((row) => row.id !== savedPay.id)]);
+        setMiscPayee('');
+        setMiscAmount('');
+        setStatus(`${savedPay.payee} $${savedPay.amount.toFixed(2)} saved for today`);
+      } else {
+        setStatus('Saved in cashbook sandbox (not live books)');
+      }
     } catch {
       setStatus('Could not save sandbox totals');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removePayment = async (id: string) => {
+    setStatus('');
+    try {
+      const res = await fetch(
+        `/api/cashbook-sandbox/closes?id=${encodeURIComponent(id)}`,
+        { method: 'DELETE', credentials: 'include', cache: 'no-store' }
+      );
+      if (!res.ok) {
+        setStatus('Could not remove that payment');
+        return;
+      }
+      setPayments((prev) => prev.filter((row) => row.id !== id));
+    } catch {
+      setStatus('Could not remove that payment');
     }
   };
 
@@ -319,6 +368,11 @@ export default function CashbookSandboxNightly() {
     </div>
   );
 
+  const moneyOut = [
+    ...cashOuts,
+    ...payments.map((pay) => ({ date: pay.date, amount: pay.amount })),
+  ];
+
   return (
     <section style={box} aria-label="Cashbook sandbox nightly totals">
       <input
@@ -332,15 +386,15 @@ export default function CashbookSandboxNightly() {
 
       <p style={{ ...label, marginBottom: 2 }}>Cashbook sandbox</p>
       <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 14px' }}>
-        Practice only — EFTPOS and cash banked are money in. Snapped receipt
-        totals are money out. Does not write the live ledger.
+        Practice only — EFTPOS and cash banked are money in. Snapped receipts
+        and misc payments are money out. Does not write the live ledger.
       </p>
 
       <CashbookSandboxMonthChart
         entries={entries}
-        cashOuts={cashOuts}
+        cashOuts={moneyOut}
         year={chartYear}
-        years={yearsInCloses(entries, cashOuts, chartYear)}
+        years={yearsInCloses(entries, moneyOut, chartYear)}
         onYear={setChartYear}
       />
 
@@ -379,6 +433,54 @@ export default function CashbookSandboxNightly() {
         onChange={(e) => setCashDeposit(e.target.value)}
         style={inputStyle}
       />
+
+      <p style={fieldLabel}>Misc payments</p>
+      <input
+        type="text"
+        placeholder="CUB"
+        value={miscPayee}
+        onChange={(e) => setMiscPayee(e.target.value)}
+        style={inputStyle}
+        aria-label="Misc payments"
+      />
+      <p style={fieldLabel}>Amount</p>
+      <input
+        type="text"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={miscAmount}
+        onChange={(e) => setMiscAmount(e.target.value)}
+        style={inputStyle}
+        aria-label="Misc payment amount"
+      />
+      {payments.length > 0 ? (
+        <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0 }}>
+          {payments.slice(0, 20).map((pay) => (
+            <li
+              key={pay.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 6,
+                color: '#e2e8f0',
+                fontSize: '0.9rem',
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                {pay.payee} ${pay.amount.toFixed(2)} · {formatAuDay(pay.date)}
+              </span>
+              <button
+                type="button"
+                onClick={() => void removePayment(pay.id)}
+                style={{ ...readBtn, padding: '6px 8px' }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <button
         type="button"
