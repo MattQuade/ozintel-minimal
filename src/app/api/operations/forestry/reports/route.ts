@@ -3,6 +3,7 @@ import {
   createForestryReport,
   listForestryReports,
 } from "@/lib/operations/forestry/reports";
+import { readJpegGps } from "@/lib/operations/forestry/jpegGps";
 import { requireOpsAccess } from "@/lib/accounting/requireAccess";
 
 export const runtime = "nodejs";
@@ -38,6 +39,11 @@ export async function POST(req: NextRequest) {
       const latitudeRaw = String(form.get("latitude") || "").trim();
       const longitudeRaw = String(form.get("longitude") || "").trim();
       const photo = form.get("photo");
+      const finite = (raw: string): number | null => {
+        if (!raw) return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+      };
 
       if (!clientName) {
         return NextResponse.json(
@@ -71,14 +77,18 @@ export async function POST(req: NextRequest) {
       }
 
       const arrayBuffer = await photo.arrayBuffer();
+      const photoBuffer = Buffer.from(arrayBuffer);
+      const fromPhoto = readJpegGps(photoBuffer);
+      const latitude = fromPhoto?.latitude ?? finite(latitudeRaw);
+      const longitude = fromPhoto?.longitude ?? finite(longitudeRaw);
       const result = await createForestryReport({
         clientName,
         notes,
         accessCode,
-        photoBuffer: Buffer.from(arrayBuffer),
+        photoBuffer,
         photoMimeType: photo.type || "image/jpeg",
-        latitude: latitudeRaw ? Number(latitudeRaw) : null,
-        longitude: longitudeRaw ? Number(longitudeRaw) : null,
+        latitude,
+        longitude,
         capturedAt,
       });
 

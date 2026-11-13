@@ -29,6 +29,14 @@ export default function ForestryOperationsPage() {
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState("");
   const [reports, setReports] = useState<ForestryReport[]>([]);
+  const [locationText, setLocationText] = useState("");
+  const locationRef = useRef<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null>(null);
+  const watchRef = useRef<number | null>(null);
+  const locationDeniedRef = useRef(false);
 
   const buildShareMessage = (link: string, accessCode: string, clientName: string) =>
     `Forestry site report for ${clientName}\n\nOpen: ${link}\nAccess code: ${accessCode}`;
@@ -97,28 +105,75 @@ export default function ForestryOperationsPage() {
 
   useEffect(() => {
     loadReports();
+    return () => {
+      if (watchRef.current != null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchRef.current);
+      }
+    };
   }, []);
 
-  const captureLocation = async () => {
-    if (typeof window === "undefined" || !navigator.geolocation) {
-      return { latitude: null, longitude: null };
+  const rememberFix = (latitude: number, longitude: number, accuracy: number) => {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    const prev = locationRef.current;
+    if (
+      prev &&
+      Number.isFinite(prev.accuracy) &&
+      Number.isFinite(accuracy) &&
+      accuracy > prev.accuracy
+    ) {
+      return;
     }
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000,
-        });
+    locationRef.current = { latitude, longitude, accuracy };
+    setLocationText(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+  };
+
+  /** Start a fix when Take Photo is tapped, so GPS can settle while notes are typed. */
+  const beginLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const onPos = (pos: GeolocationPosition) => {
+      rememberFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    };
+    const onErr = (err: GeolocationPositionError) => {
+      if (err.code === err.PERMISSION_DENIED) locationDeniedRef.current = true;
+    };
+    if (watchRef.current == null) {
+      watchRef.current = navigator.geolocation.watchPosition(onPos, onErr, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 25000,
       });
-      return {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      };
-    } catch (err) {
-      console.warn("Geolocation unavailable:", err);
-      return { latitude: null, longitude: null };
     }
+    navigator.geolocation.getCurrentPosition(onPos, onErr, {
+      enableHighAccuracy: false,
+      maximumAge: 0,
+      timeout: 8000,
+    });
+    void (async () => {
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (!Capacitor.isNativePlatform()) return;
+        const { Geolocation } = await import("@capacitor/geolocation");
+        await Geolocation.requestPermissions();
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 12000,
+          maximumAge: 300000,
+        });
+        rememberFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      } catch {
+        // Website path above still applies.
+      }
+    })();
+  };
+
+  const waitForLocation = async () => {
+    if (locationRef.current || locationDeniedRef.current) return locationRef.current;
+    const started = Date.now();
+    while (Date.now() - started < 8000) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (locationRef.current || locationDeniedRef.current) break;
+    }
+    return locationRef.current;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,7 +190,10 @@ export default function ForestryOperationsPage() {
     setCopyFeedback("");
 
     try {
-      const { latitude, longitude } = await captureLocation();
+      beginLocation();
+      const fix = await waitForLocation();
+      const latitude = fix?.latitude ?? null;
+      const longitude = fix?.longitude ?? null;
       const trimmedClient = clientName.trim();
       const trimmedNotes = notes.trim();
       const trimmedCode = accessCode.trim();
@@ -164,7 +222,13 @@ export default function ForestryOperationsPage() {
         accessCode: trimmedCode,
         clientName: trimmedClient,
       });
-      setStatus("✅ Forestry report saved. Use Share or Copy below to send to your client.");
+      const savedLat = data.report?.latitude;
+      const savedLng = data.report?.longitude;
+      setStatus(
+        savedLat != null && savedLng != null
+          ? "✅ Forestry report saved with the site location. Use Share or Copy below to send to your client."
+          : "✅ Forestry report saved. Allow location for this site, then take the photo again."
+      );
       setClientName("");
       setNotes("");
       setAccessCode("");
@@ -226,7 +290,10 @@ export default function ForestryOperationsPage() {
             />
             <button
               type="button"
-              onClick={() => photoInputRef.current?.click()}
+              onClick={() => {
+                beginLocation();
+                photoInputRef.current?.click();
+              }}
               style={{
                 padding: "14px 20px",
                 background: "#0ea5e9",
@@ -240,6 +307,11 @@ export default function ForestryOperationsPage() {
             >
               Take Photo
             </button>
+            {photoFile ? (
+              <p style={{ margin: 0, color: "#86efac", fontSize: "0.9rem" }}>
+                Photo ready{locationText ? ` · ${locationText}` : " · finding location…"}
+              </p>
+            ) : null}
             <input
               type="text"
               placeholder="Client or job name"
