@@ -147,6 +147,7 @@ export async function upsertCashbookSandboxClose(
   input: UpsertCashbookSandboxCloseInput
 ): Promise<CashbookSandboxClose> {
   const now = new Date().toISOString();
+  const eftposDate = parseDay(input.eftposDate, sydneyTodayIso()) || sydneyTodayIso();
   const store = await readStore();
   const idx = store.entries.findIndex((e) => e.eftposDate === eftposDate);
   const saved = applyClosePatch(idx >= 0 ? store.entries[idx] : null, input, now);
