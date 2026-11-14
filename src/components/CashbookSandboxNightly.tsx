@@ -313,31 +313,40 @@ export default function CashbookSandboxNightly() {
     }
   };
 
-  const saveNight = async (slots: Record<EftposSlot, string>) => {
+  const applySavedNight = (saved: SandboxCloseAmounts) => {
+    setEntries((prev) => [
+      ...prev.filter((row) => row.eftposDate !== saved.eftposDate),
+      saved,
+    ]);
+    if (saved.eftposDate !== eftposDate) return;
+    setEftpos1(moneyText(saved.eftpos1));
+    setEftpos2(moneyText(saved.eftpos2));
+    setEftpos3(moneyText(saved.eftpos3));
+    if (saved.cashDepositDate) setCashDate(saved.cashDepositDate);
+    setCashDeposit(moneyText(saved.cashDeposit));
+  };
+
+  const saveNight = async (body: Record<string, unknown>) => {
     const res = await fetch('/api/cashbook-sandbox/closes', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eftposDate,
-        eftpos1: parseMoney(slots[1]),
-        eftpos2: parseMoney(slots[2]),
-        eftpos3: parseMoney(slots[3]),
-        cashDepositDate: cashDeposit.trim() ? cashDate : null,
-        cashDeposit: parseMoney(cashDeposit),
-      }),
+      body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(data.error || 'Could not save sandbox totals');
     }
-    if (data.entry) {
-      const saved = data.entry as SandboxCloseAmounts;
-      setEntries((prev) => [
-        ...prev.filter((row) => row.eftposDate !== saved.eftposDate),
-        saved,
-      ]);
-    }
+    if (data.entry) applySavedNight(data.entry as SandboxCloseAmounts);
+  };
+
+  /** One terminal from a photo. Other boxes and cash banked for that night stay. */
+  const saveEftposSlot = async (slot: EftposSlot, amount: number) => {
+    await saveNight({
+      eftposDate,
+      merge: true,
+      [`eftpos${slot}`]: amount,
+    });
   };
 
   useEffect(() => {
@@ -347,21 +356,19 @@ export default function CashbookSandboxNightly() {
       ).detail;
       const amount = Number(detail?.amount);
       if (!detail || !Number.isFinite(amount) || amount <= 0) return;
-      const slots: Record<EftposSlot, string> = {
-        1: eftpos1,
-        2: eftpos2,
-        3: eftpos3,
+      const stored = entries.find((row) => row.eftposDate === eftposDate);
+      const current: Record<EftposSlot, number | null> = {
+        1: stored?.eftpos1 ?? parseMoney(eftpos1),
+        2: stored?.eftpos2 ?? parseMoney(eftpos2),
+        3: stored?.eftpos3 ?? parseMoney(eftpos3),
       };
-      const empty = ([1, 2, 3] as EftposSlot[]).find(
-        (slot) => parseMoney(slots[slot]) == null
-      );
+      const empty = ([1, 2, 3] as EftposSlot[]).find((slot) => current[slot] == null);
       const slot: EftposSlot = empty || 3;
-      slots[slot] = moneyText(amount);
-      setSlot(slot, slots[slot]);
+      setSlot(slot, moneyText(amount));
       detail.handled = true;
-      void saveNight(slots)
+      void saveEftposSlot(slot, amount)
         .then(() =>
-          setStatus(`EFTPOS ${slot} $${amount.toFixed(2)} added to cash in`)
+          setStatus(`EFTPOS ${slot} set to $${amount.toFixed(2)} for this night`)
         )
         .catch(() =>
           setStatus('Could not save the EFTPOS total — it is in the box')
@@ -369,7 +376,7 @@ export default function CashbookSandboxNightly() {
     };
     window.addEventListener('ozintel-eftpos-settlement', onSettle);
     return () => window.removeEventListener('ozintel-eftpos-settlement', onSettle);
-  }, [eftpos1, eftpos2, eftpos3, eftposDate, cashDate, cashDeposit]);
+  }, [entries, eftpos1, eftpos2, eftpos3, eftposDate]);
 
   const onReadFile = async (file: File | null, slot: EftposSlot | null) => {
     readSlotRef.current = null;
@@ -415,16 +422,10 @@ export default function CashbookSandboxNightly() {
         setStatus('Could not read a total — type it in the box');
         return;
       }
-      const slots: Record<EftposSlot, string> = {
-        1: eftpos1,
-        2: eftpos2,
-        3: eftpos3,
-      };
-      slots[slot] = moneyText(amount);
-      setSlot(slot, slots[slot]);
+      setSlot(slot, moneyText(amount));
       try {
-        await saveNight(slots);
-        setStatus(`EFTPOS ${slot} $${amount.toFixed(2)} added to cash in`);
+        await saveEftposSlot(slot, amount);
+        setStatus(`EFTPOS ${slot} set to $${amount.toFixed(2)} for this night`);
       } catch (err) {
         setStatus(
           err instanceof Error

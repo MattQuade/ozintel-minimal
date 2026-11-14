@@ -101,14 +101,25 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const entry = await upsertCashbookSandboxClose({
+    const merge = body.merge === true;
+    const patch: {
+      merge?: boolean;
+      eftposDate?: string;
+      eftpos1?: unknown;
+      eftpos2?: unknown;
+      eftpos3?: unknown;
+      cashDepositDate?: unknown;
+      cashDeposit?: unknown;
+    } = {
+      merge,
       eftposDate: typeof body.eftposDate === "string" ? body.eftposDate : undefined,
-      eftpos1: body.eftpos1,
-      eftpos2: body.eftpos2,
-      eftpos3: body.eftpos3,
-      cashDepositDate: body.cashDepositDate,
-      cashDeposit: body.cashDeposit,
-    });
+    };
+    if (!merge || "eftpos1" in body) patch.eftpos1 = body.eftpos1;
+    if (!merge || "eftpos2" in body) patch.eftpos2 = body.eftpos2;
+    if (!merge || "eftpos3" in body) patch.eftpos3 = body.eftpos3;
+    if (!merge || "cashDepositDate" in body) patch.cashDepositDate = body.cashDepositDate;
+    if (!merge || "cashDeposit" in body) patch.cashDeposit = body.cashDeposit;
+    const entry = await upsertCashbookSandboxClose(patch);
     const miscPayment = payee
       ? await addSandboxMiscPayment({
           payee,

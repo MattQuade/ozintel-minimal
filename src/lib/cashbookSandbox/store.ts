@@ -97,58 +97,61 @@ export type UpsertCashbookSandboxCloseInput = {
   eftpos3?: unknown;
   cashDepositDate?: unknown;
   cashDeposit?: unknown;
+  /**
+   * Photo snap sends one terminal only. Omitted amounts stay on the night.
+   * A full save leaves this unset and writes every box, including blanks.
+   */
+  merge?: boolean;
 };
+
+function amountField(
+  merge: boolean,
+  raw: unknown,
+  previous: number | null
+): number | null {
+  if (raw === undefined) return merge ? previous : null;
+  return parseAmount(raw);
+}
+
+/** One night after a save. Merge keeps stored amounts the request did not send. */
+export function applyClosePatch(
+  prev: CashbookSandboxClose | null,
+  input: UpsertCashbookSandboxCloseInput,
+  now: string
+): CashbookSandboxClose {
+  const merge = input.merge === true;
+  const eftposDate = parseDay(input.eftposDate, sydneyTodayIso()) || sydneyTodayIso();
+  const cashDeposit = amountField(merge, input.cashDeposit, prev?.cashDeposit ?? null);
+  const cashDepositDate =
+    merge && input.cashDeposit === undefined && input.cashDepositDate === undefined
+      ? prev?.cashDepositDate ?? null
+      : cashDeposit != null
+        ? parseDay(input.cashDepositDate, eftposDate)
+        : parseDay(input.cashDepositDate, null);
+
+  return {
+    id: prev?.id || `cb-${eftposDate}-${Date.now().toString(36)}`,
+    eftposDate,
+    eftpos1: amountField(merge, input.eftpos1, prev?.eftpos1 ?? null),
+    eftpos2: amountField(merge, input.eftpos2, prev?.eftpos2 ?? null),
+    eftpos3: amountField(merge, input.eftpos3, prev?.eftpos3 ?? null),
+    cashDepositDate,
+    cashDeposit,
+    createdAt: prev?.createdAt || now,
+    updatedAt: now,
+  };
+}
 
 /** Upsert by eftposDate — practice silo only, never touches live ledger. */
 export async function upsertCashbookSandboxClose(
   input: UpsertCashbookSandboxCloseInput
 ): Promise<CashbookSandboxClose> {
   const now = new Date().toISOString();
-  const eftposDate = parseDay(input.eftposDate, sydneyTodayIso()) || sydneyTodayIso();
-  const cashDeposit = parseAmount(input.cashDeposit);
-  const cashDepositDate =
-    cashDeposit != null
-      ? parseDay(input.cashDepositDate, eftposDate)
-      : parseDay(input.cashDepositDate, null);
-
-  const next: Omit<CashbookSandboxClose, "id" | "createdAt"> & {
-    id?: string;
-    createdAt?: string;
-  } = {
-    eftposDate,
-    eftpos1: parseAmount(input.eftpos1),
-    eftpos2: parseAmount(input.eftpos2),
-    eftpos3: parseAmount(input.eftpos3),
-    cashDepositDate,
-    cashDeposit,
-    updatedAt: now,
-  };
-
   const store = await readStore();
   const idx = store.entries.findIndex((e) => e.eftposDate === eftposDate);
-  let saved: CashbookSandboxClose;
-  if (idx >= 0) {
-    saved = {
-      ...store.entries[idx],
-      ...next,
-      id: store.entries[idx].id,
-      createdAt: store.entries[idx].createdAt,
-    };
-    store.entries[idx] = saved;
-  } else {
-    saved = {
-      id: `cb-${eftposDate}-${Date.now().toString(36)}`,
-      eftposDate: next.eftposDate,
-      eftpos1: next.eftpos1,
-      eftpos2: next.eftpos2,
-      eftpos3: next.eftpos3,
-      cashDepositDate: next.cashDepositDate,
-      cashDeposit: next.cashDeposit,
-      createdAt: now,
-      updatedAt: now,
-    };
-    store.entries.push(saved);
-  }
+  const saved = applyClosePatch(idx >= 0 ? store.entries[idx] : null, input, now);
+  if (idx >= 0) store.entries[idx] = saved;
+  else store.entries.push(saved);
   await writeStore(store);
   return saved;
 }
