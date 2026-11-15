@@ -34,6 +34,9 @@ type Order = {
   createdAt: string;
   customerName: string;
   customerNote: string;
+  customerId?: string;
+  pubReply?: string;
+  pubReplyAt?: string;
   lines: Array<{
     productId: string;
     name: string;
@@ -43,6 +46,96 @@ type Order = {
   total: number;
   status: "reserved" | "collected" | "cancelled";
 };
+
+function OrderReplyBox({
+  order,
+  onDone,
+}: {
+  order: Order;
+  onDone: (message: string) => void;
+}) {
+  const [text, setText] = useState(order.pubReply || "");
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState("");
+
+  const send = async () => {
+    const reply = text.trim();
+    if (!reply) {
+      setNote("Enter a reply");
+      onDone("Enter a reply");
+      return;
+    }
+    setSending(true);
+    setNote("");
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "reply", id: order.id, reply }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        const message = data.error || "Could not send the reply";
+        setNote(message);
+        onDone(message);
+        return;
+      }
+      const message = !order.customerId
+        ? "Reply saved, but this reserve has no bottle shop login to deliver it to."
+        : data.notified > 0
+          ? "Reply sent. They've been notified on their phone."
+          : "Reply saved on their bottle shop. They'll see it when they open the link.";
+      setNote(message);
+      onDone(message);
+    } catch {
+      setNote("Could not send the reply");
+      onDone("Could not send the reply");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Reply to this reserve"
+        maxLength={240}
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          marginBottom: 8,
+          padding: 10,
+          borderRadius: 8,
+          border: "1px solid #475569",
+          background: "#0f172a",
+          color: "white",
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => void send()}
+        disabled={sending}
+        style={{
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "none",
+          background: "#b45309",
+          color: "white",
+          fontWeight: 700,
+          cursor: sending ? "default" : "pointer",
+        }}
+      >
+        {sending ? "Sending…" : "Send reply"}
+      </button>
+      {note ? (
+        <p style={{ margin: "8px 0 0", color: "#93c5fd" }}>{note}</p>
+      ) : null}
+    </div>
+  );
+}
 
 type ShopCustomer = {
   id: string;
@@ -1213,6 +1306,12 @@ function BottleShopAdminInner() {
                       Note: {o.customerNote}
                     </p>
                   ) : null}
+                  <OrderReplyBox
+                    order={o}
+                    onDone={(message) => {
+                      void load().then(() => setStatus(message));
+                    }}
+                  />
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       type="button"

@@ -1,5 +1,6 @@
 import BottleShopHubPromos from "@/components/BottleShopHubPromos";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
+import BottleShopReplies from "@/components/BottleShopReplies";
 import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
 
 /** Category hub — server-rendered so phones see shelves even if JS is delayed. */
@@ -36,6 +37,7 @@ export default function BottleShopHubPage() {
         Pick a shelf, then restore to see stock and reserve.
       </p>
       <BottleShopInstallButton />
+      <BottleShopReplies />
 
       <div
         style={{

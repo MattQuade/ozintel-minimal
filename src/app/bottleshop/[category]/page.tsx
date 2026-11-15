@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
+import BottleShopReplies from "@/components/BottleShopReplies";
 import {
   clearSessionEmailCookie,
   persistSessionEmailCookie,
@@ -593,6 +594,7 @@ export default function BottleShopCategoryPage() {
           </div>
         )}
 
+        <BottleShopReplies />
         <div
           style={{
             marginTop: 24,

@@ -39,6 +39,9 @@ export type BottleOrder = {
   customerName: string;
   customerNote: string;
   customerId?: string;
+  /** Pub reply, shown in the customer's bottle shop. No phone number. */
+  pubReply?: string;
+  pubReplyAt?: string;
   lines: BottleOrderLine[];
   total: number;
   status: "reserved" | "collected" | "cancelled";
@@ -673,6 +676,55 @@ export async function placeBottleOrder(
     products: store.products.filter((p) => p.active),
     smsBody,
   };
+}
+
+export async function replyToBottleOrder(
+  id: string,
+  reply: string
+): Promise<BottleOrder> {
+  const text = String(reply || "").trim().replace(/\s+/g, " ").slice(0, 240);
+  if (!text) throw new Error("Enter a reply");
+  const store = await readStore();
+  const idx = store.orders.findIndex((o) => o.id === id);
+  if (idx < 0) throw new Error("Order not found");
+  const current = store.orders[idx];
+  store.orders[idx] = {
+    ...current,
+    pubReply: text,
+    pubReplyAt: new Date().toISOString(),
+  };
+  await writeStore(store);
+  return store.orders[idx];
+}
+
+export type BottleShopReply = {
+  id: string;
+  pubReply: string;
+  pubReplyAt: string;
+  lines: string[];
+};
+
+/** Replies for one restored customer. One owner's bottle shop file. */
+export async function listBottleRepliesForCustomer(
+  customerId: string
+): Promise<BottleShopReply[]> {
+  const id = String(customerId || "").trim().toLowerCase();
+  if (!id) return [];
+  const store = await readStore();
+  return store.orders
+    .filter(
+      (order) =>
+        String(order.customerId || "").trim().toLowerCase() === id &&
+        String(order.pubReply || "").trim()
+    )
+    .sort((a, b) => String(b.pubReplyAt || "").localeCompare(String(a.pubReplyAt || "")))
+    .slice(0, 8)
+    .map((order) => ({
+      id: order.id,
+      pubReply: String(order.pubReply || ""),
+      pubReplyAt: String(order.pubReplyAt || order.createdAt),
+      lines: order.lines.map((line) => `${line.quantity}× ${line.name}`),
+    }));
 }
 
 export async function setBottleOrderStatus(

@@ -55,7 +55,7 @@ self.addEventListener("push", (event) => {
         icon: "/icons/icon-192.png?v=10",
         badge: "/icons/icon-192.png?v=10",
         data: { url },
-        tag: "bottleshop-order",
+        tag: data.tag || "bottleshop-order",
         renotify: true,
       });
     })()

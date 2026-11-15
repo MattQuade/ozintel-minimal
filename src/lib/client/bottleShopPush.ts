@@ -56,7 +56,9 @@ export async function clearBottleShopNotifications() {
   }
 }
 
-export async function enableBottleShopPush(): Promise<string> {
+export async function enableBottleShopPush(
+  audience: "owner" | "customer" = "owner"
+): Promise<string> {
   const reg = await ensureServiceWorker();
   await navigator.serviceWorker.ready;
 
@@ -88,7 +90,10 @@ export async function enableBottleShopPush(): Promise<string> {
   const saveRes = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subscription: subscription.toJSON() }),
+    body: JSON.stringify({
+      subscription: subscription.toJSON(),
+      for: audience === "customer" ? "customer" : undefined,
+    }),
   });
   const saved = await saveRes.json();
   if (!saved.success) {

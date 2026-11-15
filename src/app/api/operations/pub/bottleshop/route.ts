@@ -3,6 +3,7 @@ import {
   createBottleProduct,
   deleteBottleOrder,
   loadBottleShopAdmin,
+  replyToBottleOrder,
   setBottleOrderStatus,
   updateBottleHubButtonLabel,
   updateBottleProduct,
@@ -11,6 +12,7 @@ import {
 import { requireOpsAccess } from "@/lib/accounting/requireAccess";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
+import { sendPushToCustomer } from "@/lib/push/subscriptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +78,28 @@ export async function PATCH(req: NextRequest) {
         updateBottleHubButtonLabel(body.id, body.label)
       );
       return NextResponse.json({ success: true, button });
+    }
+
+    if (kind === "reply") {
+      const id = String(body.id || "").trim();
+      const order = await withBottleShopOwner(() =>
+        replyToBottleOrder(id, body.reply)
+      );
+      let notified = 0;
+      if (order.customerId) {
+        try {
+          const push = await sendPushToCustomer(order.customerId, {
+            title: "Message from the pub",
+            body: order.pubReply || "The pub sent a reply",
+            url: "/bottleshop",
+            tag: "bottleshop-reply",
+          });
+          notified = push.sent;
+        } catch (error) {
+          console.error("[bottleshop reply push]", error);
+        }
+      }
+      return NextResponse.json({ success: true, order, notified });
     }
 
     if (kind === "order" || kind === "deleteOrder") {

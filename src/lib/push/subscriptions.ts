@@ -8,6 +8,8 @@ export type StoredPushSubscription = {
   endpoint: string;
   keys: { p256dh: string; auth: string };
   ownerEmail: string;
+  /** Bottle shop login this phone should hear replies for. Not a phone number. */
+  customerId?: string;
   createdAt: string;
   userAgent?: string;
 };
@@ -84,23 +86,19 @@ export type PushPayload = {
   body: string;
   url?: string;
   badgeCount?: number;
+  tag?: string;
 };
 
-export async function sendPushToOwner(
-  ownerEmail: string,
+async function sendToSubscriptions(
+  targets: StoredPushSubscription[],
+  others: StoredPushSubscription[],
   payload: PushPayload
 ): Promise<{ sent: number; failed: number }> {
-  await configureWebPush();
-  const email = ownerEmail.trim().toLowerCase();
-  const store = await readStore();
-  const targets = store.subscriptions.filter((s) => s.ownerEmail === email);
   if (!targets.length) return { sent: 0, failed: 0 };
-
+  await configureWebPush();
   let sent = 0;
   let failed = 0;
   const keep: StoredPushSubscription[] = [];
-  const allOthers = store.subscriptions.filter((s) => s.ownerEmail !== email);
-
   for (const sub of targets) {
     const pushSub = {
       endpoint: sub.endpoint,
@@ -118,15 +116,71 @@ export async function sendPushToOwner(
         err && typeof err === "object" && "statusCode" in err
           ? Number((err as { statusCode?: number }).statusCode)
           : 0;
-      // Drop gone/expired subscriptions; keep transient failures.
-      if (status !== 404 && status !== 410) {
-        keep.push(sub);
-      }
+      if (status !== 404 && status !== 410) keep.push(sub);
       console.error("[push send]", status || err);
     }
   }
-
-  store.subscriptions = [...allOthers, ...keep];
-  await writeStore(store);
+  await writeStore({ subscriptions: [...others, ...keep] });
   return { sent, failed };
+}
+
+export async function sendPushToOwner(
+  ownerEmail: string,
+  payload: PushPayload
+): Promise<{ sent: number; failed: number }> {
+  const email = ownerEmail.trim().toLowerCase();
+  const store = await readStore();
+  return sendToSubscriptions(
+    store.subscriptions.filter((s) => s.ownerEmail === email),
+    store.subscriptions.filter((s) => s.ownerEmail !== email),
+    payload
+  );
+}
+
+/** Ping the bottle shop login on this phone. Does not use a phone number. */
+export async function saveCustomerPushSubscription(
+  raw: unknown,
+  customerId: string,
+  userAgent?: string
+): Promise<StoredPushSubscription> {
+  const id = customerId.trim().toLowerCase();
+  if (!id) throw new Error("Bottle shop login is required");
+  const next = normalizeSub(raw, "");
+  if (!next) throw new Error("Invalid push subscription");
+  next.customerId = id;
+  if (userAgent) next.userAgent = userAgent.slice(0, 240);
+
+  const store = await readStore();
+  const idx = store.subscriptions.findIndex((s) => s.endpoint === next.endpoint);
+  if (idx >= 0) {
+    const prev = store.subscriptions[idx];
+    store.subscriptions[idx] = {
+      ...prev,
+      ...next,
+      ownerEmail: prev.ownerEmail || "",
+      customerId: id,
+    };
+  } else {
+    store.subscriptions.push(next);
+  }
+  await writeStore(store);
+  return next;
+}
+
+export async function sendPushToCustomer(
+  customerId: string,
+  payload: PushPayload
+): Promise<{ sent: number; failed: number }> {
+  const id = customerId.trim().toLowerCase();
+  if (!id) return { sent: 0, failed: 0 };
+  const store = await readStore();
+  return sendToSubscriptions(
+    store.subscriptions.filter(
+      (s) => String(s.customerId || "").toLowerCase() === id
+    ),
+    store.subscriptions.filter(
+      (s) => String(s.customerId || "").toLowerCase() !== id
+    ),
+    payload
+  );
 }
