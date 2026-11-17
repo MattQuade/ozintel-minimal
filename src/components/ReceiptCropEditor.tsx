@@ -25,6 +25,8 @@ type Props = {
   theme?: 'dark' | 'light';
   className?: string;
   style?: CSSProperties;
+  /** Height of the photo frame. Keep this short when buttons sit underneath. */
+  frameHeight?: string;
   onCropChange?: (crop: CropRectNorm) => void;
 };
 
@@ -38,6 +40,7 @@ export default function ReceiptCropEditor({
   theme = 'dark',
   className = '',
   style,
+  frameHeight = 'min(62vh, 520px)',
   onCropChange,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -250,7 +253,7 @@ export default function ReceiptCropEditor({
         style={{
           position: 'relative',
           width: '100%',
-          height: 'min(62vh, 520px)',
+          height: frameHeight,
           background: dark ? '#0f172a' : '#e2e8f0',
           borderRadius: 12,
           overflow: 'hidden',

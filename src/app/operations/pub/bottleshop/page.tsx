@@ -390,7 +390,12 @@ function BottleShopAdminInner() {
       setStatus("No photo selected.");
       return;
     }
-    if (!file.type.startsWith("image/") && file.type !== "") {
+    const name = (file.name || "").toLowerCase();
+    const looksLikeImage =
+      !file.type ||
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|heic|heif)$/.test(name);
+    if (!looksLikeImage) {
       setStatus("That file is not an image. Take a photo or pick a JPEG/PNG.");
       return;
     }
@@ -448,8 +453,8 @@ function BottleShopAdminInner() {
         setCropError(msg);
         return false;
       }
-      setStatus("Photo + details saved — public bottle shop will show them.");
       await load();
+      setStatus("Photo saved. It will show on the bottle shop.");
       return true;
     } catch (error) {
       console.error(error);
@@ -1255,6 +1260,7 @@ function BottleShopAdminInner() {
                       </button>
                       <label
                         style={{
+                          position: "relative",
                           marginTop: 18,
                           padding: "10px 14px",
                           borderRadius: 8,
@@ -1263,18 +1269,44 @@ function BottleShopAdminInner() {
                           fontWeight: 600,
                           cursor: "pointer",
                           display: "inline-block",
+                          overflow: "hidden",
                         }}
                       >
                         Upload photo
                         <input
                           type="file"
                           accept="image/*"
-                          capture="environment"
-                          style={{ display: "none" }}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            opacity: 0,
+                            width: "100%",
+                            height: "100%",
+                            cursor: "pointer",
+                          }}
                           onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            beginPhotoCrop(p, file);
+                            const picked = e.target.files?.[0];
                             e.target.value = "";
+                            if (!picked) {
+                              beginPhotoCrop(p, picked);
+                              return;
+                            }
+                            void picked.arrayBuffer().then(
+                              (bytes) => {
+                                beginPhotoCrop(
+                                  p,
+                                  new File(
+                                    [bytes],
+                                    picked.name || `${p.id}.jpg`,
+                                    {
+                                      type: picked.type || "image/jpeg",
+                                      lastModified: picked.lastModified,
+                                    }
+                                  )
+                                );
+                              },
+                              () => beginPhotoCrop(p, picked)
+                            );
                           }}
                         />
                       </label>
@@ -1486,13 +1518,20 @@ function BottleShopAdminInner() {
                 Close
               </button>
             </div>
-            <div style={{ flex: 1, overflow: "auto", padding: "0 16px" }}>
+            <div
+              style={{
+                flex: "1 1 auto",
+                minHeight: 0,
+                overflow: "auto",
+                padding: "0 16px",
+              }}
+            >
               <ReceiptCropEditor
                 key={photoCrop.objectUrl}
                 src={photoCrop.objectUrl}
                 initialCrop={FULL_CROP}
                 theme="dark"
-                style={{ minHeight: 280 }}
+                frameHeight="min(42vh, 360px)"
                 onCropChange={onCropChange}
               />
               {cropError ? (
