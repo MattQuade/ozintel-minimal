@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
@@ -94,6 +94,7 @@ export default function BottleShopCategoryPage() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<Cart>({});
+  const [qtyText, setQtyText] = useState<Record<string, string>>({});
   const [customerName, setCustomerName] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [restoreInput, setRestoreInput] = useState("");
@@ -108,9 +109,11 @@ export default function BottleShopCategoryPage() {
     if (!category) router.replace("/bottleshop");
   }, [category, router]);
 
+  const shelfShown = useRef(false);
+
   const loadCatalogue = useCallback(async () => {
     if (!category) return false;
-    setLoading(true);
+    if (!shelfShown.current) setLoading(true);
     try {
       const res = await fetch(
         `/api/bottleshop/products?category=${encodeURIComponent(category)}`,
@@ -121,6 +124,7 @@ export default function BottleShopCategoryPage() {
       );
       const data = await res.json();
       if (data.success) {
+        shelfShown.current = true;
         setProducts(data.products || []);
         setShelfOpen(true);
         setStatus("");
@@ -208,6 +212,7 @@ export default function BottleShopCategoryPage() {
 
   useEffect(() => {
     if (!category) return;
+    shelfShown.current = false;
     clearLegacyInviteCode();
     const storedLogin = normalizeRestoreQuery(
       readStoredLogin() || readStoredUserEmail()
@@ -258,12 +263,23 @@ export default function BottleShopCategoryPage() {
     [coffeeGroups]
   );
 
-  const setQty = (id: string, next: number, max: number) => {
-    const qty = Math.max(0, Math.min(max, Math.floor(next || 0)));
+  const setQty = (id: string, raw: string) => {
+    const digits = String(raw || "").replace(/\D/g, "").slice(0, 2);
+    setQtyText((prev) => ({ ...prev, [id]: digits }));
+    const qty = digits ? Number(digits) : 0;
     setCart((prev) => {
       const copy = { ...prev };
       if (qty <= 0) delete copy[id];
       else copy[id] = qty;
+      return copy;
+    });
+  };
+
+  const removeReserved = (id: string) => {
+    setQtyText((prev) => ({ ...prev, [id]: "" }));
+    setCart((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
       return copy;
     });
   };
@@ -300,6 +316,7 @@ export default function BottleShopCategoryPage() {
     setUnlockedName("");
     setCustomerName("");
     setCart({});
+    setQtyText({});
     setStatus("");
     void loadCatalogue();
   };
@@ -315,6 +332,13 @@ export default function BottleShopCategoryPage() {
     }
     if (!lines.length) {
       setStatus("Select at least one bottle.");
+      return;
+    }
+    const over = lines.find((l) => l.qty > l.product.quantity);
+    if (over) {
+      setStatus(
+        `${over.product.name} only has ${over.product.quantity} available.`
+      );
       return;
     }
     setSubmitting(true);
@@ -348,6 +372,7 @@ export default function BottleShopCategoryPage() {
           : nextProducts
       );
       setCart({});
+      setQtyText({});
       setStatus("Reserved. Pay & collect at the pub.");
     } catch (error) {
       console.error(error);
@@ -658,15 +683,12 @@ export default function BottleShopCategoryPage() {
                         <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
                           Qty
                           <input
-                            type="number"
-                            min={0}
-                            max={p?.quantity || 0}
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
                             disabled={soldOut || submitting || !p}
-                            value={qty}
-                            onChange={(e) =>
-                              p &&
-                              setQty(p.id, Number(e.target.value), p.quantity)
-                            }
+                            value={p ? qtyText[p.id] ?? "" : ""}
+                            onChange={(e) => p && setQty(p.id, e.target.value)}
                             style={{
                               display: "block",
                               width: 64,
@@ -748,14 +770,12 @@ export default function BottleShopCategoryPage() {
                     <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
                       Qty
                       <input
-                        type="number"
-                        min={0}
-                        max={p.quantity}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
                         disabled={soldOut || submitting}
-                        value={qty}
-                        onChange={(e) =>
-                          setQty(p.id, Number(e.target.value), p.quantity)
-                        }
+                        value={qtyText[p.id] ?? ""}
+                        onChange={(e) => setQty(p.id, e.target.value)}
                         style={{
                           display: "block",
                           width: 64,
@@ -830,14 +850,12 @@ export default function BottleShopCategoryPage() {
                       Qty
                     </label>
                     <input
-                      type="number"
-                      min={0}
-                      max={p.quantity}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
                       disabled={soldOut || submitting}
-                      value={qty}
-                      onChange={(e) =>
-                        setQty(p.id, Number(e.target.value), p.quantity)
-                      }
+                      value={qtyText[p.id] ?? ""}
+                      onChange={(e) => setQty(p.id, e.target.value)}
                       style={{
                         width: 64,
                         padding: "8px 6px",
@@ -871,13 +889,47 @@ export default function BottleShopCategoryPage() {
               Choose quantities above.
             </p>
           ) : (
-            <ul style={{ margin: "0 0 12px", paddingLeft: 18, color: "#e2e8f0" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                marginBottom: 12,
+              }}
+            >
               {lines.map((l) => (
-                <li key={l.product.id}>
-                  {l.qty}× {l.product.name} — {money(l.qty * l.product.price)}
-                </li>
+                <div
+                  key={l.product.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  <span>
+                    {l.qty}× {l.product.name} — {money(l.qty * l.product.price)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeReserved(l.product.id)}
+                    style={{
+                      flexShrink: 0,
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#991b1b",
+                      color: "white",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
           <p style={{ margin: "0 0 12px", fontWeight: 700 }}>
             Total: {money(cartTotal)}
