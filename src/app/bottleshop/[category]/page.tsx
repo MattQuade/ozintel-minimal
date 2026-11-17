@@ -36,6 +36,12 @@ function money(n: number) {
   return `$${Number(n || 0).toFixed(2)}`;
 }
 
+/** Uploaded bottle-shop photos. Placeholder wine art is not a coffee photo. */
+function uploadedPhoto(url?: string) {
+  const value = String(url || "");
+  return value.startsWith("/api/bottleshop/photos/") ? value : "";
+}
+
 function readStoredLogin() {
   try {
     return (localStorage.getItem(LOGIN_KEY) || "").trim();
@@ -518,24 +524,51 @@ export default function BottleShopCategoryPage() {
           <p style={{ color: "#94a3b8" }}>Loading…</p>
         ) : category === "coffee" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {COFFEE_TYPES.map((type) => (
+            {COFFEE_TYPES.map((type) => {
+              const typeItems = COFFEE_MENU.filter((item) => item.type === type);
+              const typePhoto =
+                typeItems
+                  .map((item) =>
+                    uploadedPhoto(
+                      products.find((product) => product.id === item.id)?.imageUrl
+                    )
+                  )
+                  .find(Boolean) || "";
+              return (
               <div key={type}>
-                <button
-                  type="button"
+                <div
                   style={{
                     width: "100%",
                     textAlign: "left",
-                    padding: "14px 16px",
+                    padding: "10px 12px",
                     borderRadius: 12,
-                    border: "none",
                     background: "#9a3412",
                     color: "white",
                     fontWeight: 700,
-                    cursor: "default",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
                   }}
                 >
-                  {type}
-                </button>
+                  {typePhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={typePhoto}
+                      alt=""
+                      width={56}
+                      height={56}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        background: "#7c2d12",
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : null}
+                  <span>{type}</span>
+                </div>
                 <div
                   style={{
                     display: "flex",
@@ -544,10 +577,11 @@ export default function BottleShopCategoryPage() {
                     marginTop: 8,
                   }}
                 >
-                  {COFFEE_MENU.filter((item) => item.type === type).map((item) => {
+                  {typeItems.map((item) => {
                     const p = products.find((product) => product.id === item.id);
                     const soldOut = !p || p.quantity <= 0;
                     const qty = p ? cart[p.id] || 0 : 0;
+                    const photo = uploadedPhoto(p?.imageUrl);
                     return (
                       <div
                         key={item.id}
@@ -564,14 +598,40 @@ export default function BottleShopCategoryPage() {
                           opacity: soldOut ? 0.55 : 1,
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{item.size}</div>
-                          <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
-                            {soldOut
-                              ? "Sold out"
-                              : p && p.price > 0
-                                ? money(p.price)
-                                : `${p?.quantity ?? 0} available`}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            minWidth: 0,
+                          }}
+                        >
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={photo}
+                              alt=""
+                              width={48}
+                              height={64}
+                              style={{
+                                width: 48,
+                                height: 64,
+                                objectFit: "cover",
+                                borderRadius: 8,
+                                background: "#0f172a",
+                                flexShrink: 0,
+                              }}
+                            />
+                          ) : null}
+                          <div>
+                            <div style={{ fontWeight: 700 }}>{item.size}</div>
+                            <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
+                              {soldOut
+                                ? "Sold out"
+                                : p && p.price > 0
+                                  ? money(p.price)
+                                  : `${p?.quantity ?? 0} available`}
+                            </div>
                           </div>
                         </div>
                         <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
@@ -604,7 +664,95 @@ export default function BottleShopCategoryPage() {
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
+            {products
+              .filter(
+                (p) => !COFFEE_MENU.some((item) => item.id === p.id)
+              )
+              .map((p) => {
+                const soldOut = p.quantity <= 0;
+                const qty = cart[p.id] || 0;
+                const photo = uploadedPhoto(p.imageUrl);
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      background: "#1e2937",
+                      border:
+                        qty > 0 ? "2px solid #fbbf24" : "1px solid #334155",
+                      opacity: soldOut ? 0.55 : 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        minWidth: 0,
+                      }}
+                    >
+                      {photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={photo}
+                          alt=""
+                          width={48}
+                          height={64}
+                          style={{
+                            width: 48,
+                            height: 64,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            background: "#0f172a",
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : null}
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{p.name}</div>
+                        <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
+                          {soldOut
+                            ? "Sold out"
+                            : p.price > 0
+                              ? money(p.price)
+                              : `${p.quantity} available`}
+                        </div>
+                      </div>
+                    </div>
+                    <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                      Qty
+                      <input
+                        type="number"
+                        min={0}
+                        max={p.quantity}
+                        disabled={soldOut || submitting}
+                        value={qty}
+                        onChange={(e) =>
+                          setQty(p.id, Number(e.target.value), p.quantity)
+                        }
+                        style={{
+                          display: "block",
+                          width: 64,
+                          marginTop: 4,
+                          padding: "8px 6px",
+                          borderRadius: 8,
+                          border: "1px solid #475569",
+                          background: "#0f172a",
+                          color: "white",
+                          textAlign: "center",
+                        }}
+                      />
+                    </label>
+                  </div>
+                );
+              })}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
