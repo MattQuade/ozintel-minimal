@@ -4,8 +4,8 @@ import {
   placeBottleOrder,
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
-import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
-import { resolveCoffeeVanNotifyPhone } from "@/lib/users";
+import { readSessionEmail } from "@/lib/operations/pub/bottleShopAccess";
+import { findUserByEmail, resolveCoffeeVanNotifyPhone } from "@/lib/users";
 import {
   getBottleShopNotifyPhone,
   getBottleShopOwnerEmail,
@@ -16,15 +16,26 @@ import { sendPushToOwner } from "@/lib/push/subscriptions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Reserve for restored Bottle Shop users only. */
+/** Anyone can reserve. A signed-in Bottle Shop user is named on the order. */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const gate = await resolveBottleShopGate(req);
-    if (!gate.ok) {
+    const typedName = String(body.customerName || "").trim();
+    let customerId: string | undefined;
+    let knownName = "";
+    const email = readSessionEmail(req);
+    if (email) {
+      const user = await findUserByEmail(email);
+      if (user?.status === "approved" && user.permissions?.bottleShop) {
+        customerId = user.email;
+        knownName = user.name;
+      }
+    }
+    const customerName = typedName || knownName;
+    if (!customerName) {
       return NextResponse.json(
-        { success: false, error: gate.error, needsAccess: true },
-        { status: 403 }
+        { success: false, error: "Enter your name." },
+        { status: 400 }
       );
     }
 
@@ -32,9 +43,9 @@ export async function POST(req: NextRequest) {
     const result = await runWithDataOwnerAsync(ownerEmail, () =>
       placeBottleOrder({
         items: Array.isArray(body.items) ? body.items : [],
-        customerName: body.customerName || gate.displayName,
+        customerName,
         customerNote: body.customerNote,
-        customerId: gate.customerId,
+        customerId,
       })
     );
 

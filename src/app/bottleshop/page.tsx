@@ -34,7 +34,7 @@ export default function BottleShopHubPage() {
       </p>
       <h1 style={{ color: "#f97316", marginBottom: 8 }}>Bottle Shop</h1>
       <p style={{ color: "#94a3b8", margin: "0 0 24px" }}>
-        Pick a shelf, then restore to see stock and reserve.
+        Pick a shelf. No account needed.
       </p>
       <BottleShopInstallButton />
       <BottleShopReplies />

@@ -98,6 +98,7 @@ export default function BottleShopCategoryPage() {
   const [customerNote, setCustomerNote] = useState("");
   const [restoreInput, setRestoreInput] = useState("");
   const [unlockedName, setUnlockedName] = useState("");
+  const [shelfOpen, setShelfOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -121,13 +122,13 @@ export default function BottleShopCategoryPage() {
       const data = await res.json();
       if (data.success) {
         setProducts(data.products || []);
-        setUnlockedName(data.customer?.name || "");
+        setShelfOpen(true);
         setStatus("");
         return true;
       }
       setProducts([]);
-      setUnlockedName("");
-      setStatus(data.error || "Restore your account to open the bottle shop.");
+      setShelfOpen(false);
+      setStatus(data.error || "Could not load the bottle shop.");
       return false;
     } catch (error) {
       console.error(error);
@@ -148,7 +149,7 @@ export default function BottleShopCategoryPage() {
     return trimmed;
   };
 
-  const silentRestore = useCallback(async (query: string) => {
+  const silentRestore = useCallback(async (query: string, quiet = false) => {
     const trimmed = normalizeRestoreQuery(query);
     if (!trimmed) return false;
     const controller = new AbortController();
@@ -163,10 +164,12 @@ export default function BottleShopCategoryPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!data.success || !data.user?.email) {
-        setStatus(
-          data.error ||
-            "No bottle shop account found. Ask the pub to add this username in the Bottle Shop ledger."
-        );
+        if (!quiet) {
+          setStatus(
+            data.error ||
+              "No bottle shop account found. Ask the pub to add this username in the Bottle Shop ledger."
+          );
+        }
         return false;
       }
       try {
@@ -190,11 +193,13 @@ export default function BottleShopCategoryPage() {
       const aborted =
         error instanceof Error &&
         (error.name === "AbortError" || error.name === "TimeoutError");
-      setStatus(
-        aborted
-          ? "Restore timed out. Try again on wifi."
-          : "Restore failed. Please try again."
-      );
+      if (!quiet) {
+        setStatus(
+          aborted
+            ? "Restore timed out. Try again on wifi."
+            : "Restore failed. Please try again."
+        );
+      }
       return false;
     } finally {
       window.clearTimeout(timer);
@@ -209,12 +214,10 @@ export default function BottleShopCategoryPage() {
     );
     if (storedLogin) setRestoreInput(storedLogin);
     void (async () => {
-      let ok = await loadCatalogue();
-      if (!ok && storedLogin) {
-        ok = await silentRestore(storedLogin);
-      }
+      const ok = await loadCatalogue();
+      if (storedLogin) await silentRestore(storedLogin, ok);
       if (!ok && !storedLogin) {
-        setStatus("Restore your account to open the bottle shop.");
+        setStatus("Could not load the bottle shop. Try again.");
       }
     })();
     // Boot once per category shelf.
@@ -236,7 +239,7 @@ export default function BottleShopCategoryPage() {
     };
   }, [loadCatalogue, restoring]);
 
-  const unlocked = products.length > 0 || Boolean(unlockedName);
+  const unlocked = shelfOpen || products.length > 0 || Boolean(unlockedName);
 
   const lines = useMemo(() => {
     return products
@@ -294,15 +297,20 @@ export default function BottleShopCategoryPage() {
     } catch {
       // ignore
     }
-    setProducts([]);
     setUnlockedName("");
+    setCustomerName("");
     setCart({});
-    setStatus("Signed out. Restore your account to open the bottle shop again.");
+    setStatus("");
+    void loadCatalogue();
   };
 
   const submit = async () => {
     if (!unlocked) {
-      setStatus("Restore your account first.");
+      setStatus("The shelf is still loading.");
+      return;
+    }
+    if (!customerName.trim() && !unlockedName) {
+      setStatus("Enter your name.");
       return;
     }
     if (!lines.length) {
@@ -401,7 +409,7 @@ export default function BottleShopCategoryPage() {
             </a>
           </p>
           <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
-            Restore your account to see {categoryLabel} stock and reserve bottles.
+            The {categoryLabel} shelf did not load. Try again, or restore a username if you have one.
           </p>
 
           <div
@@ -511,22 +519,24 @@ export default function BottleShopCategoryPage() {
 
         <BottleShopInstallButton />
 
-        <p style={{ margin: "0 0 16px" }}>
-          <button
-            type="button"
-            onClick={signOut}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#38bdf8",
-              padding: 0,
-              cursor: "pointer",
-              textDecoration: "underline",
-            }}
-          >
-            Sign out of bottle shop
-          </button>
-        </p>
+        {unlockedName ? (
+          <p style={{ margin: "0 0 16px" }}>
+            <button
+              type="button"
+              onClick={signOut}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#38bdf8",
+                padding: 0,
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              Sign out of bottle shop
+            </button>
+          </p>
+        ) : null}
 
         {loading ? (
           <p style={{ color: "#94a3b8" }}>Loading…</p>
