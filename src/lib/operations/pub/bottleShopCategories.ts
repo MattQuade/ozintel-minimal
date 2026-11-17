@@ -42,6 +42,19 @@ export function coffeeSizeLabel(size: string): string {
   return COFFEE_SIZES.find((item) => item.slug === size)?.label || size;
 }
 
+/** "Mocha small" is the drink Mocha at size Small, not a new drink. */
+export function splitCoffeeName(name: string): {
+  typeName: string;
+  size?: CoffeeSize;
+} {
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+  const match = trimmed.match(/^(.*)\s+(small|medium|large)$/i);
+  const size = match?.[2]?.toLowerCase() || "";
+  const typeName = match?.[1]?.trim() || "";
+  if (typeName && isCoffeeSize(size)) return { typeName, size };
+  return { typeName: trimmed };
+}
+
 /** Stable id so "Long black" + Small is one shelf line, not a new row every save. */
 export function coffeeProductId(typeName: string, size: CoffeeSize): string {
   const slug = String(typeName || "")
@@ -65,13 +78,17 @@ export type CoffeeShelfGroup = {
 export function coffeeShelfGroups(
   products: Array<{ id: string; coffeeType?: string; size?: string }>
 ): CoffeeShelfGroup[] {
-  const groups: CoffeeShelfGroup[] = COFFEE_TYPES.map((type) => ({
-    type,
-    rows: COFFEE_MENU.filter((item) => item.type === type).map((item) => ({
+  const stocked = new Set(products.map((product) => product.id));
+  const groups: CoffeeShelfGroup[] = [];
+  for (const type of COFFEE_TYPES) {
+    const rows = COFFEE_MENU.filter(
+      (item) => item.type === type && stocked.has(item.id)
+    ).map((item) => ({
       id: item.id,
       sizeLabel: item.size,
-    })),
-  }));
+    }));
+    if (rows.length) groups.push({ type, rows });
+  }
   const knownIds = new Set(groups.flatMap((group) => group.rows.map((row) => row.id)));
   const extra = new Map<string, CoffeeShelfGroup>();
   for (const product of products) {

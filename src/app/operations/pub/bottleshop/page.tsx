@@ -199,9 +199,7 @@ function BottleShopAdminInner() {
   const [newProductQty, setNewProductQty] = useState("1");
   const [newProductCategory, setNewProductCategory] =
     useState<BottleCategory>("beer");
-  const [newCoffeeSizes, setNewCoffeeSizes] = useState<CoffeeSize[]>(
-    COFFEE_SIZES.map((size) => size.slug)
-  );
+  const [newCoffeeSize, setNewCoffeeSize] = useState<CoffeeSize>("small");
   const [drafts, setDrafts] = useState<
     Record<
       string,
@@ -476,10 +474,6 @@ function BottleShopAdminInner() {
       setStatus("Product name is required.");
       return;
     }
-    if (newProductCategory === "coffee" && newCoffeeSizes.length === 0) {
-      setStatus("Choose Small, Medium, or Large.");
-      return;
-    }
     setStatus("Adding product…");
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
@@ -490,7 +484,7 @@ function BottleShopAdminInner() {
           price: Number(newProductPrice) || 0,
           quantity: Number(newProductQty) || 0,
           category: newProductCategory,
-          ...(newProductCategory === "coffee" ? { sizes: newCoffeeSizes } : {}),
+          ...(newProductCategory === "coffee" ? { sizes: [newCoffeeSize] } : {}),
         }),
       });
       const data = await res.json();
@@ -502,17 +496,14 @@ function BottleShopAdminInner() {
       const added = Array.isArray(data.products)
         ? data.products.map((product: Product) => product.name).join(", ")
         : data.product.name;
-      const skipped = Array.isArray(data.skipped) && data.skipped.length
-        ? ` Already on the shelf: ${data.skipped.join(", ")}.`
-        : "";
       setNewProductName("");
       setNewProductPrice("");
       setNewProductQty("1");
       setNewProductCategory("beer");
-      setNewCoffeeSizes(COFFEE_SIZES.map((size) => size.slug));
+      setNewCoffeeSize("small");
       setStatus(
         addingCoffee
-          ? `Added ${added}.${skipped} Upload a photo on each size below.`
+          ? `Added ${added}. Upload a photo on that size below.`
           : `Added ${data.product.name}. Upload a photo below.`
       );
       await load();
@@ -1038,7 +1029,7 @@ function BottleShopAdminInner() {
           >
             <p style={{ margin: "0 0 8px", color: "#94a3b8" }}>
               {newProductCategory === "coffee"
-                ? "Name the coffee, tick the cup sizes, then add. Each size is its own stock line."
+                ? "Name the coffee and pick one cup size. Add it again for another size. A size you delete stays off."
                 : "Add a new item (e.g. 24pk cider), then upload its photo."}
             </p>
             <input
@@ -1085,18 +1076,12 @@ function BottleShopAdminInner() {
             {newProductCategory === "coffee" ? (
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 {COFFEE_SIZES.map((size) => {
-                  const on = newCoffeeSizes.includes(size.slug);
+                  const on = newCoffeeSize === size.slug;
                   return (
                     <button
                       key={size.slug}
                       type="button"
-                      onClick={() =>
-                        setNewCoffeeSizes((prev) =>
-                          prev.includes(size.slug)
-                            ? prev.filter((item) => item !== size.slug)
-                            : [...prev, size.slug]
-                        )
-                      }
+                      onClick={() => setNewCoffeeSize(size.slug)}
                       style={{
                         flex: 1,
                         padding: "10px 8px",

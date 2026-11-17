@@ -15,6 +15,7 @@ import {
   isCoffeeSize,
   isFrenchShelfWine,
   normalizeBottleCategory,
+  splitCoffeeName,
   type BottleCategory,
   type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
@@ -633,17 +634,16 @@ export async function createCoffeeProducts(input: {
   quantity?: number;
   sizes: string[];
 }): Promise<{ products: BottleProduct[]; skipped: string[] }> {
-  const typeName = String(input.name || "").trim().replace(/\s+/g, " ");
+  const split = splitCoffeeName(input.name);
+  const typeName = split.typeName;
   if (!typeName) throw new Error("Product name is required");
-  const wanted = new Set(
-    input.sizes
-      .map((size) => String(size || "").trim().toLowerCase())
-      .filter(isCoffeeSize)
-  );
-  const sizes = (["small", "medium", "large"] as const).filter((size) =>
-    wanted.has(size)
-  );
-  if (!sizes.length) throw new Error("Choose Small, Medium, or Large.");
+  const picked = input.sizes
+    .map((size) => String(size || "").trim().toLowerCase())
+    .find(isCoffeeSize);
+  // One size per add. A deleted size is not put back because another size was chosen.
+  const size = split.size || picked;
+  if (!size) throw new Error("Choose Small, Medium, or Large.");
+  const sizes = [size];
   if (!coffeeProductId(typeName, "small")) {
     throw new Error("Use a coffee name with letters.");
   }
@@ -673,7 +673,8 @@ export async function createCoffeeProducts(input: {
     created.push(product);
   }
   if (!created.length) {
-    throw new Error(`${typeName} is already on the coffee shelf.`);
+    const already = skipped.length ? ` ${skipped.join(", ").toLowerCase()}` : "";
+    throw new Error(`${typeName}${already} is already in the stock.`);
   }
   await writeStore(store);
   return { products: created, skipped };
