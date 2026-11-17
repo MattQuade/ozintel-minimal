@@ -10,10 +10,10 @@ import {
 } from "@/lib/client/sessionEmail";
 import {
   bottleCategoryLabel,
-  COFFEE_MENU,
-  COFFEE_TYPES,
+  coffeeShelfGroups,
   isBottleCategory,
   type BottleCategory,
+  type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
 
 type Product = {
@@ -24,6 +24,8 @@ type Product = {
   imageUrl: string;
   active: boolean;
   category?: BottleCategory;
+  size?: CoffeeSize;
+  coffeeType?: string;
 };
 
 type Cart = Record<string, number>;
@@ -245,6 +247,12 @@ export default function BottleShopCategoryPage() {
   const cartTotal = useMemo(
     () => lines.reduce((sum, l) => sum + l.qty * l.product.price, 0),
     [lines]
+  );
+
+  const coffeeGroups = useMemo(() => coffeeShelfGroups(products), [products]);
+  const coffeeRowIds = useMemo(
+    () => new Set(coffeeGroups.flatMap((group) => group.rows.map((row) => row.id))),
+    [coffeeGroups]
   );
 
   const setQty = (id: string, next: number, max: number) => {
@@ -524,8 +532,11 @@ export default function BottleShopCategoryPage() {
           <p style={{ color: "#94a3b8" }}>Loading…</p>
         ) : category === "coffee" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {COFFEE_TYPES.map((type) => {
-              const typeItems = COFFEE_MENU.filter((item) => item.type === type);
+            {coffeeGroups.map((group) => {
+              const typeItems = group.rows.map((row) => ({
+                id: row.id,
+                size: row.sizeLabel,
+              }));
               const typePhoto =
                 typeItems
                   .map((item) =>
@@ -535,7 +546,7 @@ export default function BottleShopCategoryPage() {
                   )
                   .find(Boolean) || "";
               return (
-              <div key={type}>
+              <div key={group.type}>
                 <div
                   style={{
                     width: "100%",
@@ -567,7 +578,7 @@ export default function BottleShopCategoryPage() {
                       }}
                     />
                   ) : null}
-                  <span>{type}</span>
+                  <span>{group.type}</span>
                 </div>
                 <div
                   style={{
@@ -667,9 +678,7 @@ export default function BottleShopCategoryPage() {
               );
             })}
             {products
-              .filter(
-                (p) => !COFFEE_MENU.some((item) => item.id === p.id)
-              )
+              .filter((p) => !coffeeRowIds.has(p.id))
               .map((p) => {
                 const soldOut = p.quantity <= 0;
                 const qty = cart[p.id] || 0;

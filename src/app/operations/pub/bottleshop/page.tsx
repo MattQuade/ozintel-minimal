@@ -16,7 +16,9 @@ import {
 import { prepareReceiptFileForOcr } from "@/lib/client/compressReceiptImage";
 import {
   BOTTLE_SHOP_CATEGORIES,
+  COFFEE_SIZES,
   type BottleCategory,
+  type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
 
 type Product = {
@@ -197,6 +199,9 @@ function BottleShopAdminInner() {
   const [newProductQty, setNewProductQty] = useState("1");
   const [newProductCategory, setNewProductCategory] =
     useState<BottleCategory>("beer");
+  const [newCoffeeSizes, setNewCoffeeSizes] = useState<CoffeeSize[]>(
+    COFFEE_SIZES.map((size) => size.slug)
+  );
   const [drafts, setDrafts] = useState<
     Record<
       string,
@@ -471,6 +476,10 @@ function BottleShopAdminInner() {
       setStatus("Product name is required.");
       return;
     }
+    if (newProductCategory === "coffee" && newCoffeeSizes.length === 0) {
+      setStatus("Choose Small, Medium, or Large.");
+      return;
+    }
     setStatus("Adding product…");
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
@@ -481,6 +490,7 @@ function BottleShopAdminInner() {
           price: Number(newProductPrice) || 0,
           quantity: Number(newProductQty) || 0,
           category: newProductCategory,
+          ...(newProductCategory === "coffee" ? { sizes: newCoffeeSizes } : {}),
         }),
       });
       const data = await res.json();
@@ -488,11 +498,23 @@ function BottleShopAdminInner() {
         setStatus(data.error || "Could not add product");
         return;
       }
+      const addingCoffee = newProductCategory === "coffee";
+      const added = Array.isArray(data.products)
+        ? data.products.map((product: Product) => product.name).join(", ")
+        : data.product.name;
+      const skipped = Array.isArray(data.skipped) && data.skipped.length
+        ? ` Already on the shelf: ${data.skipped.join(", ")}.`
+        : "";
       setNewProductName("");
       setNewProductPrice("");
       setNewProductQty("1");
       setNewProductCategory("beer");
-      setStatus(`Added ${data.product.name}. Upload a photo below.`);
+      setNewCoffeeSizes(COFFEE_SIZES.map((size) => size.slug));
+      setStatus(
+        addingCoffee
+          ? `Added ${added}.${skipped} Upload a photo on each size below.`
+          : `Added ${data.product.name}. Upload a photo below.`
+      );
       await load();
     } catch (error) {
       console.error(error);
@@ -1015,12 +1037,18 @@ function BottleShopAdminInner() {
             }}
           >
             <p style={{ margin: "0 0 8px", color: "#94a3b8" }}>
-              Add a new item (e.g. 24pk cider), then upload its photo.
+              {newProductCategory === "coffee"
+                ? "Name the coffee, tick the cup sizes, then add. Each size is its own stock line."
+                : "Add a new item (e.g. 24pk cider), then upload its photo."}
             </p>
             <input
               value={newProductName}
               onChange={(e) => setNewProductName(e.target.value)}
-              placeholder="Product name"
+              placeholder={
+                newProductCategory === "coffee"
+                  ? "Coffee name (e.g. Long black)"
+                  : "Product name"
+              }
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -1054,6 +1082,38 @@ function BottleShopAdminInner() {
                 </option>
               ))}
             </select>
+            {newProductCategory === "coffee" ? (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {COFFEE_SIZES.map((size) => {
+                  const on = newCoffeeSizes.includes(size.slug);
+                  return (
+                    <button
+                      key={size.slug}
+                      type="button"
+                      onClick={() =>
+                        setNewCoffeeSizes((prev) =>
+                          prev.includes(size.slug)
+                            ? prev.filter((item) => item !== size.slug)
+                            : [...prev, size.slug]
+                        )
+                      }
+                      style={{
+                        flex: 1,
+                        padding: "10px 8px",
+                        borderRadius: 8,
+                        border: on ? "none" : "1px solid #475569",
+                        background: on ? "#9a3412" : "#0f172a",
+                        color: "white",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {size.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
                 value={newProductPrice}

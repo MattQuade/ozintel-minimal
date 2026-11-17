@@ -26,6 +26,80 @@ export const COFFEE_MENU = [
 
 export const COFFEE_TYPES = ["Cappuccino", "Latte", "Flat white"] as const;
 
+export const COFFEE_SIZES = [
+  { slug: "small", label: "Small" },
+  { slug: "medium", label: "Medium" },
+  { slug: "large", label: "Large" },
+] as const;
+
+export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
+
+export function isCoffeeSize(value: string): value is CoffeeSize {
+  return COFFEE_SIZES.some((size) => size.slug === value);
+}
+
+export function coffeeSizeLabel(size: string): string {
+  return COFFEE_SIZES.find((item) => item.slug === size)?.label || size;
+}
+
+/** Stable id so "Long black" + Small is one shelf line, not a new row every save. */
+export function coffeeProductId(typeName: string, size: CoffeeSize): string {
+  const slug = String(typeName || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `coffee-${slug}-${size}` : "";
+}
+
+export type CoffeeShelfGroup = {
+  type: string;
+  rows: Array<{ id: string; sizeLabel: string }>;
+};
+
+/**
+ * Cappuccino, Latte, and Flat white stay first.
+ * Any later coffee added with cup sizes is grouped the same way.
+ */
+export function coffeeShelfGroups(
+  products: Array<{ id: string; coffeeType?: string; size?: string }>
+): CoffeeShelfGroup[] {
+  const groups: CoffeeShelfGroup[] = COFFEE_TYPES.map((type) => ({
+    type,
+    rows: COFFEE_MENU.filter((item) => item.type === type).map((item) => ({
+      id: item.id,
+      sizeLabel: item.size,
+    })),
+  }));
+  const knownIds = new Set(groups.flatMap((group) => group.rows.map((row) => row.id)));
+  const extra = new Map<string, CoffeeShelfGroup>();
+  for (const product of products) {
+    if (knownIds.has(product.id)) continue;
+    const type = String(product.coffeeType || "").trim();
+    const size = String(product.size || "").trim().toLowerCase();
+    if (!type || !isCoffeeSize(size)) continue;
+    if (COFFEE_TYPES.some((known) => known.toLowerCase() === type.toLowerCase())) {
+      continue;
+    }
+    let group = extra.get(type.toLowerCase());
+    if (!group) {
+      group = { type, rows: [] };
+      extra.set(type.toLowerCase(), group);
+    }
+    if (group.rows.some((row) => row.id === product.id)) continue;
+    group.rows.push({ id: product.id, sizeLabel: coffeeSizeLabel(size) });
+    knownIds.add(product.id);
+  }
+  const sizeRank = (label: string) =>
+    COFFEE_SIZES.findIndex((size) => size.label === label);
+  for (const group of extra.values()) {
+    group.rows.sort((a, b) => sizeRank(a.sizeLabel) - sizeRank(b.sizeLabel));
+    groups.push(group);
+  }
+  return groups;
+}
+
 export function isBottleCategory(value: string): value is BottleCategory {
   return BOTTLE_SHOP_CATEGORIES.some((c) => c.slug === value);
 }

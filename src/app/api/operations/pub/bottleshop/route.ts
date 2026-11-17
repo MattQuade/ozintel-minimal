@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createBottleProduct,
+  createCoffeeProducts,
   deleteBottleOrder,
   deleteBottleProduct,
   loadBottleShopAdmin,
@@ -46,6 +47,23 @@ export async function POST(req: NextRequest) {
   if (!access.ok) return access.response;
   try {
     const body = await req.json();
+    const sizes = Array.isArray(body.sizes) ? body.sizes : [];
+    if (String(body.category || "").trim().toLowerCase() === "coffee" && sizes.length) {
+      const result = await withBottleShopOwner(() =>
+        createCoffeeProducts({
+          name: body.name,
+          price: body.price,
+          quantity: body.quantity,
+          sizes,
+        })
+      );
+      return NextResponse.json({
+        success: true,
+        product: result.products[0],
+        products: result.products,
+        skipped: result.skipped,
+      });
+    }
     const product = await withBottleShopOwner(() =>
       createBottleProduct({
         name: body.name,

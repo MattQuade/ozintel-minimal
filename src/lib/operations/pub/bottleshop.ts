@@ -9,10 +9,14 @@ import {
 } from "@/lib/dataPaths";
 import {
   COFFEE_MENU,
+  coffeeProductId,
+  coffeeSizeLabel,
   isBordeauxSuperieurAt29,
+  isCoffeeSize,
   isFrenchShelfWine,
   normalizeBottleCategory,
   type BottleCategory,
+  type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
 
 export type { BottleCategory };
@@ -25,6 +29,10 @@ export type BottleProduct = {
   imageUrl: string;
   active: boolean;
   category: BottleCategory;
+  /** Set on coffees added with a cup size. */
+  size?: CoffeeSize;
+  /** Drink name without the size, e.g. "Long black". */
+  coffeeType?: string;
 };
 
 export type BottleOrderLine = {
@@ -176,6 +184,9 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
   const id = String(raw.id || "").trim();
   const name = String(raw.name || "").trim();
   if (!id || !name) return null;
+  const category = normalizeBottleCategory(raw.category, { id, name });
+  const sizeRaw = String(raw.size || "").trim().toLowerCase();
+  const coffeeType = String(raw.coffeeType || "").trim();
   return {
     id,
     name,
@@ -183,7 +194,9 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
     quantity: Math.max(0, Math.floor(Number(raw.quantity) || 0)),
     imageUrl: String(raw.imageUrl || `/bottleshop/${id}.svg`).trim(),
     active: raw.active !== false,
-    category: normalizeBottleCategory(raw.category, { id, name }),
+    category,
+    ...(category === "coffee" && isCoffeeSize(sizeRaw) ? { size: sizeRaw } : {}),
+    ...(category === "coffee" && coffeeType ? { coffeeType } : {}),
   };
 }
 
@@ -611,6 +624,59 @@ export async function deleteBottleProduct(id: string): Promise<void> {
   } catch {
     // No uploaded photo for this product.
   }
+}
+
+/** One new coffee drink, with a stock line for each chosen cup size. */
+export async function createCoffeeProducts(input: {
+  name: string;
+  price?: number;
+  quantity?: number;
+  sizes: string[];
+}): Promise<{ products: BottleProduct[]; skipped: string[] }> {
+  const typeName = String(input.name || "").trim().replace(/\s+/g, " ");
+  if (!typeName) throw new Error("Product name is required");
+  const wanted = new Set(
+    input.sizes
+      .map((size) => String(size || "").trim().toLowerCase())
+      .filter(isCoffeeSize)
+  );
+  const sizes = (["small", "medium", "large"] as const).filter((size) =>
+    wanted.has(size)
+  );
+  if (!sizes.length) throw new Error("Choose Small, Medium, or Large.");
+  if (!coffeeProductId(typeName, "small")) {
+    throw new Error("Use a coffee name with letters.");
+  }
+
+  const store = await readStore();
+  const created: BottleProduct[] = [];
+  const skipped: string[] = [];
+  for (const size of sizes) {
+    const id = coffeeProductId(typeName, size);
+    const label = coffeeSizeLabel(size);
+    if (store.products.some((product) => product.id === id)) {
+      skipped.push(label);
+      continue;
+    }
+    const product: BottleProduct = {
+      id,
+      name: `${typeName} ${label.toLowerCase()}`,
+      price: Math.max(0, Number(input.price) || 0),
+      quantity: Math.max(0, Math.floor(Number(input.quantity) || 0)),
+      imageUrl: "/bottleshop/wine-01.svg",
+      active: true,
+      category: "coffee",
+      size,
+      coffeeType: typeName,
+    };
+    store.products.push(product);
+    created.push(product);
+  }
+  if (!created.length) {
+    throw new Error(`${typeName} is already on the coffee shelf.`);
+  }
+  await writeStore(store);
+  return { products: created, skipped };
 }
 
 export async function createBottleProduct(input: {
