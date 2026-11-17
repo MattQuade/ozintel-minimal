@@ -10,6 +10,8 @@ import {
 } from "@/lib/client/sessionEmail";
 import {
   bottleCategoryLabel,
+  COFFEE_MENU,
+  COFFEE_TYPES,
   isBottleCategory,
   type BottleCategory,
 } from "@/lib/operations/pub/bottleShopCategories";
@@ -488,7 +490,9 @@ export default function BottleShopCategoryPage() {
           </a>
         </p>
         <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
-          Reserve {categoryLabel} here — pay and collect at the pub.
+          {category === "coffee"
+            ? "Choose a coffee, set the quantity, then reserve. Pay and collect at the van."
+            : `Reserve ${categoryLabel} here — pay and collect at the pub.`}
         </p>
 
         <BottleShopInstallButton />
@@ -512,6 +516,96 @@ export default function BottleShopCategoryPage() {
 
         {loading ? (
           <p style={{ color: "#94a3b8" }}>Loading…</p>
+        ) : category === "coffee" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {COFFEE_TYPES.map((type) => (
+              <div key={type}>
+                <button
+                  type="button"
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#9a3412",
+                    color: "white",
+                    fontWeight: 700,
+                    cursor: "default",
+                  }}
+                >
+                  {type}
+                </button>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                >
+                  {COFFEE_MENU.filter((item) => item.type === type).map((item) => {
+                    const p = products.find((product) => product.id === item.id);
+                    const soldOut = !p || p.quantity <= 0;
+                    const qty = p ? cart[p.id] || 0 : 0;
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          background: "#1e2937",
+                          border:
+                            qty > 0 ? "2px solid #fbbf24" : "1px solid #334155",
+                          opacity: soldOut ? 0.55 : 1,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{item.size}</div>
+                          <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
+                            {soldOut
+                              ? "Sold out"
+                              : p && p.price > 0
+                                ? money(p.price)
+                                : `${p?.quantity ?? 0} available`}
+                          </div>
+                        </div>
+                        <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                          Qty
+                          <input
+                            type="number"
+                            min={0}
+                            max={p?.quantity || 0}
+                            disabled={soldOut || submitting || !p}
+                            value={qty}
+                            onChange={(e) =>
+                              p &&
+                              setQty(p.id, Number(e.target.value), p.quantity)
+                            }
+                            style={{
+                              display: "block",
+                              width: 64,
+                              marginTop: 4,
+                              padding: "8px 6px",
+                              borderRadius: 8,
+                              border: "1px solid #475569",
+                              background: "#0f172a",
+                              color: "white",
+                              textAlign: "center",
+                            }}
+                          />
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {products.map((p) => {
@@ -639,7 +733,11 @@ export default function BottleShopCategoryPage() {
           />
           <input
             type="text"
-            placeholder="Note for the pub (optional)"
+            placeholder={
+              category === "coffee"
+                ? "Note for the coffee van (optional)"
+                : "Note for the pub (optional)"
+            }
             value={customerNote}
             onChange={(e) => setCustomerNote(e.target.value)}
             style={{
@@ -669,7 +767,11 @@ export default function BottleShopCategoryPage() {
               cursor: submitting || !lines.length ? "not-allowed" : "pointer",
             }}
           >
-            {submitting ? "Reserving…" : "Reserve bottles"}
+            {submitting
+              ? "Reserving…"
+              : category === "coffee"
+                ? "Reserve"
+                : "Reserve bottles"}
           </button>
           {status ? (
             <p style={{ margin: "12px 0 0", color: "#93c5fd", lineHeight: 1.4 }}>

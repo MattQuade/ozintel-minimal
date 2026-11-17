@@ -341,6 +341,44 @@ export async function findUserForRestore(query: string) {
   return matchUserForRestore(query, users);
 }
 
+/** John Gill's coffee van. Texts go to the mobile on this account. */
+const COFFEE_VAN_PHONE_DIGITS = "61413693618";
+
+/**
+ * Phone for a coffee reserve. One users.json read.
+ * Keeps that account on the bottle shop only.
+ */
+export async function resolveCoffeeVanNotifyPhone(): Promise<string> {
+  const users = await readUsersFast();
+  const idx = users.findIndex(
+    (user) => normalizePhone(user.phone) === COFFEE_VAN_PHONE_DIGITS
+  );
+  if (idx < 0) return `+${COFFEE_VAN_PHONE_DIGITS}`;
+  const user = users[idx];
+  const bottleShopOnly =
+    user.status === "approved" &&
+    user.permissions.bottleShop &&
+    !user.permissions.accounting &&
+    !user.permissions.pubOps &&
+    !user.permissions.forestryOps &&
+    !user.permissions.logisticsOps;
+  if (!bottleShopOnly && user.status !== "blocked") {
+    users[idx] = {
+      ...user,
+      status: "approved",
+      permissions: {
+        accounting: false,
+        pubOps: false,
+        forestryOps: false,
+        logisticsOps: false,
+        bottleShop: true,
+      },
+    };
+    await writeUsers(users);
+  }
+  return user.phone.trim();
+}
+
 /**
  * Ensure an approved Bottle Shop login exists (e.g. jsmith@ozintel).
  * Creates the user if missing; enables bottleShop + approves if present.

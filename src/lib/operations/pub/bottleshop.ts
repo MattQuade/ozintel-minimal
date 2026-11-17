@@ -8,6 +8,7 @@ import {
   getRepoSeedBottleShopPath,
 } from "@/lib/dataPaths";
 import {
+  COFFEE_MENU,
   isBordeauxSuperieurAt29,
   isFrenchShelfWine,
   normalizeBottleCategory,
@@ -31,6 +32,7 @@ export type BottleOrderLine = {
   name: string;
   quantity: number;
   unitPrice: number;
+  category?: BottleCategory;
 };
 
 export type BottleOrder = {
@@ -153,6 +155,23 @@ function normalizeCustomer(
   };
 }
 
+/** Add the coffee sizes once. Later deletes stay deleted. */
+function addCoffeeMenu(products: BottleProduct[]): boolean {
+  if (products.some((product) => product.id.startsWith("coffee-"))) return false;
+  for (const item of COFFEE_MENU) {
+    products.push({
+      id: item.id,
+      name: `${item.type} ${item.size.toLowerCase()}`,
+      price: 0,
+      quantity: 20,
+      imageUrl: "/bottleshop/wine-01.svg",
+      active: true,
+      category: "coffee",
+    });
+  }
+  return true;
+}
+
 function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
   const id = String(raw.id || "").trim();
   const name = String(raw.name || "").trim();
@@ -254,7 +273,9 @@ async function readStore(): Promise<BottleShopStore> {
     const hubButtons = normalizeHubButtons(
       (parsed as { hubButtons?: unknown }).hubButtons
     );
-    return { products, orders, customers, hubButtons };
+    const store = { products, orders, customers, hubButtons };
+    if (addCoffeeMenu(store.products)) await writeStore(store);
+    return store;
   } catch {
     return defaultStore();
   }
@@ -626,14 +647,40 @@ export type PlaceOrderInput = {
 export type PlaceOrderResult = {
   order: BottleOrder;
   products: BottleProduct[];
+  /** Whole reserve, kept for the ledger. */
   smsBody: string;
+  /** Coffee lines only. Null when the reserve has no coffee. */
+  coffeeSmsBody: string | null;
+  /** Bottle lines only. Null when the reserve is coffee only. */
+  pubSmsBody: string | null;
 };
+
+function orderText(
+  title: string,
+  lines: BottleOrderLine[],
+  customerName: string,
+  customerNote: string
+): string {
+  const total = lines.reduce(
+    (sum, line) => sum + line.quantity * line.unitPrice,
+    0
+  );
+  return [
+    title,
+    lines.map((line) => `${line.quantity}x ${line.name}`).join(", "),
+    `Total: $${total.toFixed(2)}`,
+    `Name: ${customerName}`,
+    customerNote ? `Note: ${customerNote}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 export async function placeBottleOrder(
   input: PlaceOrderInput
 ): Promise<PlaceOrderResult> {
   const items = Array.isArray(input.items) ? input.items : [];
-  if (!items.length) throw new Error("Select at least one bottle");
+  if (!items.length) throw new Error("Select at least one item");
 
   const wanted = new Map<string, number>();
   for (const item of items) {
@@ -642,7 +689,7 @@ export async function placeBottleOrder(
     if (!productId || quantity <= 0) continue;
     wanted.set(productId, (wanted.get(productId) || 0) + quantity);
   }
-  if (!wanted.size) throw new Error("Select at least one bottle");
+  if (!wanted.size) throw new Error("Select at least one item");
 
   const store = await readStore();
   const lines: BottleOrderLine[] = [];
@@ -661,6 +708,7 @@ export async function placeBottleOrder(
       name: product.name,
       quantity,
       unitPrice: product.price,
+      category: product.category,
     });
   }
 
@@ -681,23 +729,21 @@ export async function placeBottleOrder(
   store.orders.push(order);
   await writeStore(store);
 
-  const lineText = lines
-    .map((l) => `${l.quantity}x ${l.name}`)
-    .join(", ");
-  const smsBody = [
-    "BOTTLE SHOP ORDER",
-    lineText,
-    `Total: $${total.toFixed(2)}`,
-    `Name: ${customerName}`,
-    customerNote ? `Note: ${customerNote}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const coffeeLines = lines.filter((line) => line.category === "coffee");
+  const pubLines = lines.filter((line) => line.category !== "coffee");
+  const coffeeSmsBody = coffeeLines.length
+    ? orderText("COFFEE ORDER", coffeeLines, customerName, customerNote)
+    : null;
+  const pubSmsBody = pubLines.length
+    ? orderText("BOTTLE SHOP ORDER", pubLines, customerName, customerNote)
+    : null;
 
   return {
     order,
     products: store.products.filter((p) => p.active),
-    smsBody,
+    smsBody: [coffeeSmsBody, pubSmsBody].filter(Boolean).join("\n\n"),
+    coffeeSmsBody,
+    pubSmsBody,
   };
 }
 

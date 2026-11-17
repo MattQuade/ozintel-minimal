@@ -1,5 +1,6 @@
 /** Public bottle shop shelves — keep this list tiny and fixed. */
 export const BOTTLE_SHOP_CATEGORIES = [
+  { slug: "coffee", label: "Coffee" },
   { slug: "beer", label: "Beer" },
   { slug: "wine", label: "Australian Wine" },
   { slug: "french-wine", label: "French Wine" },
@@ -9,6 +10,21 @@ export const BOTTLE_SHOP_CATEGORIES = [
 ] as const;
 
 export type BottleCategory = (typeof BOTTLE_SHOP_CATEGORIES)[number]["slug"];
+
+/** Starting coffee list. Each size is its own shelf item so it has its own quantity. */
+export const COFFEE_MENU = [
+  { id: "coffee-cappuccino-small", type: "Cappuccino", size: "Small" },
+  { id: "coffee-cappuccino-medium", type: "Cappuccino", size: "Medium" },
+  { id: "coffee-cappuccino-large", type: "Cappuccino", size: "Large" },
+  { id: "coffee-latte-small", type: "Latte", size: "Small" },
+  { id: "coffee-latte-medium", type: "Latte", size: "Medium" },
+  { id: "coffee-latte-large", type: "Latte", size: "Large" },
+  { id: "coffee-flat-white-small", type: "Flat white", size: "Small" },
+  { id: "coffee-flat-white-medium", type: "Flat white", size: "Medium" },
+  { id: "coffee-flat-white-large", type: "Flat white", size: "Large" },
+] as const;
+
+export const COFFEE_TYPES = ["Cappuccino", "Latte", "Flat white"] as const;
 
 export function isBottleCategory(value: string): value is BottleCategory {
   return BOTTLE_SHOP_CATEGORIES.some((c) => c.slug === value);
@@ -57,6 +73,13 @@ export function normalizeBottleCategory(
     .toLowerCase();
   const blob = `${id} ${name}`;
 
+  if (
+    /\bcoffees?\b|cappuccino|latte|flat\s*white|long\s*black|espresso|mocha|macchiato|piccolo/.test(
+      blob
+    )
+  ) {
+    return "coffee";
+  }
   if (isFrenchShelfWine(name) || isFrenchShelfWine(id)) return "french-wine";
   if (id.startsWith("wine") || /\bwine\b|shiraz|cabernet|merlot|pinot|chardonnay|sauvignon|riesling|ros[eé]|sparkling|moscato/.test(blob)) {
     return "wine";

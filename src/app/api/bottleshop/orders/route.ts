@@ -5,6 +5,7 @@ import {
 } from "@/lib/operations/pub/bottleshop";
 import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
 import { resolveBottleShopGate } from "@/lib/operations/pub/bottleShopAccess";
+import { resolveCoffeeVanNotifyPhone } from "@/lib/users";
 import {
   getBottleShopNotifyPhone,
   getBottleShopOwnerEmail,
@@ -42,18 +43,34 @@ export async function POST(req: NextRequest) {
     );
 
     let sms: { ok: boolean; mocked?: boolean; error?: string } = { ok: false };
-    try {
-      const sent = await sendViaMessageMedia(
-        getBottleShopNotifyPhone(),
-        result.smsBody
-      );
-      sms = { ok: true, mocked: sent.mocked };
-    } catch (error) {
-      console.error("[bottleshop sms]", error);
-      sms = {
-        ok: false,
-        error: error instanceof Error ? error.message : "SMS failed",
-      };
+    const smsErrors: string[] = [];
+    if (result.coffeeSmsBody) {
+      try {
+        const phone = await resolveCoffeeVanNotifyPhone();
+        const sent = await sendViaMessageMedia(phone, result.coffeeSmsBody);
+        sms = { ok: true, mocked: sent.mocked };
+      } catch (error) {
+        console.error("[coffee sms]", error);
+        smsErrors.push(error instanceof Error ? error.message : "Coffee SMS failed");
+      }
+    }
+    if (result.pubSmsBody) {
+      try {
+        const sent = await sendViaMessageMedia(
+          getBottleShopNotifyPhone(),
+          result.pubSmsBody
+        );
+        sms = { ok: true, mocked: sent.mocked };
+      } catch (error) {
+        console.error("[bottleshop sms]", error);
+        smsErrors.push(error instanceof Error ? error.message : "SMS failed");
+      }
+    }
+    if (!result.coffeeSmsBody && !result.pubSmsBody) {
+      smsErrors.push("Nothing to text");
+    }
+    if (smsErrors.length && !sms.ok) {
+      sms = { ok: false, error: smsErrors.join(" ") };
     }
 
     let push: { sent: number; failed: number; error?: string } = {
@@ -61,12 +78,14 @@ export async function POST(req: NextRequest) {
       failed: 0,
     };
     try {
-      push = await sendPushToOwner(ownerEmail, {
-        title: "Bottle shop order",
-        body: result.smsBody.replace(/\n/g, " · "),
-        url: "/operations/pub/bottleshop",
-        badgeCount: reservedCount,
-      });
+      if (result.pubSmsBody) {
+        push = await sendPushToOwner(ownerEmail, {
+          title: "Bottle shop order",
+          body: result.pubSmsBody.replace(/\n/g, " · "),
+          url: "/operations/pub/bottleshop",
+          badgeCount: reservedCount,
+        });
+      }
     } catch (error) {
       console.error("[bottleshop push]", error);
       push = {
