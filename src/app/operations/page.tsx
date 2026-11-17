@@ -1,7 +1,5 @@
 "use client";
 
-import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
-
 export default function OperationsIndexPage() {
   return (
     <main
@@ -58,9 +56,10 @@ export default function OperationsIndexPage() {
             padding: 20,
             fontSize: "1.3rem",
             borderRadius: 12,
+            background: "#b45309",
+            color: "white",
             textDecoration: "none",
             fontWeight: "bold",
-            ...bottleShopGloss,
             boxSizing: "border-box",
             textAlign: "center",
           }}

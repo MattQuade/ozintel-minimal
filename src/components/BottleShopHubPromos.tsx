@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
 
 type HubButton = { id: string; label: string };
 
@@ -16,16 +15,18 @@ const buttonStyle: CSSProperties = {
   maxWidth: 400,
   padding: 16,
   borderRadius: 12,
+  background: "#9a3412",
+  color: "white",
   textDecoration: "none",
-  ...bottleShopGloss,
   fontWeight: "bold",
+  border: "none",
   cursor: "default",
   fontFamily: "inherit",
   fontSize: "inherit",
   textAlign: "center",
 };
 
-/** Extra hub buttons under Cruisers — labels come from the ledger. */
+/** Extra brown hub buttons under Cruisers — labels come from the ledger. */
 export default function BottleShopHubPromos() {
   const [buttons, setButtons] = useState<HubButton[]>(FALLBACK);
 

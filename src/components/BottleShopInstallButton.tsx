@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -143,15 +142,10 @@ export default function BottleShopInstallButton() {
             width: "100%",
             padding: 12,
             borderRadius: 10,
+            border: "none",
+            background: deferred ? "#b45309" : "#475569",
+            color: "white",
             fontWeight: 700,
-            ...(deferred
-              ? bottleShopGloss
-              : {
-                  background: "#475569",
-                  color: "white",
-                  border: "none",
-                  boxShadow: "none",
-                }),
             cursor: deferred ? "pointer" : "default",
           }}
         >

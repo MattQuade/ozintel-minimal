@@ -1,5 +1,4 @@
 import BottleShopHubPromos from "@/components/BottleShopHubPromos";
-import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
 import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
@@ -58,9 +57,10 @@ export default function BottleShopHubPage() {
               maxWidth: 400,
               padding: 16,
               borderRadius: 12,
+              background: "#9a3412",
+              color: "white",
               textDecoration: "none",
               fontWeight: "bold",
-              ...bottleShopGloss,
             }}
           >
             {cat.label}
