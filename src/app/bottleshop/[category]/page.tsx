@@ -334,12 +334,14 @@ export default function BottleShopCategoryPage() {
       setStatus("Select at least one bottle.");
       return;
     }
-    const over = lines.find((l) => l.qty > l.product.quantity);
-    if (over) {
-      setStatus(
-        `${over.product.name} only has ${over.product.quantity} available.`
-      );
-      return;
+    if (category !== "coffee") {
+      const over = lines.find((l) => l.qty > l.product.quantity);
+      if (over) {
+        setStatus(
+          `${over.product.name} only has ${over.product.quantity} available.`
+        );
+        return;
+      }
     }
     setSubmitting(true);
     setStatus("Reserving…");
@@ -625,7 +627,6 @@ export default function BottleShopCategoryPage() {
                 >
                   {typeItems.map((item) => {
                     const p = products.find((product) => product.id === item.id);
-                    const soldOut = !p || p.quantity <= 0;
                     const qty = p ? cart[p.id] || 0 : 0;
                     const photo = uploadedPhoto(p?.imageUrl);
                     return (
@@ -641,7 +642,6 @@ export default function BottleShopCategoryPage() {
                           background: "#1e2937",
                           border:
                             qty > 0 ? "2px solid #fbbf24" : "1px solid #334155",
-                          opacity: soldOut ? 0.55 : 1,
                         }}
                       >
                         <div
@@ -671,13 +671,11 @@ export default function BottleShopCategoryPage() {
                           ) : null}
                           <div>
                             <div style={{ fontWeight: 700 }}>{item.size}</div>
-                            <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
-                              {soldOut
-                                ? "Sold out"
-                                : p && p.price > 0
-                                  ? money(p.price)
-                                  : `${p?.quantity ?? 0} available`}
-                            </div>
+                            {p && p.price > 0 ? (
+                              <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
+                                {money(p.price)}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
@@ -686,7 +684,7 @@ export default function BottleShopCategoryPage() {
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            disabled={soldOut || submitting || !p}
+                            disabled={submitting || !p}
                             value={p ? qtyText[p.id] ?? "" : ""}
                             onChange={(e) => p && setQty(p.id, e.target.value)}
                             style={{
@@ -712,7 +710,6 @@ export default function BottleShopCategoryPage() {
             {products
               .filter((p) => !coffeeRowIds.has(p.id))
               .map((p) => {
-                const soldOut = p.quantity <= 0;
                 const qty = cart[p.id] || 0;
                 const photo = uploadedPhoto(p.imageUrl);
                 return (
@@ -728,7 +725,6 @@ export default function BottleShopCategoryPage() {
                       background: "#1e2937",
                       border:
                         qty > 0 ? "2px solid #fbbf24" : "1px solid #334155",
-                      opacity: soldOut ? 0.55 : 1,
                     }}
                   >
                     <div
@@ -758,13 +754,11 @@ export default function BottleShopCategoryPage() {
                       ) : null}
                       <div>
                         <div style={{ fontWeight: 700 }}>{p.name}</div>
-                        <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
-                          {soldOut
-                            ? "Sold out"
-                            : p.price > 0
-                              ? money(p.price)
-                              : `${p.quantity} available`}
-                        </div>
+                        {p.price > 0 ? (
+                          <div style={{ color: "#86efac", fontSize: "0.9rem" }}>
+                            {money(p.price)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
@@ -773,7 +767,7 @@ export default function BottleShopCategoryPage() {
                         type="text"
                         inputMode="numeric"
                         autoComplete="off"
-                        disabled={soldOut || submitting}
+                        disabled={submitting}
                         value={qtyText[p.id] ?? ""}
                         onChange={(e) => setQty(p.id, e.target.value)}
                         style={{

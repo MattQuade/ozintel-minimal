@@ -764,12 +764,15 @@ export async function placeBottleOrder(
   for (const [productId, quantity] of wanted) {
     const product = store.products.find((p) => p.id === productId && p.active);
     if (!product) throw new Error(`Bottle not found: ${productId}`);
-    if (product.quantity < quantity) {
-      throw new Error(
-        `Only ${product.quantity} left of ${product.name} (requested ${quantity})`
-      );
+    // Coffee is made to order. Stock counts stay on beer and wine.
+    if (product.category !== "coffee") {
+      if (product.quantity < quantity) {
+        throw new Error(
+          `Only ${product.quantity} left of ${product.name} (requested ${quantity})`
+        );
+      }
+      product.quantity -= quantity;
     }
-    product.quantity -= quantity;
     lines.push({
       productId: product.id,
       name: product.name,
@@ -874,6 +877,7 @@ export async function setBottleOrderStatus(
   // Restock once when moving reserved → cancelled.
   if (current.status === "reserved" && status === "cancelled") {
     for (const line of current.lines) {
+      if (line.category === "coffee") continue;
       const product = store.products.find((p) => p.id === line.productId);
       if (product) product.quantity += line.quantity;
     }
@@ -891,6 +895,7 @@ export async function deleteBottleOrder(id: string): Promise<void> {
   const current = store.orders[idx];
   if (current.status === "reserved") {
     for (const line of current.lines) {
+      if (line.category === "coffee") continue;
       const product = store.products.find((p) => p.id === line.productId);
       if (product) product.quantity += line.quantity;
     }
