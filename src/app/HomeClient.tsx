@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
+import { bottleShopGloss } from '@/lib/client/bottleShopGloss';
 
 const VoiceNavBar = dynamic(() => import('@/components/VoiceNavBar'), {
   ssr: false,
@@ -1979,7 +1980,7 @@ export default function HomePage({
         <a href="/operations" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#1d4ed8', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Operations
         </a>
-        <a href="/bottleshop" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#b45309', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
+        <a href="/bottleshop" style={{ padding: '20px', fontSize: '1.625rem', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center', ...bottleShopGloss }}>
           Bottle Shop
         </a>
         <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>

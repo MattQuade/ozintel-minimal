@@ -14,6 +14,7 @@ import {
   type CropRectNorm,
 } from "@/lib/client/cropImage";
 import { prepareReceiptFileForOcr } from "@/lib/client/compressReceiptImage";
+import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
 import {
   BOTTLE_SHOP_CATEGORIES,
   COFFEE_SIZES,
@@ -123,10 +124,8 @@ function OrderReplyBox({
         style={{
           padding: "8px 12px",
           borderRadius: 8,
-          border: "none",
-          background: "#b45309",
-          color: "white",
           fontWeight: 700,
+          ...bottleShopGloss,
           cursor: sending ? "default" : "pointer",
         }}
       >
@@ -791,7 +790,7 @@ function BottleShopAdminInner() {
         <>
           <h2 style={{ marginTop: 28 }}>Public hub buttons</h2>
           <p style={{ color: "#94a3b8", marginTop: 0 }}>
-            These brown buttons sit under Cruisers on{" "}
+            These buttons sit under Cruisers on{" "}
             <a href="/bottleshop" style={{ color: "#fbbf24" }}>
               /bottleshop
             </a>
@@ -841,10 +840,8 @@ function BottleShopAdminInner() {
                   style={{
                     padding: "10px 14px",
                     borderRadius: 8,
-                    border: "none",
-                    background: "#b45309",
-                    color: "white",
                     fontWeight: 700,
+                    ...bottleShopGloss,
                     cursor: "pointer",
                   }}
                 >
@@ -938,10 +935,8 @@ function BottleShopAdminInner() {
               style={{
                 padding: "10px 14px",
                 borderRadius: 8,
-                border: "none",
-                background: "#b45309",
-                color: "white",
                 fontWeight: 600,
+                ...bottleShopGloss,
                 cursor: "pointer",
               }}
             >
@@ -1095,9 +1090,14 @@ function BottleShopAdminInner() {
                         flex: 1,
                         padding: "10px 8px",
                         borderRadius: 8,
-                        border: on ? "none" : "1px solid #475569",
-                        background: on ? "#9a3412" : "#0f172a",
-                        color: "white",
+                        ...(on
+                          ? bottleShopGloss
+                          : {
+                              border: "1px solid #475569",
+                              background: "#0f172a",
+                              color: "white",
+                              boxShadow: "none",
+                            }),
                         fontWeight: 700,
                         cursor: "pointer",
                       }}
@@ -1145,10 +1145,8 @@ function BottleShopAdminInner() {
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
-                  border: "none",
-                  background: "#b45309",
-                  color: "white",
                   fontWeight: 600,
+                  ...bottleShopGloss,
                   cursor: "pointer",
                 }}
               >
@@ -1318,9 +1316,8 @@ function BottleShopAdminInner() {
                           marginTop: 18,
                           padding: "10px 14px",
                           borderRadius: 8,
-                          background: "#b45309",
-                          color: "white",
                           fontWeight: 600,
+                          ...bottleShopGloss,
                           cursor: "pointer",
                           display: "inline-block",
                           overflow: "hidden",
@@ -1638,10 +1635,15 @@ function BottleShopAdminInner() {
                 style={{
                   padding: "12px 16px",
                   borderRadius: 8,
-                  border: "none",
-                  background: cropSaving ? "#475569" : "#b45309",
-                  color: "white",
                   fontWeight: 700,
+                  ...(cropSaving
+                    ? {
+                        background: "#475569",
+                        color: "white",
+                        border: "none",
+                        boxShadow: "none",
+                      }
+                    : bottleShopGloss),
                   cursor: cropSaving ? "not-allowed" : "pointer",
                 }}
               >

@@ -8,6 +8,7 @@ import {
   clearSessionEmailCookie,
   persistSessionEmailCookie,
 } from "@/lib/client/sessionEmail";
+import { bottleShopGloss } from "@/lib/client/bottleShopGloss";
 import {
   bottleCategoryLabel,
   coffeeShelfGroups,
@@ -553,9 +554,8 @@ export default function BottleShopCategoryPage() {
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 12,
-                    background: "#9a3412",
-                    color: "white",
                     fontWeight: 700,
+                    ...bottleShopGloss,
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
@@ -573,7 +573,7 @@ export default function BottleShopCategoryPage() {
                         height: 56,
                         objectFit: "cover",
                         borderRadius: 8,
-                        background: "#7c2d12",
+                        background: "#166534",
                         flexShrink: 0,
                       }}
                     />
@@ -916,10 +916,15 @@ export default function BottleShopCategoryPage() {
               width: "100%",
               padding: 14,
               borderRadius: 10,
-              border: "none",
-              background: submitting || !lines.length ? "#475569" : "#b45309",
-              color: "white",
               fontWeight: 700,
+              ...(submitting || !lines.length
+                ? {
+                    background: "#475569",
+                    color: "white",
+                    border: "none",
+                    boxShadow: "none",
+                  }
+                : bottleShopGloss),
               fontSize: "1.05rem",
               cursor: submitting || !lines.length ? "not-allowed" : "pointer",
             }}
