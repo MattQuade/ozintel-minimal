@@ -569,6 +569,29 @@ export async function updateBottleProduct(
   return next;
 }
 
+/** Remove one product from this owner's bottle shop, including its photo. */
+export async function deleteBottleProduct(id: string): Promise<void> {
+  const productId = String(id || "").trim();
+  if (
+    !productId ||
+    productId.includes("/") ||
+    productId.includes("\\") ||
+    productId.includes("..")
+  ) {
+    throw new Error("Product not found");
+  }
+  const store = await readStore();
+  const idx = store.products.findIndex((p) => p.id === productId);
+  if (idx < 0) throw new Error("Product not found");
+  store.products.splice(idx, 1);
+  await writeStore(store);
+  try {
+    await fs.unlink(photoFilePath(productId));
+  } catch {
+    // No uploaded photo for this product.
+  }
+}
+
 export async function createBottleProduct(input: {
   name: string;
   price?: number;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createBottleProduct,
   deleteBottleOrder,
+  deleteBottleProduct,
   loadBottleShopAdmin,
   replyToBottleOrder,
   setBottleOrderStatus,
@@ -100,6 +101,18 @@ export async function PATCH(req: NextRequest) {
         }
       }
       return NextResponse.json({ success: true, order, notified });
+    }
+
+    if (kind === "deleteProduct") {
+      const id = String(body.id || "").trim();
+      if (!id) {
+        return NextResponse.json(
+          { success: false, error: "id is required" },
+          { status: 400 }
+        );
+      }
+      await withBottleShopOwner(() => deleteBottleProduct(id));
+      return NextResponse.json({ success: true });
     }
 
     if (kind === "order" || kind === "deleteOrder") {

@@ -362,6 +362,29 @@ function BottleShopAdminInner() {
     }
   };
 
+  const deleteProduct = async (id: string, name: string) => {
+    const label = name.trim() || "this product";
+    if (!window.confirm(`Delete ${label} from the bottle shop?`)) return;
+    setStatus(`Deleting ${label}…`);
+    try {
+      const res = await fetch("/api/operations/pub/bottleshop", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "deleteProduct", id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setStatus(data.error || "Delete failed");
+        return;
+      }
+      await load();
+      setStatus(`Deleted ${label}.`);
+    } catch (error) {
+      console.error(error);
+      setStatus("Delete failed.");
+    }
+  };
+
   const beginPhotoCrop = (product: Product, file: File | null | undefined) => {
     if (!file) {
       setStatus("No photo selected.");
@@ -1255,6 +1278,22 @@ function BottleShopAdminInner() {
                           }}
                         />
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => void deleteProduct(p.id, draft.name || p.name)}
+                        style={{
+                          marginTop: 18,
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          border: "none",
+                          background: "#991b1b",
+                          color: "white",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
