@@ -217,9 +217,18 @@ function BottleShopAdminInner() {
   const cropRef = useRef<CropRectNorm>(FULL_CROP);
   const [cropSaving, setCropSaving] = useState(false);
   const [cropError, setCropError] = useState("");
+  const [phoneCamera, setPhoneCamera] = useState(false);
   // Keep the live object URL in a ref so React Strict Mode cleanup cannot
   // revoke the blob the crop UI is still showing.
   const photoObjectUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const ua = navigator.userAgent || "";
+    const mobile =
+      /iPhone|iPad|iPod|Android/i.test(ua) ||
+      window.matchMedia("(pointer: coarse)").matches;
+    setPhoneCamera(mobile);
+  }, []);
 
   const onCropChange = useCallback((next: CropRectNorm) => {
     cropRef.current = next;
@@ -1321,6 +1330,7 @@ function BottleShopAdminInner() {
                         <input
                           type="file"
                           accept="image/*"
+                          {...(phoneCamera ? { capture: "environment" as const } : {})}
                           style={{
                             position: "absolute",
                             inset: 0,
