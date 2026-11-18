@@ -27,8 +27,10 @@ function isIos() {
  */
 export default function BottleShopInstallButton({
   title = "Collingullie Hotel",
+  showInstalledNote = true,
 }: {
   title?: string;
+  showInstalledNote?: boolean;
 }) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null
@@ -74,7 +76,7 @@ export default function BottleShopInstallButton({
       <div style={{ margin: "0 0 16px", textAlign: "center" }}>
         <p
           style={{
-            margin: "0 0 8px",
+            margin: showInstalledNote ? "0 0 8px" : 0,
             color: "#86efac",
             fontSize: "1.9rem",
             fontWeight: 700,
@@ -83,9 +85,11 @@ export default function BottleShopInstallButton({
         >
           {title}
         </p>
-        <p style={{ margin: 0, color: "#86efac", fontSize: "0.95rem" }}>
-          Bottle Shop is installed on this device.
-        </p>
+        {showInstalledNote ? (
+          <p style={{ margin: 0, color: "#86efac", fontSize: "0.95rem" }}>
+            Bottle Shop is installed on this device.
+          </p>
+        ) : null}
       </div>
     );
   }
