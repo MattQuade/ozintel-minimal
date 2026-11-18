@@ -753,7 +753,9 @@ export default function BottleShopCategoryPage() {
             : `Reserve ${categoryLabel} here — pay and collect at the pub.`}
         </p>
 
-        <BottleShopInstallButton />
+        <BottleShopInstallButton
+          title={category === "coffee" ? "J&S Espresso Bar" : undefined}
+        />
 
         {unlockedName ? (
           <p style={{ margin: "0 0 16px" }}>

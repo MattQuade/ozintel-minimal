@@ -25,7 +25,11 @@ function isIos() {
  * Lets customers install a bottle-shop-only home-screen app
  * (separate from the full OzIntel PWA).
  */
-export default function BottleShopInstallButton() {
+export default function BottleShopInstallButton({
+  title = "Collingullie Hotel",
+}: {
+  title?: string;
+}) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null
   );
@@ -77,7 +81,7 @@ export default function BottleShopInstallButton() {
             lineHeight: 1.2,
           }}
         >
-          Collingullie Hotel
+          {title}
         </p>
         <p style={{ margin: 0, color: "#86efac", fontSize: "0.95rem" }}>
           Bottle Shop is installed on this device.
