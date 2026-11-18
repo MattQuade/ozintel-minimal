@@ -344,6 +344,14 @@ export async function findUserForRestore(query: string) {
 /** John Gill's coffee van. Texts go to the mobile on this account. */
 const COFFEE_VAN_PHONE_DIGITS = "61413693618";
 
+/** The coffee van account: approved, bottle shop only is not required here, phone must match. */
+export function isCoffeeVanUser(
+  user: { phone?: string; status?: string; permissions?: { bottleShop?: boolean } } | null | undefined
+): boolean {
+  if (!user || user.status !== "approved" || !user.permissions?.bottleShop) return false;
+  return normalizePhone(user.phone || "") === COFFEE_VAN_PHONE_DIGITS;
+}
+
 /**
  * Phone for a coffee reserve. One users.json read.
  * Keeps that account on the bottle shop only.

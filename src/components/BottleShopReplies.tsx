@@ -14,7 +14,11 @@ type Reply = {
  * Pub replies for the restored login. Asks for a phone alert only if they tap.
  * Does not collect a phone number.
  */
-export default function BottleShopReplies() {
+export default function BottleShopReplies({
+  heading = "Message from the pub",
+}: {
+  heading?: string;
+}) {
   const [messages, setMessages] = useState<Reply[]>([]);
   const [signedIn, setSignedIn] = useState(false);
   const [alertNote, setAlertNote] = useState("");
@@ -92,7 +96,7 @@ export default function BottleShopReplies() {
     >
       {messages.length ? (
         <p style={{ margin: "0 0 8px", color: "#fbbf24", fontWeight: 700 }}>
-          Message from the pub
+          {heading}
         </p>
       ) : (
         <p style={{ margin: "0 0 8px", color: "#cbd5e1", fontSize: "0.9rem" }}>

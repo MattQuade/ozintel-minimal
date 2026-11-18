@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useParams, useRouter } from "next/navigation";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
+import CoffeeVanReplyLink from "@/components/CoffeeVanReplyLink";
 import {
   clearSessionEmailCookie,
   persistSessionEmailCookie,
@@ -220,6 +221,7 @@ function CoffeeDrink({
 }
 
 const LOGIN_KEY = "ozintel_bottleshop_login";
+const COFFEE_ORDER_KEY = "ozintel_coffee_order";
 const USER_KEY = "ozintel_current_user";
 const LEGACY_CODE_KEY = "ozintel_bottleshop_code";
 
@@ -293,6 +295,8 @@ export default function BottleShopCategoryPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [coffeeOrderId, setCoffeeOrderId] = useState("");
+  const [coffeeReply, setCoffeeReply] = useState("");
 
   useEffect(() => {
     if (!category) router.replace("/bottleshop");
@@ -418,11 +422,50 @@ export default function BottleShopCategoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
+  const loadCoffeeReply = useCallback(async (id: string) => {
+    if (!id) return;
+    try {
+      const res = await fetch(
+        `/api/bottleshop/coffee-orders/reply?id=${encodeURIComponent(id)}`,
+        { cache: "no-store" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (data.success) setCoffeeReply(String(data.reply || ""));
+    } catch {
+      // The shelf still works if the reply check fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (category !== "coffee") return;
+    let stored = "";
+    try {
+      stored = localStorage.getItem(COFFEE_ORDER_KEY) || "";
+    } catch {
+      stored = "";
+    }
+    if (!stored) return;
+    setCoffeeOrderId(stored);
+    void loadCoffeeReply(stored);
+  }, [category, loadCoffeeReply]);
+
+  useEffect(() => {
+    if (category !== "coffee" || !coffeeOrderId || coffeeReply) return;
+    let checks = 0;
+    const timer = window.setInterval(() => {
+      checks += 1;
+      void loadCoffeeReply(coffeeOrderId);
+      if (checks >= 6) window.clearInterval(timer);
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, [category, coffeeOrderId, coffeeReply, loadCoffeeReply]);
+
   useEffect(() => {
     const refresh = () => {
       if (restoring) return;
       if (document.visibilityState === "visible") {
         void loadCatalogue();
+        if (category === "coffee" && coffeeOrderId) void loadCoffeeReply(coffeeOrderId);
       }
     };
     document.addEventListener("visibilitychange", refresh);
@@ -431,7 +474,7 @@ export default function BottleShopCategoryPage() {
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("focus", refresh);
     };
-  }, [loadCatalogue, restoring]);
+  }, [loadCatalogue, restoring, category, coffeeOrderId, loadCoffeeReply]);
 
   const unlocked = shelfOpen || products.length > 0 || Boolean(unlockedName);
 
@@ -584,7 +627,19 @@ export default function BottleShopCategoryPage() {
       );
       setCart({});
       setQtyText({});
-      setStatus("Reserved. Pay & collect at the pub.");
+      if (category === "coffee" && data.order?.id) {
+        const orderId = String(data.order.id);
+        setCoffeeOrderId(orderId);
+        setCoffeeReply("");
+        try {
+          localStorage.setItem(COFFEE_ORDER_KEY, orderId);
+        } catch {
+          // ignore
+        }
+        setStatus("Reserved. Pay and collect at the van.");
+      } else {
+        setStatus("Reserved. Pay & collect at the pub.");
+      }
     } catch (error) {
       console.error(error);
       setStatus("Reserve failed. Please try again.");
@@ -757,6 +812,24 @@ export default function BottleShopCategoryPage() {
           title={category === "coffee" ? "J&S Espresso Bar" : undefined}
           showInstalledNote={category !== "coffee"}
         />
+
+        {category === "coffee" ? <CoffeeVanReplyLink /> : null}
+        {category === "coffee" && coffeeReply ? (
+          <div
+            style={{
+              margin: "0 0 16px",
+              padding: 14,
+              borderRadius: 12,
+              background: "#14532d",
+              border: "1px solid #166534",
+            }}
+          >
+            <p style={{ margin: "0 0 6px", color: "#86efac", fontWeight: 700 }}>
+              Message from the coffee van
+            </p>
+            <p style={{ margin: 0, lineHeight: 1.4 }}>{coffeeReply}</p>
+          </div>
+        ) : null}
 
         {unlockedName ? (
           <p style={{ margin: "0 0 16px" }}>
@@ -943,7 +1016,13 @@ export default function BottleShopCategoryPage() {
           </div>
         )}
 
-        <BottleShopReplies />
+        <BottleShopReplies
+          heading={
+            category === "coffee"
+              ? "Message from the coffee van"
+              : "Message from the pub"
+          }
+        />
         <div
           style={{
             marginTop: 24,

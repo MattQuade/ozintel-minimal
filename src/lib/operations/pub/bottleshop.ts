@@ -831,6 +831,59 @@ export async function placeBottleOrder(
   };
 }
 
+export type CoffeeOrderForReply = {
+  id: string;
+  createdAt: string;
+  customerName: string;
+  customerNote: string;
+  customerId?: string;
+  status: BottleOrder["status"];
+  pubReply: string;
+  lines: string[];
+};
+
+/** Recent coffee reserves for the van. One store read, newest first. */
+export async function listCoffeeOrdersForReply(limit = 15): Promise<CoffeeOrderForReply[]> {
+  const store = await readStore();
+  const out: CoffeeOrderForReply[] = [];
+  const recent = store.orders.slice(-80).reverse();
+  for (const order of recent) {
+    if (order.status === "cancelled") continue;
+    const lines = order.lines.filter((line) => line.category === "coffee");
+    if (!lines.length) continue;
+    out.push({
+      id: order.id,
+      createdAt: order.createdAt,
+      customerName: order.customerName,
+      customerNote: order.customerNote,
+      customerId: order.customerId,
+      status: order.status,
+      pubReply: String(order.pubReply || ""),
+      lines: lines.map((line) => `${line.quantity}× ${line.name}`),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export async function isCoffeeOrder(id: string): Promise<boolean> {
+  const orderId = String(id || "").trim();
+  if (!orderId.startsWith("ord-")) return false;
+  const store = await readStore();
+  const order = store.orders.find((item) => item.id === orderId);
+  return Boolean(order && order.lines.some((line) => line.category === "coffee"));
+}
+
+/** Reply text for one coffee order. Empty when there is no reply. */
+export async function getCoffeeOrderReply(id: string): Promise<string> {
+  const orderId = String(id || "").trim();
+  if (!orderId.startsWith("ord-")) return "";
+  const store = await readStore();
+  const order = store.orders.find((item) => item.id === orderId);
+  if (!order || !order.lines.some((line) => line.category === "coffee")) return "";
+  return String(order.pubReply || "").trim();
+}
+
 export async function replyToBottleOrder(
   id: string,
   reply: string
