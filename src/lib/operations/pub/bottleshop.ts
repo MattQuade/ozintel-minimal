@@ -12,6 +12,7 @@ import {
   coffeeProductId,
   coffeeMilkLabel,
   coffeeSizeLabel,
+  coffeeUnitPrice,
   isBordeauxSuperieurAt29,
   isCoffeeMilk,
   isCoffeeSize,
@@ -789,7 +790,7 @@ export async function placeBottleOrder(
       productId: product.id,
       name: milkSlug ? `${product.name}, ${coffeeMilkLabel(milkSlug)}` : product.name,
       quantity,
-      unitPrice: product.price,
+      unitPrice: milkSlug ? coffeeUnitPrice(product.price, milkSlug) : product.price,
       category: product.category,
       ...(milkSlug ? { milk: milkSlug } : {}),
     });

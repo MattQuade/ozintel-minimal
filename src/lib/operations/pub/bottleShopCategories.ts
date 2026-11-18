@@ -36,14 +36,33 @@ export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
 
 /** Milk on a coffee order. Full cream is the usual choice. */
 export const COFFEE_MILKS = [
-  { slug: "full-cream", label: "Full cream" },
-  { slug: "lite", label: "Lite milk" },
-  { slug: "almond", label: "Almond" },
-  { slug: "oat", label: "Oat" },
-  { slug: "soy", label: "Soy" },
+  { slug: "full-cream", label: "Full cream", button: "Full cream" },
+  { slug: "lite", label: "Lite milk", button: "Lite" },
+  { slug: "almond", label: "Almond", button: "Almond" },
+  { slug: "oat", label: "Oat", button: "Oat" },
+  { slug: "soy", label: "Soy", button: "Soy" },
 ] as const;
 
 export type CoffeeMilk = (typeof COFFEE_MILKS)[number]["slug"];
+
+/** Phone layout: dairy on the first row, the 50c milks on the second. */
+export const COFFEE_MILK_ROWS: CoffeeMilk[][] = [
+  ["full-cream", "lite"],
+  ["almond", "oat", "soy"],
+];
+
+/** Almond, oat, and soy add 50 cents per cup. */
+export const COFFEE_MILK_EXTRA = 0.5;
+
+export function coffeeMilkExtra(milk: string): number {
+  return milk === "almond" || milk === "oat" || milk === "soy"
+    ? COFFEE_MILK_EXTRA
+    : 0;
+}
+
+export function coffeeUnitPrice(base: number, milk?: string): number {
+  return Math.max(0, Number(base) || 0) + coffeeMilkExtra(String(milk || ""));
+}
 
 export function isCoffeeMilk(value: string): value is CoffeeMilk {
   return COFFEE_MILKS.some((milk) => milk.slug === value);

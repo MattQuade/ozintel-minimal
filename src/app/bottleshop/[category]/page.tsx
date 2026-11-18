@@ -11,9 +11,12 @@ import {
 import {
   bottleCategoryLabel,
   COFFEE_MILKS,
+  COFFEE_MILK_ROWS,
   coffeeLineKey,
+  coffeeMilkExtra,
   coffeeMilkLabel,
   coffeeShelfGroups,
+  coffeeUnitPrice,
   isBottleCategory,
   type BottleCategory,
   type CoffeeMilk,
@@ -79,6 +82,8 @@ function CoffeeDrink({
   const [milk, setMilk] = useState<CoffeeMilk>("full-cream");
   const size = sizes.find((item) => item.id === sizeId) || sizes[0];
   const key = size ? coffeeLineKey(size.id, milk) : "";
+  const unit = size ? coffeeUnitPrice(size.price, milk) : 0;
+  const surchargeOn = coffeeMilkExtra(milk) > 0;
   const reserved = sizes.some((item) =>
     COFFEE_MILKS.some((option) => (cart[coffeeLineKey(item.id, option.slug)] || 0) > 0)
   );
@@ -134,17 +139,45 @@ function CoffeeDrink({
           ))}
         </div>
       ) : null}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {COFFEE_MILKS.map((option) => (
-          <button
-            key={option.slug}
-            type="button"
-            aria-pressed={option.slug === milk}
-            onClick={() => setMilk(option.slug)}
-            style={choiceStyle(option.slug === milk)}
-          >
-            {option.label}
-          </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {COFFEE_MILK_ROWS.map((row) => (
+          <div key={row.join("-")} style={{ display: "flex", gap: 6 }}>
+            {row.map((slug) => {
+              const option = COFFEE_MILKS.find((item) => item.slug === slug);
+              if (!option) return null;
+              return (
+                <button
+                  key={option.slug}
+                  type="button"
+                  aria-pressed={option.slug === milk}
+                  onClick={() => setMilk(option.slug)}
+                  style={{
+                    ...choiceStyle(option.slug === milk),
+                    flex: "1 1 0",
+                    padding: "10px 4px",
+                  }}
+                >
+                  {option.button}
+                </button>
+              );
+            })}
+            {row.includes("almond") ? (
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Almond, oat and soy add 50 cents"
+                style={{
+                  ...choiceStyle(surchargeOn),
+                  flex: "1 1 0",
+                  padding: "10px 4px",
+                  color: "#86efac",
+                  cursor: "default",
+                }}
+              >
+                +50c
+              </button>
+            ) : null}
+          </div>
         ))}
       </div>
       <div
@@ -157,7 +190,7 @@ function CoffeeDrink({
         }}
       >
         <div style={{ color: "#86efac", fontWeight: 600, minWidth: 0 }}>
-          {size && size.price > 0 ? money(size.price) : ""}
+          {unit > 0 ? money(unit) : ""}
         </div>
         <label style={{ fontSize: "0.75rem", color: "#94a3b8", flexShrink: 0 }}>
           Qty
@@ -424,7 +457,11 @@ export default function BottleShopCategoryPage() {
   }, [products, cart, category]);
 
   const cartTotal = useMemo(
-    () => lines.reduce((sum, l) => sum + l.qty * l.product.price, 0),
+    () =>
+      lines.reduce(
+        (sum, l) => sum + l.qty * coffeeUnitPrice(l.product.price, l.milk),
+        0
+      ),
     [lines]
   );
 
@@ -941,7 +978,7 @@ export default function BottleShopCategoryPage() {
                   <span style={{ minWidth: 0, lineHeight: 1.35 }}>
                     {l.qty}× {l.product.name}
                     {l.milk ? `, ${coffeeMilkLabel(l.milk)}` : ""} —{" "}
-                    {money(l.qty * l.product.price)}
+                    {money(l.qty * coffeeUnitPrice(l.product.price, l.milk))}
                   </span>
                   <button
                     type="button"

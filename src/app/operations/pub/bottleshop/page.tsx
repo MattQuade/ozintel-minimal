@@ -44,6 +44,7 @@ type Order = {
     name: string;
     quantity: number;
     unitPrice: number;
+    milk?: string;
   }>;
   total: number;
   status: "reserved" | "collected" | "cancelled";
@@ -1418,7 +1419,7 @@ function BottleShopAdminInner() {
                   </div>
                   <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
                     {o.lines.map((l) => (
-                      <li key={`${o.id}-${l.productId}`}>
+                      <li key={`${o.id}-${l.productId}-${l.milk || ""}`}>
                         {l.quantity}× {l.name} ({money(l.unitPrice)})
                       </li>
                     ))}
