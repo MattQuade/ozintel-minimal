@@ -5,6 +5,10 @@ import {
   getRepoSeedUsersPath,
   getUsersFilePath,
 } from "@/lib/dataPaths";
+import {
+  COFFEE_VAN_PHONE_DIGITS,
+  isCoffeeVanReplyAccount,
+} from "@/lib/operations/pub/coffeeVan";
 export type UserStatus = "pending" | "approved" | "blocked";
 export type UserPermissions = {
   accounting: boolean;
@@ -341,15 +345,20 @@ export async function findUserForRestore(query: string) {
   return matchUserForRestore(query, users);
 }
 
-/** John Gill's coffee van. Texts go to the mobile on this account. */
-const COFFEE_VAN_PHONE_DIGITS = "61413693618";
-
-/** The coffee van account: approved, bottle shop only is not required here, phone must match. */
+/** John, or Summer's login. Texts still go only to John's mobile. */
 export function isCoffeeVanUser(
-  user: { phone?: string; status?: string; permissions?: { bottleShop?: boolean } } | null | undefined
+  user:
+    | {
+        email?: string;
+        phone?: string;
+        status?: string;
+        permissions?: { bottleShop?: boolean };
+      }
+    | null
+    | undefined
 ): boolean {
   if (!user || user.status !== "approved" || !user.permissions?.bottleShop) return false;
-  return normalizePhone(user.phone || "") === COFFEE_VAN_PHONE_DIGITS;
+  return isCoffeeVanReplyAccount(user);
 }
 
 /**

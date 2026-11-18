@@ -1,19 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isCoffeeVanReplyAccount } from "@/lib/operations/pub/coffeeVan";
 
 const USER_KEY = "ozintel_current_user";
-const VAN_PHONE = "61413693618";
 
-function isVanPhone(phone: string) {
-  const digits = String(phone || "").replace(/\D/g, "");
-  if (digits.length === 10 && digits.startsWith("0")) {
-    return `61${digits.slice(1)}` === VAN_PHONE;
-  }
-  return digits === VAN_PHONE;
-}
-
-/** Shown only on the phone already signed in as the coffee van. */
+/** Shown only on a phone already signed in as the coffee van. */
 export default function CoffeeVanReplyLink() {
   const [show, setShow] = useState(false);
 
@@ -21,8 +13,8 @@ export default function CoffeeVanReplyLink() {
     try {
       const raw = localStorage.getItem(USER_KEY);
       if (!raw) return;
-      const user = JSON.parse(raw) as { phone?: string };
-      setShow(isVanPhone(String(user?.phone || "")));
+      const user = JSON.parse(raw) as { email?: string; phone?: string };
+      setShow(isCoffeeVanReplyAccount(user));
     } catch {
       setShow(false);
     }
