@@ -34,6 +34,30 @@ export const COFFEE_SIZES = [
 
 export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
 
+/** Milk on a coffee order. Full cream is the usual choice. */
+export const COFFEE_MILKS = [
+  { slug: "full-cream", label: "Full cream" },
+  { slug: "lite", label: "Lite milk" },
+  { slug: "almond", label: "Almond" },
+  { slug: "oat", label: "Oat" },
+  { slug: "soy", label: "Soy" },
+] as const;
+
+export type CoffeeMilk = (typeof COFFEE_MILKS)[number]["slug"];
+
+export function isCoffeeMilk(value: string): value is CoffeeMilk {
+  return COFFEE_MILKS.some((milk) => milk.slug === value);
+}
+
+export function coffeeMilkLabel(milk: string): string {
+  return COFFEE_MILKS.find((item) => item.slug === milk)?.label || milk;
+}
+
+/** One shelf line per cup and milk, so oat and soy of the same size stay separate. */
+export function coffeeLineKey(productId: string, milk: CoffeeMilk): string {
+  return `${productId}::${milk}`;
+}
+
 export function isCoffeeSize(value: string): value is CoffeeSize {
   return COFFEE_SIZES.some((size) => size.slug === value);
 }

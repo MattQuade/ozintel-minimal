@@ -10,8 +10,10 @@ import {
 import {
   COFFEE_MENU,
   coffeeProductId,
+  coffeeMilkLabel,
   coffeeSizeLabel,
   isBordeauxSuperieurAt29,
+  isCoffeeMilk,
   isCoffeeSize,
   isFrenchShelfWine,
   normalizeBottleCategory,
@@ -42,6 +44,8 @@ export type BottleOrderLine = {
   quantity: number;
   unitPrice: number;
   category?: BottleCategory;
+  /** Coffee milk slug. Beer and wine leave this off. */
+  milk?: string;
 };
 
 export type BottleOrder = {
@@ -705,7 +709,7 @@ export async function createBottleProduct(input: {
 }
 
 export type PlaceOrderInput = {
-  items: Array<{ productId: string; quantity: number }>;
+  items: Array<{ productId: string; quantity: number; milk?: string }>;
   customerName?: string;
   customerNote?: string;
   customerId?: string;
@@ -749,19 +753,25 @@ export async function placeBottleOrder(
   const items = Array.isArray(input.items) ? input.items : [];
   if (!items.length) throw new Error("Select at least one item");
 
-  const wanted = new Map<string, number>();
+  const wanted = new Map<string, { productId: string; milk: string; quantity: number }>();
   for (const item of items) {
     const productId = String(item.productId || "").trim();
     const quantity = Math.floor(Number(item.quantity) || 0);
     if (!productId || quantity <= 0) continue;
-    wanted.set(productId, (wanted.get(productId) || 0) + quantity);
+    const milk = isCoffeeMilk(String(item.milk || "").trim())
+      ? String(item.milk).trim()
+      : "";
+    const key = `${productId}\0${milk}`;
+    const prev = wanted.get(key);
+    if (prev) prev.quantity += quantity;
+    else wanted.set(key, { productId, milk, quantity });
   }
   if (!wanted.size) throw new Error("Select at least one item");
 
   const store = await readStore();
   const lines: BottleOrderLine[] = [];
 
-  for (const [productId, quantity] of wanted) {
+  for (const { productId, milk, quantity } of wanted.values()) {
     const product = store.products.find((p) => p.id === productId && p.active);
     if (!product) throw new Error(`Bottle not found: ${productId}`);
     // Coffee is made to order. Stock counts stay on beer and wine.
@@ -773,12 +783,15 @@ export async function placeBottleOrder(
       }
       product.quantity -= quantity;
     }
+    const milkSlug =
+      product.category === "coffee" ? (isCoffeeMilk(milk) ? milk : "full-cream") : "";
     lines.push({
       productId: product.id,
-      name: product.name,
+      name: milkSlug ? `${product.name}, ${coffeeMilkLabel(milkSlug)}` : product.name,
       quantity,
       unitPrice: product.price,
       category: product.category,
+      ...(milkSlug ? { milk: milkSlug } : {}),
     });
   }
 
