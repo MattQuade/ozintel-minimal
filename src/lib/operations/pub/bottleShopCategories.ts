@@ -38,6 +38,7 @@ export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
 export const COFFEE_MILKS = [
   { slug: "full-cream", label: "Full cream", button: "Full cream" },
   { slug: "lite", label: "Lite milk", button: "Lite" },
+  { slug: "lactose-free", label: "Lactose free", button: "Lact. free" },
   { slug: "almond", label: "Almond", button: "Almond" },
   { slug: "oat", label: "Oat", button: "Oat" },
   { slug: "soy", label: "Soy", button: "Soy" },
@@ -47,7 +48,7 @@ export type CoffeeMilk = (typeof COFFEE_MILKS)[number]["slug"];
 
 /** Phone layout: dairy on the first row, the 50c milks on the second. */
 export const COFFEE_MILK_ROWS: CoffeeMilk[][] = [
-  ["full-cream", "lite"],
+  ["full-cream", "lite", "lactose-free"],
   ["almond", "oat", "soy"],
 ];
 
