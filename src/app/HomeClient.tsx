@@ -174,6 +174,91 @@ function alertStatusMessage(
   return '';
 }
 
+function ApprovedUserDetails({
+  user,
+  onSaved,
+}: {
+  user: UserProfile;
+  onSaved: (users: UserProfile[], updated: UserProfile) => void;
+}) {
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    setName(user.name);
+    setEmail(user.email);
+  }, [user.name, user.email]);
+
+  const save = async () => {
+    const nextName = name.trim();
+    const nextEmail = email.trim().toLowerCase();
+    if (!nextName || !nextEmail) {
+      setNote('Enter a name and a username.');
+      return;
+    }
+    setBusy(true);
+    setNote('');
+    try {
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          name: nextName,
+          newEmail: nextEmail,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.user) {
+        setNote(data.error || 'Could not save.');
+        return;
+      }
+      onSaved(data.users, data.user);
+      setNote('Saved.');
+    } catch {
+      setNote('Could not save.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>
+        Name and username
+      </p>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Full name"
+        style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8, padding: 8, borderRadius: 6, border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+      />
+      <input
+        type="text"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Username / email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8, padding: 8, borderRadius: 6, border: '1px solid #475569', background: '#1e2937', color: 'white' }}
+      />
+      <button
+        type="button"
+        onClick={() => void save()}
+        disabled={busy}
+        style={{ background: '#22c55e', color: 'white', border: 'none', padding: '8px 12px', borderRadius: 6, fontWeight: 700, cursor: busy ? 'default' : 'pointer' }}
+      >
+        {busy ? 'Saving…' : 'Save name and username'}
+      </button>
+      {note ? <p style={{ margin: '8px 0 0', color: '#93c5fd' }}>{note}</p> : null}
+    </div>
+  );
+}
+
 export default function HomePage({
   initialSignup = null,
   initialRestore = null,
@@ -1424,6 +1509,19 @@ export default function HomePage({
 
                     {selectedEditUser?.email === u.email && (
                       <div style={{ marginTop: '10px', padding: '10px', background: '#0f172a', borderRadius: '6px', border: '1px solid #475569' }}>
+                        <ApprovedUserDetails
+                          user={u}
+                          onSaved={(users, updated) => {
+                            setAllUsers(users);
+                            setSelectedEditUser(updated);
+                            if (currentUser && emailsMatch(currentUser.email, u.email)) {
+                              const next = { ...currentUser, name: updated.name, email: updated.email };
+                              setCurrentUser(next);
+                              localStorage.setItem('ozintel_current_user', JSON.stringify(next));
+                              setUserCookie(updated.email);
+                            }
+                          }}
+                        />
                         <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#38bdf8' }}>Component Permissions:</p>
                         <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: '#94a3b8' }}>
                           Accounting is a private silo: full books plus receipt capture. Never shared with you or anyone else.

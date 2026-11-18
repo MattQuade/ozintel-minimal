@@ -184,3 +184,23 @@ export async function sendPushToCustomer(
     payload
   );
 }
+
+/** Keep phone alerts attached when an admin renames a username. */
+export async function renamePushIdentity(fromEmail: string, toEmail: string): Promise<void> {
+  const from = String(fromEmail || "").trim().toLowerCase();
+  const to = String(toEmail || "").trim().toLowerCase();
+  if (!from || !to || from === to) return;
+  const store = await readStore();
+  let changed = false;
+  for (const sub of store.subscriptions) {
+    if (String(sub.ownerEmail || "").trim().toLowerCase() === from) {
+      sub.ownerEmail = to;
+      changed = true;
+    }
+    if (String(sub.customerId || "").trim().toLowerCase() === from) {
+      sub.customerId = to;
+      changed = true;
+    }
+  }
+  if (changed) await writeStore(store);
+}

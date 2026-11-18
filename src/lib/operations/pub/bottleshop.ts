@@ -970,3 +970,25 @@ export async function deleteBottleOrder(id: string): Promise<void> {
   store.orders.splice(idx, 1);
   await writeStore(store);
 }
+
+/** Point coffee orders and bottle-shop logins at a renamed username. One file. */
+export async function renameBottleShopLogin(fromEmail: string, toEmail: string): Promise<void> {
+  const from = String(fromEmail || "").trim().toLowerCase();
+  const to = String(toEmail || "").trim().toLowerCase();
+  if (!from || !to || from === to) return;
+  const store = await readStore();
+  let changed = false;
+  for (const order of store.orders) {
+    if (String(order.customerId || "").trim().toLowerCase() === from) {
+      order.customerId = to;
+      changed = true;
+    }
+  }
+  for (const customer of store.customers) {
+    if (String(customer.login || "").trim().toLowerCase() === from) {
+      customer.login = to;
+      changed = true;
+    }
+  }
+  if (changed) await writeStore(store);
+}

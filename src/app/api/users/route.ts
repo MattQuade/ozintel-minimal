@@ -1,3 +1,4 @@
+import { promises as fs } from "fs";
 import { NextRequest, NextResponse } from "next/server";
 import {
   publicUser,
@@ -9,8 +10,22 @@ import {
   type UserStatus,
 } from "@/lib/users";
 import { ensureOwnerAccountingSilo } from "@/lib/accounting/store";
+import { getOwnerDataRoot } from "@/lib/dataPaths";
+import { runWithDataOwnerAsync } from "@/lib/dataOwnerContext";
+import { renameBottleShopLogin } from "@/lib/operations/pub/bottleshop";
+import { getBottleShopOwnerEmail } from "@/lib/sms/sendSms";
+import { renamePushIdentity } from "@/lib/push/subscriptions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+async function pathExists(target: string) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export async function GET() {
   // Hot path: never bootstrap/migrate on every phone/admin poll.
   const users = await readUsersFast();
@@ -152,8 +167,71 @@ export async function PUT(req: NextRequest) {
         }
       }
     }
-    if (typeof body.name === "string") users[idx].name = body.name.trim();
+    if (typeof body.name === "string") {
+      const name = body.name.trim();
+      if (!name) {
+        return NextResponse.json(
+          { success: false, error: "Name is required" },
+          { status: 400 }
+        );
+      }
+      users[idx].name = name;
+    }
     if (typeof body.phone === "string") users[idx].phone = body.phone.trim();
+
+    const previousEmail = users[idx].email;
+    const nextEmail =
+      typeof body.newEmail === "string"
+        ? body.newEmail.trim().toLowerCase().replace(/\s+/g, "")
+        : previousEmail;
+    if (nextEmail !== previousEmail.toLowerCase()) {
+      if (!nextEmail.includes("@") || /[\\/]/.test(nextEmail)) {
+        return NextResponse.json(
+          { success: false, error: "Enter a username like summer@ozintel.com.au" },
+          { status: 400 }
+        );
+      }
+      const taken = users.some(
+        (user, userIndex) =>
+          userIndex !== idx && user.email.toLowerCase() === nextEmail
+      );
+      if (taken) {
+        return NextResponse.json(
+          { success: false, error: "That username is already in use" },
+          { status: 409 }
+        );
+      }
+      const fromDir = getOwnerDataRoot(previousEmail);
+      const toDir = getOwnerDataRoot(nextEmail);
+      const destExists = await pathExists(toDir);
+      if (destExists) {
+        return NextResponse.json(
+          { success: false, error: "That username already has saved data" },
+          { status: 409 }
+        );
+      }
+      const replaceEmail = (value: string) =>
+        value.toLowerCase() === previousEmail.toLowerCase() ? nextEmail : value;
+      for (const user of users) {
+        if (!user.shares) continue;
+        user.shares = {
+          pubOps: (user.shares.pubOps || []).map(replaceEmail),
+          logisticsOps: (user.shares.logisticsOps || []).map(replaceEmail),
+        };
+      }
+      users[idx].email = nextEmail;
+      if (await pathExists(fromDir)) {
+        await fs.rename(fromDir, toDir);
+      }
+      try {
+        await renamePushIdentity(previousEmail, nextEmail);
+        await runWithDataOwnerAsync(getBottleShopOwnerEmail(), () =>
+          renameBottleShopLogin(previousEmail, nextEmail)
+        );
+      } catch (error) {
+        console.error("[rename user links]", error);
+      }
+    }
     await writeUsers(users);
     return NextResponse.json({
       success: true,
