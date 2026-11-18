@@ -61,9 +61,10 @@ export default function BottleShopHubPage() {
               color: "white",
               textDecoration: "none",
               fontWeight: "bold",
+              lineHeight: 1.3,
             }}
           >
-            {cat.label}
+            {cat.slug === "coffee" ? "Fri Morning Coffee 5.30 - 12" : cat.label}
           </a>
         ))}
         <BottleShopHubPromos />
