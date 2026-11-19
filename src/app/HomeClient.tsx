@@ -1195,7 +1195,7 @@ export default function HomePage({
   };
 
   const sendSafeArrival = async (e?: React.FormEvent<HTMLFormElement>) => {
-    // If React is alive, enhance with a short location attempt then JSON POST.
+    // If React is alive, wait for a location fix then JSON POST.
     // If this handler never runs, the native form POST to /api/alerts still works.
     e?.preventDefault();
     if (sendingKind) return;
@@ -1210,12 +1210,14 @@ export default function HomePage({
     }
 
     setSendingKind('safe');
-    setStatus('Sending Safe Arrival alert...');
+    setStatus('Finding your location...');
     try {
-      const loc = await Promise.race([
-        getAlertLocation(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
+      const loc = await getAlertLocation();
+      setStatus(
+        loc
+          ? 'Sending Safe Arrival alert with your location...'
+          : 'Sending Safe Arrival alert...'
+      );
       const res = await fetch(`${API_BASE}/api/alerts`, {
         method: 'POST',
         headers: {
@@ -1231,12 +1233,15 @@ export default function HomePage({
       const data = await res.json().catch(() => ({}));
       const sentCount = Number(data.sent) || 0;
       if (data.success && sentCount > 0) {
+        const base = alertStatusMessage(
+          'safe-ok',
+          String(sentCount),
+          data.failed ? String(data.failed) : null
+        );
         setStatus(
-          alertStatusMessage(
-            'safe-ok',
-            String(sentCount),
-            data.failed ? String(data.failed) : null
-          )
+          loc
+            ? `${base} Location link included.`
+            : `${base} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
         );
         await refreshCurrentUser();
       } else {
@@ -1264,12 +1269,14 @@ export default function HomePage({
     }
 
     setSendingKind('emergency');
-    setStatus('Sending Emergency alert...');
+    setStatus('Finding your location...');
     try {
-      const loc = await Promise.race([
-        getAlertLocation(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
+      const loc = await getAlertLocation();
+      setStatus(
+        loc
+          ? 'Sending Emergency alert with your location...'
+          : 'Sending Emergency alert...'
+      );
       const res = await fetch(`${API_BASE}/api/alerts`, {
         method: 'POST',
         headers: {
@@ -1285,12 +1292,15 @@ export default function HomePage({
       const data = await res.json().catch(() => ({}));
       const sentCount = Number(data.sent) || 0;
       if (data.success && sentCount > 0) {
+        const base = alertStatusMessage(
+          'emergency-ok',
+          String(sentCount),
+          data.failed ? String(data.failed) : null
+        );
         setStatus(
-          alertStatusMessage(
-            'emergency-ok',
-            String(sentCount),
-            data.failed ? String(data.failed) : null
-          )
+          loc
+            ? `${base} Location link included.`
+            : `${base} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
         );
         await refreshCurrentUser();
       } else {
@@ -1665,7 +1675,11 @@ export default function HomePage({
             touchAction: 'manipulation',
           }}
         >
-          {sendingKind === 'safe' ? 'Sending…' : '✅ SAFE ARRIVAL'}
+          {sendingKind === 'safe'
+            ? status.startsWith('Finding')
+              ? 'Finding location…'
+              : 'Sending…'
+            : '✅ SAFE ARRIVAL'}
         </button>
       </form>
       <form
@@ -1694,7 +1708,11 @@ export default function HomePage({
             touchAction: 'manipulation',
           }}
         >
-          {sendingKind === 'emergency' ? 'Sending…' : '🚨 SEND HELP'}
+          {sendingKind === 'emergency'
+            ? status.startsWith('Finding')
+              ? 'Finding location…'
+              : 'Sending…'
+            : '🚨 SEND HELP'}
         </button>
       </form>
       {sendingKind && (
