@@ -22,3 +22,5 @@ tsconfig.tsbuildinfo
 
 # Per-account Accounting/Ops PIN hashes (live on OZINTEL_DATA_DIR in production)
 data/accounting-pins.json
+# Public bottle shop open counts (live on OZINTEL_DATA_DIR in production)
+data/bottleshop-visits.json

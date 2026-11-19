@@ -1,6 +1,7 @@
 import BottleShopHubPromos from "@/components/BottleShopHubPromos";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
+import BottleShopVisitBeacon from "@/components/BottleShopVisitBeacon";
 import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
 
 /** Category hub — server-rendered so phones see shelves even if JS is delayed. */
@@ -32,6 +33,7 @@ export default function BottleShopHubPage() {
           ← Back to Alerts
         </a>
       </p>
+      <BottleShopVisitBeacon />
       <h1 style={{ color: "#f97316", marginBottom: 8 }}>Bottle Shop</h1>
       <p style={{ color: "#94a3b8", margin: "0 0 24px" }}>
         Pick a shelf. No account needed.

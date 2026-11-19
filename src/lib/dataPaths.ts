@@ -22,6 +22,11 @@ export function getUsersFilePath(): string {
   return path.join(getDataDir(), "users.json");
 }
 
+/** Daily open counts for the public /bottleshop page. One small file. */
+export function getBottleShopVisitsPath(): string {
+  return path.join(getDataDir(), "bottleshop-visits.json");
+}
+
 /** Repo-bundled seed file (used once when persistent disk is empty). */
 export function getRepoSeedUsersPath(): string {
   return path.join(process.cwd(), "data", "users.json");

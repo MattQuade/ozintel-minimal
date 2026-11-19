@@ -328,6 +328,8 @@ export default function HomePage({
   const [showRestore, setShowRestore] = useState(false);
   const [restoreEmail, setRestoreEmail] = useState('');
   const [dataDirConfigured, setDataDirConfigured] = useState<boolean | null>(null);
+  const [shopOpensToday, setShopOpensToday] = useState<number | null>(null);
+  const [shopOpenDays, setShopOpenDays] = useState<{ date: string; count: number }[]>([]);
 
   const loadContactsFromServer = async () => {
     try {
@@ -503,6 +505,18 @@ export default function HomePage({
   useEffect(() => {
     if (!isAdminAuthenticated) return;
     void fetchUsers();
+    let cancelled = false;
+    void fetch(`${API_BASE}/api/bottleshop/visits`, { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data.success) return;
+        setShopOpensToday(Number(data.today) || 0);
+        setShopOpenDays(Array.isArray(data.days) ? data.days : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [isAdminAuthenticated]);
 
   // Lightweight status sync — /api/me, not the full users list every 5s.
@@ -1445,6 +1459,20 @@ export default function HomePage({
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', textAlign: 'center' }}>
             <span style={{ color: '#94a3b8' }}>Total SMS sent this month (all users): </span>
             <strong style={{ color: '#22c55e', fontSize: '1.4rem' }}>{totalSmsThisMonth}</strong>
+            <p style={{ margin: '12px 0 0', color: '#94a3b8' }}>
+              Bottle shop opens today:{' '}
+              <strong style={{ color: '#fbbf24', fontSize: '1.4rem' }}>
+                {shopOpensToday == null ? '…' : shopOpensToday}
+              </strong>
+            </p>
+            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+              Each open of ozintel.com.au/bottleshop. The same phone counts again if it opens the page again.
+              {shopOpenDays.length > 1
+                ? ` Recent: ${shopOpenDays
+                    .map((day) => `${day.date.slice(8)}/${day.date.slice(5, 7)} ${day.count}`)
+                    .join(' · ')}`
+                : ''}
+            </p>
           </div>
           
           <div style={{ marginBottom: '25px', padding: '15px', background: '#0f172a', borderRadius: '8px', border: '1px solid #475569' }}>
