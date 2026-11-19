@@ -329,6 +329,7 @@ export default function HomePage({
   const [restoreEmail, setRestoreEmail] = useState('');
   const [dataDirConfigured, setDataDirConfigured] = useState<boolean | null>(null);
   const [shopOpensToday, setShopOpensToday] = useState<number | null>(null);
+  const [shopOpensMonth, setShopOpensMonth] = useState<number | null>(null);
   const [shopOpenDays, setShopOpenDays] = useState<{ date: string; count: number }[]>([]);
 
   const loadContactsFromServer = async () => {
@@ -511,6 +512,7 @@ export default function HomePage({
       .then((data) => {
         if (cancelled || !data.success) return;
         setShopOpensToday(Number(data.today) || 0);
+        setShopOpensMonth(Number(data.month) || 0);
         setShopOpenDays(Array.isArray(data.days) ? data.days : []);
       })
       .catch(() => {});
@@ -1459,11 +1461,19 @@ export default function HomePage({
           <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', textAlign: 'center' }}>
             <span style={{ color: '#94a3b8' }}>Total SMS sent this month (all users): </span>
             <strong style={{ color: '#22c55e', fontSize: '1.4rem' }}>{totalSmsThisMonth}</strong>
-            <p style={{ margin: '12px 0 0', color: '#94a3b8' }}>
-              Bottle shop opens today:{' '}
-              <strong style={{ color: '#fbbf24', fontSize: '1.4rem' }}>
-                {shopOpensToday == null ? '…' : shopOpensToday}
-              </strong>
+            <p style={{ margin: '12px 0 0', color: '#94a3b8', display: 'flex', justifyContent: 'center', gap: '22px', flexWrap: 'wrap' }}>
+              <span>
+                Bottle shop opens today:{' '}
+                <strong style={{ color: '#fbbf24', fontSize: '1.4rem' }}>
+                  {shopOpensToday == null ? '…' : shopOpensToday}
+                </strong>
+              </span>
+              <span>
+                Bottle shop opens this month:{' '}
+                <strong style={{ color: '#fbbf24', fontSize: '1.4rem' }}>
+                  {shopOpensMonth == null ? '…' : shopOpensMonth}
+                </strong>
+              </span>
             </p>
             <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.85rem' }}>
               Each open of ozintel.com.au/bottleshop. The same phone counts again if it opens the page again.

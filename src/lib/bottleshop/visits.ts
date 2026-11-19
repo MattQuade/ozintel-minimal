@@ -74,5 +74,9 @@ export async function readBottleShopVisits(now = new Date(), limit = 7) {
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .slice(0, limit)
     .map(([day, count]) => ({ date: day, count }));
-  return { date, today: days[date] || 0, days: recent };
+  const monthKey = date.slice(0, 7);
+  const month = Object.entries(days).reduce((sum, [day, count]) => {
+    return day.startsWith(monthKey) ? sum + count : sum;
+  }, 0);
+  return { date, today: days[date] || 0, month, days: recent };
 }
