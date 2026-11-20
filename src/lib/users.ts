@@ -345,7 +345,7 @@ export async function findUserForRestore(query: string) {
   return matchUserForRestore(query, users);
 }
 
-/** John, or Summer's login. Texts still go only to John's mobile. */
+/** Summer, or John's phone. Coffee texts go to Summer's mobile. */
 export function isCoffeeVanUser(
   user:
     | {
@@ -363,37 +363,18 @@ export function isCoffeeVanUser(
 
 /**
  * Phone for a coffee reserve. One users.json read.
- * Keeps that account on the bottle shop only.
+ * Texts Summer's saved mobile, or her number if the account has none yet.
  */
 export async function resolveCoffeeVanNotifyPhone(): Promise<string> {
   const users = await readUsersFast();
-  const idx = users.findIndex(
-    (user) => normalizePhone(user.phone) === COFFEE_VAN_PHONE_DIGITS
+  const user = users.find(
+    (item) => normalizePhone(item.phone) === COFFEE_VAN_PHONE_DIGITS
   );
-  if (idx < 0) return `+${COFFEE_VAN_PHONE_DIGITS}`;
-  const user = users[idx];
-  const bottleShopOnly =
-    user.status === "approved" &&
-    user.permissions.bottleShop &&
-    !user.permissions.accounting &&
-    !user.permissions.pubOps &&
-    !user.permissions.forestryOps &&
-    !user.permissions.logisticsOps;
-  if (!bottleShopOnly && user.status !== "blocked") {
-    users[idx] = {
-      ...user,
-      status: "approved",
-      permissions: {
-        accounting: false,
-        pubOps: false,
-        forestryOps: false,
-        logisticsOps: false,
-        bottleShop: true,
-      },
-    };
-    await writeUsers(users);
+  const phone = String(user?.phone || "").trim();
+  if (phone) {
+    return phone.startsWith("+") ? phone : `+${normalizePhone(phone)}`;
   }
-  return user.phone.trim();
+  return `+${COFFEE_VAN_PHONE_DIGITS}`;
 }
 
 /**
