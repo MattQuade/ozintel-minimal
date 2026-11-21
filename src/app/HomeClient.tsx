@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
+import AlertInbox from '@/components/AlertInbox';
 
 const VoiceNavBar = dynamic(() => import('@/components/VoiceNavBar'), {
   ssr: false,
@@ -164,9 +165,9 @@ function alertStatusMessage(
     const failNote = failed ? ` (${failed} failed)` : '';
     const noun = n === 1 ? 'contact' : 'contacts';
     if (alert === 'emergency-ok') {
-      return `🚨 Emergency alert sent to ${n} ${noun}${failNote}.`;
+      return `🚨 Emergency alert is in the app for ${n} ${noun}${failNote}.`;
     }
-    return `✅ Safe arrival alert sent to ${n} ${noun}${failNote}.`;
+    return `✅ Safe arrival is in the app for ${n} ${noun}${failNote}.`;
   }
   if (alert === 'error') {
     return `❌ ${reason || 'Could not send alert.'}`;
@@ -1248,16 +1249,18 @@ export default function HomePage({
       });
       const data = await res.json().catch(() => ({}));
       const sentCount = Number(data.sent) || 0;
+      const missed = Array.isArray(data.missed) ? data.missed.filter(Boolean).join(', ') : '';
       if (data.success && sentCount > 0) {
         const base = alertStatusMessage(
           'safe-ok',
           String(sentCount),
-          data.failed ? String(data.failed) : null
+          null
         );
+        const missNote = missed ? ` No OzIntel login for ${missed}.` : '';
         setStatus(
           loc
-            ? `${base} Location link included.`
-            : `${base} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
+            ? `${base}${missNote} Location link included.`
+            : `${base}${missNote} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
         );
         await refreshCurrentUser();
       } else {
@@ -1307,16 +1310,18 @@ export default function HomePage({
       });
       const data = await res.json().catch(() => ({}));
       const sentCount = Number(data.sent) || 0;
+      const missed = Array.isArray(data.missed) ? data.missed.filter(Boolean).join(', ') : '';
       if (data.success && sentCount > 0) {
         const base = alertStatusMessage(
           'emergency-ok',
           String(sentCount),
-          data.failed ? String(data.failed) : null
+          null
         );
+        const missNote = missed ? ` No OzIntel login for ${missed}.` : '';
         setStatus(
           loc
-            ? `${base} Location link included.`
-            : `${base} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
+            ? `${base}${missNote} Location link included.`
+            : `${base}${missNote} No location link. On the iPhone open Settings → Privacy & Security → Location Services → Safari Websites → ozintel.com.au, choose While Using, and turn Precise Location on.`
         );
         await refreshCurrentUser();
       } else {
@@ -1687,6 +1692,10 @@ export default function HomePage({
         </div>
       )}
 
+      {currentUser ? <AlertInbox /> : null}
+      <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 12px', maxWidth: '420px' }}>
+        These alerts open inside OzIntel. No text is sent.
+      </p>
       <form
         method="POST"
         action="/api/alerts"
@@ -2032,7 +2041,7 @@ export default function HomePage({
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Safe Arrival Contacts</h2>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
-          Saved to your OzIntel account (works after Restore).
+          Saved to your OzIntel account. They see the alert when they open the app.
         </p>
         {safeContacts.map((contact, index) => (
           <div key={`${contact.phone}-${index}`} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -2080,7 +2089,7 @@ export default function HomePage({
       <div style={{ margin: '30px 0', borderTop: '1px solid #334155', paddingTop: '20px' }}>
         <h2>Emergency Contacts</h2>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', margin: '0 auto 8px', maxWidth: '400px' }}>
-          Saved to your OzIntel account (works after Restore).
+          Saved to your OzIntel account. They see the alert when they open the app.
         </p>
         {emergencyContacts.map((contact, index) => (
           <div key={`${contact.phone}-${index}`} style={{ background: '#334155', padding: '12px', margin: '10px auto', borderRadius: '8px', maxWidth: '400px', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>

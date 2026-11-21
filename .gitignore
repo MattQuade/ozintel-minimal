@@ -24,3 +24,5 @@ tsconfig.tsbuildinfo
 data/accounting-pins.json
 # Public bottle shop open counts (live on OZINTEL_DATA_DIR in production)
 data/bottleshop-visits.json
+# In-app Safe Arrival / emergency alerts (live on OZINTEL_DATA_DIR in production)
+data/alert-inbox/

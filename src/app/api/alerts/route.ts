@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByEmail, readUsers, writeUsers, type User } from "@/lib/users";
+import {
+  findUserByEmail,
+  normalizePhone,
+  readUsersFast,
+  writeUsers,
+  type User,
+} from "@/lib/users";
 import { readAlertContacts } from "@/lib/alertContacts";
-import { sendViaMessageMedia } from "@/lib/sms/sendSms";
+import { addInAppAlert } from "@/lib/alerts/inbox";
+import { sendPushToOwner } from "@/lib/push/subscriptions";
 import { publicHomeUrl } from "@/lib/publicOrigin";
 import { SESSION_COOKIE_NAME } from "@/lib/sessionCookie";
 
@@ -247,7 +254,7 @@ export async function POST(req: NextRequest) {
     const lockedKind = takeAlertLock(user.email, alertType);
     if (lockedKind) {
       const busy =
-        "A send is already in progress. Wait a few seconds, then try again if the text did not arrive.";
+        "A send is already in progress. Wait a few seconds, then try again if it did not show in the app.";
       if (html) {
         return NextResponse.redirect(
           publicHomeUrl(req, {
@@ -283,44 +290,59 @@ export async function POST(req: NextRequest) {
     }
 
     const message = buildRichMessage(user, alertType, lat, lng);
-    const results: { phone: string; ok: boolean; error?: string }[] = [];
+    const users = await readUsersFast();
+    const missed: string[] = [];
+    let sent = 0;
+    const now = new Date();
+    const alertId = `alr-${now.getTime().toString(36)}`;
 
     for (const contact of contacts) {
+      const digits = normalizePhone(contact.phone);
+      const recipient = users.find(
+        (item) =>
+          item.status === "approved" && normalizePhone(item.phone) === digits
+      );
+      if (!recipient) {
+        missed.push(contact.name);
+        continue;
+      }
+      await addInAppAlert(recipient.email, {
+        id: `${alertId}-${sent}`,
+        at: now.toISOString(),
+        fromName: user.name,
+        fromEmail: user.email,
+        kind: alertType,
+        body: message,
+      });
+      sent += 1;
       try {
-        await sendViaMessageMedia(contact.phone, message, 10000);
-        results.push({ phone: contact.phone, ok: true });
-      } catch (err) {
-        const error = err instanceof Error ? err.message : "send failed";
-        console.error("[alert SMS failed]", contact.phone, error);
-        results.push({
-          phone: contact.phone,
-          ok: false,
-          error,
+        await sendPushToOwner(recipient.email, {
+          title: alertType === "EMERGENCY" ? "Emergency alert" : "Safe arrival",
+          body: `${user.name}: ${alertType === "EMERGENCY" ? "I need immediate assistance!" : "I have arrived safely."}`,
+          url: "/",
         });
+      } catch (error) {
+        console.error("[alert push]", error);
       }
     }
 
-    const sent = results.filter((r) => r.ok).length;
-    const failed = results.length - sent;
+    const failed = missed.length;
     if (sent === 0) releaseAlertLock(user.email);
-    const sendError =
-      results.find((row) => !row.ok)?.error || "SMS send failed — try again";
+    const sendError = missed.length
+      ? `No OzIntel login for ${missed.join(", ")}.`
+      : "Could not leave the alert in the app.";
 
-    // Update lastAlert / smsCount when at least one SMS was accepted.
     if (sent > 0) {
-      const users = await readUsers();
       const idx = users.findIndex(
-        (u) => u.email.toLowerCase() === user.email.toLowerCase()
+        (item) => item.email.toLowerCase() === user.email.toLowerCase()
       );
       if (idx >= 0) {
-        const now = new Date();
         users[idx].lastAlert = {
           at: now.toISOString(),
           lat,
           lng,
           alertType,
         };
-        users[idx].smsCount = (users[idx].smsCount || 0) + sent;
         await writeUsers(users);
       }
     }
@@ -350,7 +372,7 @@ export async function POST(req: NextRequest) {
         success: sent > 0,
         sent,
         failed,
-        results,
+        missed,
         message,
         ...(sent > 0 ? {} : { error: sendError }),
       },
