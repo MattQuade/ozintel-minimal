@@ -8,11 +8,6 @@ import AlertInbox from '@/components/AlertInbox';
 const VoiceNavBar = dynamic(() => import('@/components/VoiceNavBar'), {
   ssr: false,
 });
-const HomeReceiptCapture = dynamic(
-  () => import('@/components/HomeReceiptCapture'),
-  { ssr: false }
-);
-
 type Contact = {
   name: string;
   phone: string;
@@ -45,7 +40,6 @@ type UserProfile = {
 
 const API_BASE = "";
 const ADMIN_SELF_EMAIL = 'mattquade2000@gmail.com';
-const ADMIN_RETURN_KEY = 'ozintel_admin_return_email';
 
 // ---------- Cookie helpers ----------
 const COOKIE_NAME = 'ozintel_user_email';
@@ -862,13 +856,6 @@ export default function HomePage({
   };
 
   const openAsUser = async (user: UserProfile) => {
-    if (!emailsMatch(user.email, ADMIN_SELF_EMAIL)) {
-      try {
-        localStorage.setItem(ADMIN_RETURN_KEY, ADMIN_SELF_EMAIL);
-      } catch {
-        /* ignore */
-      }
-    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     await updatePermissions(user.email, 'accounting', true);
     const ok = await restoreFromServer(user.email, true);
@@ -887,24 +874,6 @@ export default function HomePage({
     setStatus(
       `Opened as ${user.name} — capture, read, suppliers, and COA are this account. Restore yourself before handover.`
     );
-  };
-
-  const restoreMyAccount = async () => {
-    let email = ADMIN_SELF_EMAIL;
-    try {
-      email = localStorage.getItem(ADMIN_RETURN_KEY) || ADMIN_SELF_EMAIL;
-    } catch {
-      email = ADMIN_SELF_EMAIL;
-    }
-    const ok = await restoreFromServer(email, true);
-    if (ok) {
-      try {
-        localStorage.removeItem(ADMIN_RETURN_KEY);
-      } catch {
-        /* ignore */
-      }
-      setStatus('Restored your account.');
-    }
   };
 
   const updateOpsShare = async (
@@ -1341,84 +1310,11 @@ export default function HomePage({
 
   // Total SMS this month (all users)
   const totalSmsThisMonth = allUsers.reduce((sum, u) => sum + (u.smsCount || 0), 0);
-  const isTestingOtherUser = Boolean(
-    isAdminAuthenticated &&
-      currentUser &&
-      !emailsMatch(currentUser.email, ADMIN_SELF_EMAIL)
-  );
-  const listedCurrent = currentUser
-    ? allUsers.find((u) => emailsMatch(u.email, currentUser.email))
-    : undefined;
-  const canCaptureReceipts = Boolean(
-    currentUser?.status === 'approved' &&
-      (currentUser.permissions?.accounting ||
-        listedCurrent?.permissions?.accounting ||
-        isTestingOtherUser)
-  );
-
   return (
     <div style={{ fontFamily: 'system-ui', background: '#0f172a', color: 'white', textAlign: 'center', padding: '20px', minHeight: '100vh' }}>
       
       <h1 style={{ color: '#22d3ee', margin: '10px 0', fontSize: '3.2rem', lineHeight: 1.1 }}>🛡️ OzIntel</h1>
       <p style={{ color: '#94a3b8', marginTop: 0, fontSize: '1.6rem', fontWeight: 500 }}>Family & Business</p>
-
-      {isAdminAuthenticated && currentUser && !emailsMatch(currentUser.email, ADMIN_SELF_EMAIL) && (
-        <div style={{
-          background: '#78350f',
-          border: '1px solid #f59e0b',
-          borderRadius: 12,
-          padding: '14px 16px',
-          margin: '12px auto',
-          maxWidth: 420,
-          textAlign: 'left',
-        }}>
-          <p style={{ margin: '0 0 10px', fontWeight: 700, color: '#fde68a' }}>
-            Testing as {currentUser.name}
-          </p>
-          <p style={{ margin: '0 0 12px', color: '#fed7aa', fontSize: '0.9rem' }}>
-            Camera, read, suppliers, and COA are this account only. Restore yourself before handover.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <a href="/accounting/shops" style={{ background: '#ea580c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Suppliers</a>
-            <a href="/coa" style={{ background: '#0ea5e9', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>COA</a>
-            <a href="/accounting/receipts" style={{ background: '#c2410c', color: 'white', textDecoration: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8 }}>Receipts</a>
-            <button type="button" onClick={() => void restoreMyAccount()} style={{ background: '#14532d', color: 'white', border: 'none', fontWeight: 700, padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>
-              Restore my account
-            </button>
-          </div>
-          {canCaptureReceipts ? (
-            <div id="home-receipt-capture" style={{ marginTop: 14, textAlign: 'center' }}>
-              <HomeReceiptCapture />
-            </div>
-          ) : (
-            <p style={{ margin: '12px 0 0', color: '#fecaca', fontSize: '0.9rem' }}>
-              Tick Accounting on this user in the admin list so Capture Receipt appears here.
-            </p>
-          )}
-        </div>
-      )}
-
-      {currentUser && (
-        <div style={{ 
-          background: currentUser.status === 'approved' ? '#14532d' : currentUser.status === 'blocked' ? '#450a0a' : '#78350f', 
-          border: `1px solid ${currentUser.status === 'approved' ? '#22c55e' : currentUser.status === 'blocked' ? '#ef4444' : '#f59e0b'}`, 
-          padding: '12px 20px', 
-          borderRadius: '10px', 
-          margin: '15px auto', 
-          maxWidth: '400px' 
-        }}>
-          <p style={{ margin: 0, fontSize: '1rem' }}>
-            Account: <strong>{currentUser.name}</strong> ({currentUser.email})<br />
-            Status: <strong style={{ 
-              color: currentUser.status === 'approved' ? '#4ade80' : currentUser.status === 'blocked' ? '#f87171' : '#fbbf24' 
-            }}>
-              {currentUser.status === 'approved' ? '✅ Approved' : 
-               currentUser.status === 'blocked' ? '🚫 Blocked' : 
-               '⏳ Pending Admin Approval'}
-            </strong>
-          </p>
-        </div>
-      )}
 
       <p
         role="status"
