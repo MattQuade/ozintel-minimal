@@ -66,7 +66,7 @@ export default function BottleShopHubPage() {
               lineHeight: 1.3,
             }}
           >
-            {cat.slug === "coffee" ? "Fri Morning Coffee 5.30 - 12" : cat.label}
+            {cat.slug === "coffee" ? "Thu & Fri Morning Coffee 5.30 - 12" : cat.label}
           </a>
         ))}
         <BottleShopHubPromos />
