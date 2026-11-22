@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Bottle Shop",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
   },
   icons: {
     icon: [
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#f4f7fb",
   viewportFit: "cover",
 };
 

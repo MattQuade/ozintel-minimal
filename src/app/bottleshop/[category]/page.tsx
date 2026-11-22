@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
+import {
+  productLetter,
+  shopCanvas,
+  shopCard,
+  shopLine,
+  shopMuted,
+} from "@/components/bottleShopLook";
 import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
 import CoffeeVanReplyLink from "@/components/CoffeeVanReplyLink";
@@ -94,8 +101,8 @@ function CoffeeDrink({
         marginTop: 8,
         padding: 12,
         borderRadius: 12,
-        background: "#1e2937",
-        border: reserved ? "2px solid #fbbf24" : "1px solid #334155",
+        background: shopCard,
+        border: reserved ? "2px solid #fbbf24" : `1px solid ${shopLine}`,
         minWidth: 0,
       }}
     >
@@ -113,12 +120,12 @@ function CoffeeDrink({
                 height: 48,
                 objectFit: "cover",
                 borderRadius: 8,
-                background: "#0f172a",
+                background: "#e8eef5",
                 flexShrink: 0,
               }}
             />
           ) : null}
-          <div style={{ fontWeight: 700 }}>{title}</div>
+          <div style={productLetter}>{title}</div>
         </div>
       ) : null}
       {sizes.some((item) => item.label) ? (
@@ -190,10 +197,10 @@ function CoffeeDrink({
           marginTop: 10,
         }}
       >
-        <div style={{ color: "#86efac", fontWeight: 600, minWidth: 0 }}>
+        <div style={{ color: "#157a45", fontWeight: 600, minWidth: 0 }}>
           {unit > 0 ? money(unit) : ""}
         </div>
-        <label style={{ fontSize: "0.75rem", color: "#94a3b8", flexShrink: 0 }}>
+        <label style={{ fontSize: "0.75rem", color: shopMuted, flexShrink: 0 }}>
           Qty
           <input
             type="text"
@@ -208,9 +215,9 @@ function CoffeeDrink({
               marginTop: 4,
               padding: "8px 6px",
               borderRadius: 8,
-              border: "1px solid #475569",
-              background: "#0f172a",
-              color: "white",
+              border: `1px solid ${shopLine}`,
+              background: "#f8fafc",
+              color: "#0c2f6b",
               textAlign: "center",
             }}
           />
@@ -653,13 +660,13 @@ export default function BottleShopCategoryPage() {
       <main
         style={{
           fontFamily: "system-ui, sans-serif",
-          background: "#0f172a",
-          color: "white",
+          background: shopCanvas,
+          color: "#0c2f6b",
           minHeight: "100vh",
           padding: 24,
         }}
       >
-        <p style={{ color: "#94a3b8" }}>Opening bottle shop…</p>
+        <p style={{ color: shopMuted }}>Opening bottle shop…</p>
       </main>
     );
   }
@@ -669,18 +676,18 @@ export default function BottleShopCategoryPage() {
       <main
         style={{
           fontFamily: "system-ui, sans-serif",
-          background: "#0f172a",
-          color: "white",
+          background: shopCanvas,
+          color: "#0c2f6b",
           minHeight: "100vh",
           padding:
             "calc(20px + env(safe-area-inset-top, 0px)) 16px 48px",
         }}
       >
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
-          <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
+          <p style={{ margin: "0 0 8px", color: shopMuted, fontSize: "0.9rem" }}>
             OzIntel · Pub Bottle Shop
           </p>
-          <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", color: "#f8fafc" }}>
+          <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", ...productLetter }}>
             {categoryLabel}
           </h1>
           <p style={{ margin: "0 0 12px" }}>
@@ -699,7 +706,7 @@ export default function BottleShopCategoryPage() {
               ← Bottle Shop
             </a>
           </p>
-          <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
+          <p style={{ margin: "0 0 16px", color: shopMuted, lineHeight: 1.45 }}>
             The {categoryLabel} shelf did not load. Try again, or restore a username if you have one.
           </p>
 
@@ -707,8 +714,8 @@ export default function BottleShopCategoryPage() {
             style={{
               padding: 16,
               borderRadius: 12,
-              background: "#1e2937",
-              border: "1px solid #334155",
+              background: shopCard,
+              border: `1px solid ${shopLine}`,
               marginBottom: 16,
             }}
           >
@@ -732,9 +739,9 @@ export default function BottleShopCategoryPage() {
                 marginBottom: 10,
                 padding: 12,
                 borderRadius: 8,
-                border: "1px solid #475569",
-                background: "#0f172a",
-                color: "white",
+                border: `1px solid ${shopLine}`,
+                background: "#f8fafc",
+                color: "#0c2f6b",
               }}
             />
             <button
@@ -757,10 +764,10 @@ export default function BottleShopCategoryPage() {
           </div>
 
           {status ? (
-            <p style={{ margin: "0", color: "#fca5a5" }}>{status}</p>
+            <p style={{ margin: "0", color: "#b91c1c" }}>{status}</p>
           ) : null}
           {loading ? (
-            <p style={{ marginTop: 16, color: "#94a3b8" }}>Checking access…</p>
+            <p style={{ marginTop: 16, color: shopMuted }}>Checking access…</p>
           ) : null}
         </div>
       </main>
@@ -771,19 +778,19 @@ export default function BottleShopCategoryPage() {
     <main
       style={{
         fontFamily: "system-ui, sans-serif",
-        background: "#0f172a",
-        color: "white",
+        background: shopCanvas,
+        color: "#0c2f6b",
         minHeight: "100vh",
         padding:
           "calc(20px + env(safe-area-inset-top, 0px)) 16px 48px",
       }}
     >
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
-        <p style={{ margin: "0 0 8px", color: "#94a3b8", fontSize: "0.9rem" }}>
+        <p style={{ margin: "0 0 8px", color: shopMuted, fontSize: "0.9rem" }}>
           OzIntel · Pub Bottle Shop
           {unlockedName ? ` · ${unlockedName}` : ""}
         </p>
-        <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", color: "#f8fafc" }}>
+        <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", ...productLetter }}>
           {categoryLabel}
         </h1>
         <p style={{ margin: "0 0 12px" }}>
@@ -802,7 +809,7 @@ export default function BottleShopCategoryPage() {
             ← Bottle Shop
           </a>
         </p>
-        <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.45 }}>
+        <p style={{ margin: "0 0 16px", color: shopMuted, lineHeight: 1.45 }}>
           {category === "coffee"
             ? "Choose the size and the milk, then the quantity. Switch milk to add another. Pay and collect at the van."
             : `Reserve ${categoryLabel} here — pay and collect at the pub.`}
@@ -839,7 +846,7 @@ export default function BottleShopCategoryPage() {
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#38bdf8",
+                color: "#075985",
                 padding: 0,
                 cursor: "pointer",
                 textDecoration: "underline",
@@ -851,7 +858,7 @@ export default function BottleShopCategoryPage() {
         ) : null}
 
         {loading ? (
-          <p style={{ color: "#94a3b8" }}>Loading…</p>
+          <p style={{ color: shopMuted }}>Loading…</p>
         ) : category === "coffee" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {coffeeGroups.map((group) => {
@@ -875,8 +882,8 @@ export default function BottleShopCategoryPage() {
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 12,
-                    background: "#9a3412",
-                    color: "white",
+                    background: shopCard,
+                    border: `1px solid ${shopLine}`,
                     fontWeight: 700,
                     display: "flex",
                     alignItems: "center",
@@ -900,7 +907,7 @@ export default function BottleShopCategoryPage() {
                       }}
                     />
                   ) : null}
-                  <span>{group.type}</span>
+                  <span style={productLetter}>{group.type}</span>
                 </div>
                 <CoffeeDrink
                   title=""
@@ -949,8 +956,8 @@ export default function BottleShopCategoryPage() {
                     gridTemplateColumns: "72px 1fr auto",
                     gap: 12,
                     alignItems: "center",
-                    background: "#1e2937",
-                    border: "1px solid #334155",
+                    background: shopCard,
+                    border: `1px solid ${shopLine}`,
                     borderRadius: 12,
                     padding: 12,
                     opacity: soldOut ? 0.55 : 1,
@@ -967,14 +974,14 @@ export default function BottleShopCategoryPage() {
                       height: 96,
                       objectFit: "cover",
                       borderRadius: 8,
-                      background: "#0f172a",
+                      background: "#e8eef5",
                     }}
                   />
                   <div>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    <div style={{ ...productLetter, marginBottom: 4 }}>
                       {p.name}
                     </div>
-                    <div style={{ color: "#86efac", fontWeight: 600 }}>
+                    <div style={{ color: "#157a45", fontWeight: 600 }}>
                       {money(p.price)}
                     </div>
                     <div style={{ color: "#ef4444", fontSize: "1.071rem" }}>
@@ -989,7 +996,7 @@ export default function BottleShopCategoryPage() {
                       gap: 6,
                     }}
                   >
-                    <label style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                    <label style={{ fontSize: "0.75rem", color: shopMuted }}>
                       Qty
                     </label>
                     <input
@@ -1003,9 +1010,9 @@ export default function BottleShopCategoryPage() {
                         width: 64,
                         padding: "8px 6px",
                         borderRadius: 8,
-                        border: "1px solid #475569",
-                        background: "#0f172a",
-                        color: "white",
+                        border: `1px solid ${shopLine}`,
+                        background: "#f8fafc",
+                        color: "#0c2f6b",
                         textAlign: "center",
                       }}
                     />
@@ -1028,13 +1035,13 @@ export default function BottleShopCategoryPage() {
             marginTop: 24,
             padding: 16,
             borderRadius: 12,
-            background: "#1e2937",
-            border: "1px solid #334155",
+            background: shopCard,
+            border: `1px solid ${shopLine}`,
           }}
         >
           <h2 style={{ margin: "0 0 12px", fontSize: "1.1rem" }}>Your reserve</h2>
           {lines.length === 0 ? (
-            <p style={{ color: "#94a3b8", margin: "0 0 12px" }}>
+            <p style={{ color: shopMuted, margin: "0 0 12px" }}>
               Choose quantities above.
             </p>
           ) : (
@@ -1054,7 +1061,7 @@ export default function BottleShopCategoryPage() {
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 8,
-                    color: "#e2e8f0",
+                    ...productLetter,
                   }}
                 >
                   <span style={{ minWidth: 0, lineHeight: 1.35 }}>
@@ -1096,9 +1103,9 @@ export default function BottleShopCategoryPage() {
               marginBottom: 8,
               padding: 12,
               borderRadius: 8,
-              border: "1px solid #475569",
-              background: "#0f172a",
-              color: "white",
+              border: `1px solid ${shopLine}`,
+              background: "#f8fafc",
+              color: "#0c2f6b",
             }}
           />
           <input
@@ -1116,9 +1123,9 @@ export default function BottleShopCategoryPage() {
               marginBottom: 12,
               padding: 12,
               borderRadius: 8,
-              border: "1px solid #475569",
-              background: "#0f172a",
-              color: "white",
+              border: `1px solid ${shopLine}`,
+              background: "#f8fafc",
+              color: "#0c2f6b",
             }}
           />
           <button
@@ -1144,7 +1151,7 @@ export default function BottleShopCategoryPage() {
                 : "Reserve bottles"}
           </button>
           {status ? (
-            <p style={{ margin: "12px 0 0", color: "#93c5fd", lineHeight: 1.4 }}>
+            <p style={{ margin: "12px 0 0", color: "#1d4ed8", lineHeight: 1.4 }}>
               {status}
             </p>
           ) : null}
