@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { shopSage } from "@/components/bottleShopLook";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -77,10 +78,12 @@ export default function BottleShopInstallButton({
         <p
           style={{
             margin: showInstalledNote ? "0 0 8px" : 0,
-            color: "#86efac",
+            color: shopSage,
             fontSize: "1.9rem",
-            fontWeight: 700,
+            fontWeight: 800,
             lineHeight: 1.2,
+            textShadow:
+              "0 1px 0 rgba(255,255,255,0.95), 0 1px 1px rgba(70, 105, 78, 0.28)",
           }}
         >
           {title}

@@ -5,6 +5,8 @@ export const shopCanvas = "#f4f7fb";
 export const shopCard = "#ffffff";
 export const shopLine = "#d5deea";
 export const shopMuted = "#5b6b82";
+/** Sage for the Collingullie Hotel and J&S Espresso Bar headings. */
+export const shopSage = "#6b8f71";
 
 /** Gloss navy for product names on the light background. */
 export const productLetter: CSSProperties = {
