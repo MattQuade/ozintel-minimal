@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createBottleProduct,
   createCoffeeProducts,
+  createStyledCoffee,
   deleteBottleOrder,
   deleteBottleProduct,
   loadBottleShopAdmin,
@@ -47,8 +48,22 @@ export async function POST(req: NextRequest) {
   if (!access.ok) return access.response;
   try {
     const body = await req.json();
+    const category = String(body.category || "").trim().toLowerCase();
+    const coffeeFormat = String(body.coffeeFormat || "").trim();
     const sizes = Array.isArray(body.sizes) ? body.sizes : [];
-    if (String(body.category || "").trim().toLowerCase() === "coffee" && sizes.length) {
+    if (category === "coffee" && (coffeeFormat === "2" || coffeeFormat === "3")) {
+      const product = await withBottleShopOwner(() =>
+        createStyledCoffee({
+          name: body.name,
+          price: body.price,
+          quantity: body.quantity,
+          format: coffeeFormat,
+          buttons: body.buttons,
+        })
+      );
+      return NextResponse.json({ success: true, product });
+    }
+    if (category === "coffee" && sizes.length) {
       const result = await withBottleShopOwner(() =>
         createCoffeeProducts({
           name: body.name,
@@ -173,6 +188,8 @@ export async function PATCH(req: NextRequest) {
         imageUrl: body.imageUrl,
         active: body.active,
         category: body.category,
+        coffeeFormat: body.coffeeFormat,
+        buttons: body.buttons,
       })
     );
     return NextResponse.json({ success: true, product });

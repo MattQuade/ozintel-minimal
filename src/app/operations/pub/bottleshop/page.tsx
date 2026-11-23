@@ -15,11 +15,23 @@ import {
 } from "@/lib/client/cropImage";
 import { prepareReceiptFileForOcr } from "@/lib/client/compressReceiptImage";
 import {
-  BOTTLE_SHOP_CATEGORIES,
   COFFEE_SIZES,
+  normalizeCoffee3Buttons,
+  STOCK_MENU,
+  stockMenuChoice,
+  stockMenuValue,
   type BottleCategory,
+  type CoffeeFormat,
   type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
+
+type ProductDraft = {
+  price: string;
+  quantity: string;
+  name: string;
+  stock: string;
+  buttons: [string, string, string];
+};
 
 type Product = {
   id: string;
@@ -29,6 +41,8 @@ type Product = {
   imageUrl: string;
   active: boolean;
   category: BottleCategory;
+  coffeeFormat?: CoffeeFormat;
+  buttons?: string[];
 };
 
 type Order = {
@@ -198,15 +212,12 @@ function BottleShopAdminInner() {
   const [newProductName, setNewProductName] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [newProductQty, setNewProductQty] = useState("1");
-  const [newProductCategory, setNewProductCategory] =
-    useState<BottleCategory>("beer");
+  const [newProductCategory, setNewProductCategory] = useState("beer");
   const [newCoffeeSize, setNewCoffeeSize] = useState<CoffeeSize>("small");
-  const [drafts, setDrafts] = useState<
-    Record<
-      string,
-      { price: string; quantity: string; name: string; category: BottleCategory }
-    >
-  >({});
+  const [newCoffeeButtons, setNewCoffeeButtons] = useState<
+    [string, string, string]
+  >(["Button 1", "Button 2", "Button 3"]);
+  const [drafts, setDrafts] = useState<Record<string, ProductDraft>>({});
   const [photoCrop, setPhotoCrop] = useState<{
     productId: string;
     productName: string;
@@ -286,21 +297,14 @@ function BottleShopAdminInner() {
             ).length;
       setReservedCount(reserved);
       void syncAppBadge(reserved);
-      const nextDrafts: Record<
-        string,
-        {
-          price: string;
-          quantity: string;
-          name: string;
-          category: BottleCategory;
-        }
-      > = {};
+      const nextDrafts: Record<string, ProductDraft> = {};
       for (const p of nextProducts) {
         nextDrafts[p.id] = {
           name: p.name,
           price: String(p.price),
           quantity: String(p.quantity),
-          category: p.category || "beer",
+          stock: stockMenuValue(p.category || "beer", p.coffeeFormat),
+          buttons: normalizeCoffee3Buttons(p.buttons),
         };
       }
       setDrafts(nextDrafts);
@@ -348,6 +352,7 @@ function BottleShopAdminInner() {
   const saveProduct = async (id: string) => {
     const draft = drafts[id];
     if (!draft) return;
+    const menu = stockMenuChoice(draft.stock);
     setStatus("Saving…");
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
@@ -359,7 +364,9 @@ function BottleShopAdminInner() {
           name: draft.name,
           price: Number(draft.price),
           quantity: Number(draft.quantity),
-          category: draft.category,
+          category: menu.category,
+          coffeeFormat: menu.coffeeFormat,
+          ...(menu.coffeeFormat === "3" ? { buttons: draft.buttons } : {}),
         }),
       });
       const data = await res.json();
@@ -485,6 +492,7 @@ function BottleShopAdminInner() {
       return;
     }
     setStatus("Adding product…");
+    const addingMenu = stockMenuChoice(newProductCategory);
     try {
       const res = await fetch("/api/operations/pub/bottleshop", {
         method: "POST",
@@ -493,8 +501,12 @@ function BottleShopAdminInner() {
           name: newProductName.trim(),
           price: Number(newProductPrice) || 0,
           quantity: Number(newProductQty) || 0,
-          category: newProductCategory,
-          ...(newProductCategory === "coffee" ? { sizes: [newCoffeeSize] } : {}),
+          category: addingMenu.category,
+          ...(addingMenu.coffeeFormat
+            ? { coffeeFormat: addingMenu.coffeeFormat }
+            : {}),
+          ...(addingMenu.coffeeFormat === "1" ? { sizes: [newCoffeeSize] } : {}),
+          ...(addingMenu.coffeeFormat === "3" ? { buttons: newCoffeeButtons } : {}),
         }),
       });
       const data = await res.json();
@@ -502,7 +514,6 @@ function BottleShopAdminInner() {
         setStatus(data.error || "Could not add product");
         return;
       }
-      const addingCoffee = newProductCategory === "coffee";
       const added = Array.isArray(data.products)
         ? data.products.map((product: Product) => product.name).join(", ")
         : data.product.name;
@@ -511,10 +522,11 @@ function BottleShopAdminInner() {
       setNewProductQty("1");
       setNewProductCategory("beer");
       setNewCoffeeSize("small");
+      setNewCoffeeButtons(["Button 1", "Button 2", "Button 3"]);
       setStatus(
-        addingCoffee
+        addingMenu.coffeeFormat === "1"
           ? `Added ${added}. Upload a photo on that size below.`
-          : `Added ${data.product.name}. Upload a photo below.`
+          : `Added ${added}. Upload a photo below.`
       );
       await load();
     } catch (error) {
@@ -1038,15 +1050,19 @@ function BottleShopAdminInner() {
             }}
           >
             <p style={{ margin: "0 0 8px", color: "#94a3b8" }}>
-              {newProductCategory === "coffee"
+              {stockMenuChoice(newProductCategory).coffeeFormat === "1"
                 ? "Name the coffee and pick one cup size. Add it again for another size. A size you delete stays off."
-                : "Add a new item (e.g. 24pk cider), then upload its photo."}
+                : stockMenuChoice(newProductCategory).coffeeFormat === "2"
+                  ? "Name the drink. Customers see Large, then Choc, Strawb, and Caramel."
+                  : stockMenuChoice(newProductCategory).coffeeFormat === "3"
+                    ? "Name the drink, then edit the three buttons."
+                    : "Add a new item (e.g. 24pk cider), then upload its photo."}
             </p>
             <input
               value={newProductName}
               onChange={(e) => setNewProductName(e.target.value)}
               placeholder={
-                newProductCategory === "coffee"
+                stockMenuChoice(newProductCategory).category === "coffee"
                   ? "Coffee name (e.g. Long black)"
                   : "Product name"
               }
@@ -1077,13 +1093,39 @@ function BottleShopAdminInner() {
                 color: "white",
               }}
             >
-              {BOTTLE_SHOP_CATEGORIES.map((c) => (
-                <option key={c.slug} value={c.slug}>
+              {STOCK_MENU.map((c) => (
+                <option key={c.value} value={c.value}>
                   {c.label}
                 </option>
               ))}
             </select>
-            {newProductCategory === "coffee" ? (
+            {stockMenuChoice(newProductCategory).coffeeFormat === "3" ? (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                {newCoffeeButtons.map((label, index) => (
+                  <input
+                    key={index}
+                    value={label}
+                    onChange={(e) =>
+                      setNewCoffeeButtons((prev) => {
+                        const next = [...prev] as [string, string, string];
+                        next[index] = e.target.value;
+                        return next;
+                      })
+                    }
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: 10,
+                      borderRadius: 8,
+                      border: "1px solid #475569",
+                      background: "#0f172a",
+                      color: "white",
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
+            {stockMenuChoice(newProductCategory).coffeeFormat === "1" ? (
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 {COFFEE_SIZES.map((size) => {
                   const on = newCoffeeSize === size.slug;
@@ -1163,7 +1205,8 @@ function BottleShopAdminInner() {
                 name: p.name,
                 price: String(p.price),
                 quantity: String(p.quantity),
-                category: p.category || "beer",
+                stock: stockMenuValue(p.category || "beer", p.coffeeFormat),
+                buttons: normalizeCoffee3Buttons(p.buttons),
               };
               return (
                 <div
@@ -1269,19 +1312,19 @@ function BottleShopAdminInner() {
                       <label style={{ fontSize: "0.85rem", color: "#94a3b8" }}>
                         Shelf
                         <select
-                          value={draft.category}
+                          value={draft.stock}
                           onChange={(e) =>
                             setDrafts((prev) => ({
                               ...prev,
                               [p.id]: {
                                 ...draft,
-                                category: e.target.value as BottleCategory,
+                                stock: e.target.value,
                               },
                             }))
                           }
                           style={{
                             display: "block",
-                            width: 120,
+                            width: 140,
                             marginTop: 4,
                             padding: 8,
                             borderRadius: 8,
@@ -1290,13 +1333,46 @@ function BottleShopAdminInner() {
                             color: "white",
                           }}
                         >
-                          {BOTTLE_SHOP_CATEGORIES.map((c) => (
-                            <option key={c.slug} value={c.slug}>
+                          {STOCK_MENU.map((c) => (
+                            <option key={c.value} value={c.value}>
                               {c.label}
                             </option>
                           ))}
                         </select>
                       </label>
+                      {stockMenuChoice(draft.stock).coffeeFormat === "3" ? (
+                        <div style={{ display: "flex", gap: 6, width: "100%" }}>
+                          {draft.buttons.map((label, index) => (
+                            <input
+                              key={index}
+                              value={label}
+                              onChange={(e) =>
+                                setDrafts((prev) => {
+                                  const buttons = [...draft.buttons] as [
+                                    string,
+                                    string,
+                                    string,
+                                  ];
+                                  buttons[index] = e.target.value;
+                                  return {
+                                    ...prev,
+                                    [p.id]: { ...draft, buttons },
+                                  };
+                                })
+                              }
+                              style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: 8,
+                                borderRadius: 8,
+                                border: "1px solid #475569",
+                                background: "#0f172a",
+                                color: "white",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => saveProduct(p.id)}

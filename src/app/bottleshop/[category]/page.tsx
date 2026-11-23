@@ -18,15 +18,19 @@ import {
 } from "@/lib/client/sessionEmail";
 import {
   bottleCategoryLabel,
+  COFFEE_2_CHOICES,
   COFFEE_MILKS,
   COFFEE_MILK_ROWS,
+  coffeeFormatOf,
   coffeeLineKey,
   coffeeMilkExtra,
   coffeeMilkLabel,
   coffeeShelfGroups,
   coffeeUnitPrice,
   isBottleCategory,
+  normalizeCoffee3Buttons,
   type BottleCategory,
+  type CoffeeFormat,
   type CoffeeMilk,
   type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
@@ -41,6 +45,8 @@ type Product = {
   category?: BottleCategory;
   size?: CoffeeSize;
   coffeeType?: string;
+  coffeeFormat?: CoffeeFormat;
+  buttons?: string[];
 };
 
 type Cart = Record<string, number>;
@@ -50,6 +56,8 @@ type ReserveLine = {
   product: Product;
   qty: number;
   milk?: CoffeeMilk;
+  choice?: string;
+  choiceLabel?: string;
 };
 
 function choiceStyle(selected: boolean): CSSProperties {
@@ -77,6 +85,8 @@ function CoffeeDrink({
   qtyText,
   submitting,
   onQty,
+  format = "1",
+  choices = [],
 }: {
   title: string;
   photo: string;
@@ -85,15 +95,25 @@ function CoffeeDrink({
   qtyText: Record<string, string>;
   submitting: boolean;
   onQty: (key: string, raw: string) => void;
+  format?: CoffeeFormat;
+  choices?: Array<{ slug: string; button: string }>;
 }) {
   const [sizeId, setSizeId] = useState(sizes[0]?.id || "");
   const [milk, setMilk] = useState<CoffeeMilk>("full-cream");
+  const [pick, setPick] = useState(choices[0]?.slug || "");
   const size = sizes.find((item) => item.id === sizeId) || sizes[0];
-  const key = size ? coffeeLineKey(size.id, milk) : "";
-  const unit = size ? coffeeUnitPrice(size.price, milk) : 0;
+  const option = format === "1" ? milk : pick;
+  const key = size ? coffeeLineKey(size.id, option) : "";
+  const unit = size
+    ? format === "1"
+      ? coffeeUnitPrice(size.price, milk)
+      : size.price
+    : 0;
   const surchargeOn = coffeeMilkExtra(milk) > 0;
   const reserved = sizes.some((item) =>
-    COFFEE_MILKS.some((option) => (cart[coffeeLineKey(item.id, option.slug)] || 0) > 0)
+    (format === "1" ? COFFEE_MILKS.map((row) => row.slug) : choices.map((row) => row.slug)).some(
+      (slug) => (cart[coffeeLineKey(item.id, slug)] || 0) > 0
+    )
   );
   return (
     <div
@@ -128,7 +148,17 @@ function CoffeeDrink({
           <div style={productLetter}>{title}</div>
         </div>
       ) : null}
-      {sizes.some((item) => item.label) ? (
+      {format === "2" ? (
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+          <button
+            type="button"
+            aria-pressed
+            style={{ ...choiceStyle(true), width: "32%" }}
+          >
+            Large
+          </button>
+        </div>
+      ) : sizes.some((item) => item.label) ? (
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           {sizes.map((item) => (
             <button
@@ -147,6 +177,7 @@ function CoffeeDrink({
           ))}
         </div>
       ) : null}
+      {format === "1" ? (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {COFFEE_MILK_ROWS.map((row) => (
           <div key={row.join("-")} style={{ display: "flex", gap: 6 }}>
@@ -188,6 +219,25 @@ function CoffeeDrink({
           </div>
         ))}
       </div>
+      ) : (
+        <div style={{ display: "flex", gap: 6 }}>
+          {choices.map((item) => (
+            <button
+              key={item.slug}
+              type="button"
+              aria-pressed={item.slug === pick}
+              onClick={() => setPick(item.slug)}
+              style={{
+                ...choiceStyle(item.slug === pick),
+                flex: "1 1 0",
+                padding: "10px 4px",
+              }}
+            >
+              {item.button}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         style={{
           display: "flex",
@@ -497,6 +547,32 @@ export default function BottleShopCategoryPage() {
     }
     const reserved: ReserveLine[] = [];
     for (const product of products) {
+      const format = coffeeFormatOf(product);
+      if (format === "2") {
+        for (const option of COFFEE_2_CHOICES) {
+          const key = coffeeLineKey(product.id, option.slug);
+          const qty = cart[key] || 0;
+          if (qty > 0) {
+            reserved.push({
+              key,
+              product,
+              qty,
+              choice: option.slug,
+              choiceLabel: `Large, ${option.label}`,
+            });
+          }
+        }
+        continue;
+      }
+      if (format === "3") {
+        normalizeCoffee3Buttons(product.buttons).forEach((label, index) => {
+          const slug = String(index);
+          const key = coffeeLineKey(product.id, slug);
+          const qty = cart[key] || 0;
+          if (qty > 0) reserved.push({ key, product, qty, choice: slug, choiceLabel: label });
+        });
+        continue;
+      }
       for (const option of COFFEE_MILKS) {
         const key = coffeeLineKey(product.id, option.slug);
         const qty = cart[key] || 0;
@@ -509,7 +585,10 @@ export default function BottleShopCategoryPage() {
   const cartTotal = useMemo(
     () =>
       lines.reduce(
-        (sum, l) => sum + l.qty * coffeeUnitPrice(l.product.price, l.milk),
+        (sum, l) =>
+          sum +
+          l.qty *
+            (l.milk ? coffeeUnitPrice(l.product.price, l.milk) : l.product.price),
         0
       ),
     [lines]
@@ -615,6 +694,7 @@ export default function BottleShopCategoryPage() {
             productId: l.product.id,
             quantity: l.qty,
             ...(l.milk ? { milk: l.milk } : {}),
+            ...(l.choice ? { choice: l.choice } : {}),
           })),
         }),
       });
@@ -929,18 +1009,35 @@ export default function BottleShopCategoryPage() {
             })}
             {products
               .filter((p) => !coffeeRowIds.has(p.id))
-              .map((p) => (
+              .map((p) => {
+                const format = coffeeFormatOf(p);
+                const choices =
+                  format === "2"
+                    ? COFFEE_2_CHOICES.map((item) => ({
+                        slug: item.slug,
+                        button: item.label,
+                      }))
+                    : format === "3"
+                      ? normalizeCoffee3Buttons(p.buttons).map((label, index) => ({
+                          slug: String(index),
+                          button: label,
+                        }))
+                      : [];
+                return (
                 <CoffeeDrink
                   key={p.id}
                   title={p.name}
                   photo={uploadedPhoto(p.imageUrl)}
+                  format={format}
+                  choices={choices}
                   sizes={[{ id: p.id, label: "", price: p.price }]}
                   cart={cart}
                   qtyText={qtyText}
                   submitting={submitting}
                   onQty={setQty}
                 />
-              ))}
+                );
+              })}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1065,8 +1162,18 @@ export default function BottleShopCategoryPage() {
                 >
                   <span style={{ minWidth: 0, lineHeight: 1.35 }}>
                     {l.qty}× {l.product.name}
-                    {l.milk ? `, ${coffeeMilkLabel(l.milk)}` : ""} —{" "}
-                    {money(l.qty * coffeeUnitPrice(l.product.price, l.milk))}
+                    {l.choiceLabel
+                      ? `, ${l.choiceLabel}`
+                      : l.milk
+                        ? `, ${coffeeMilkLabel(l.milk)}`
+                        : ""}{" "}
+                    —{" "}
+                    {money(
+                      l.qty *
+                        (l.milk
+                          ? coffeeUnitPrice(l.product.price, l.milk)
+                          : l.product.price)
+                    )}
                   </span>
                   <button
                     type="button"

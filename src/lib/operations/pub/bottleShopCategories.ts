@@ -34,6 +34,79 @@ export const COFFEE_SIZES = [
 
 export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
 
+/** Three coffee card layouts. Coffee 1 is the original size and milk card. */
+export type CoffeeFormat = "1" | "2" | "3";
+
+export function isCoffeeFormat(value: string): value is CoffeeFormat {
+  return value === "1" || value === "2" || value === "3";
+}
+
+export function coffeeFormatOf(product: { coffeeFormat?: string } | null | undefined): CoffeeFormat {
+  const value = String(product?.coffeeFormat || "");
+  return isCoffeeFormat(value) ? value : "1";
+}
+
+/** Coffee 2 second row. Large is the only size, centred above these. */
+export const COFFEE_2_CHOICES = [
+  { slug: "choc", label: "Choc" },
+  { slug: "strawb", label: "Strawb" },
+  { slug: "caramel", label: "Caramel" },
+] as const;
+
+export type Coffee2Choice = (typeof COFFEE_2_CHOICES)[number]["slug"];
+
+export function isCoffee2Choice(value: string): value is Coffee2Choice {
+  return COFFEE_2_CHOICES.some((item) => item.slug === value);
+}
+
+export function coffee2ChoiceLabel(slug: string): string {
+  return COFFEE_2_CHOICES.find((item) => item.slug === slug)?.label || slug;
+}
+
+/** Coffee 3 is one row of three labels the ledger can rename. */
+export function normalizeCoffee3Buttons(raw: unknown): [string, string, string] {
+  const list = Array.isArray(raw) ? raw : [];
+  return [0, 1, 2].map((index) => {
+    const text = String(list[index] || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, 18);
+    return text || `Button ${index + 1}`;
+  }) as [string, string, string];
+}
+
+export type StockMenuChoice = {
+  value: string;
+  label: string;
+  category: BottleCategory;
+  coffeeFormat?: CoffeeFormat;
+};
+
+/** Stock dropdown. Coffee stays one public shelf, with three card formats. */
+export const STOCK_MENU: StockMenuChoice[] = [
+  { value: "coffee-1", label: "Coffee 1", category: "coffee", coffeeFormat: "1" },
+  { value: "coffee-2", label: "Coffee 2", category: "coffee", coffeeFormat: "2" },
+  { value: "coffee-3", label: "Coffee 3", category: "coffee", coffeeFormat: "3" },
+  ...BOTTLE_SHOP_CATEGORIES.filter((item) => item.slug !== "coffee").map((item) => ({
+    value: item.slug,
+    label: item.label,
+    category: item.slug,
+  })),
+];
+
+export function stockMenuValue(category: string, format?: string): string {
+  if (category === "coffee") return `coffee-${coffeeFormatOf({ coffeeFormat: format })}`;
+  return isBottleCategory(category) ? category : "beer";
+}
+
+export function stockMenuChoice(value: string): StockMenuChoice {
+  return (
+    STOCK_MENU.find((item) => item.value === value) ||
+    STOCK_MENU.find((item) => item.value === "beer") ||
+    STOCK_MENU[0]
+  );
+}
+
 /** Milk on a coffee order. Full cream is the usual choice. */
 export const COFFEE_MILKS = [
   { slug: "full-cream", label: "Full cream", button: "Full cream" },
@@ -74,8 +147,8 @@ export function coffeeMilkLabel(milk: string): string {
 }
 
 /** One shelf line per cup and milk, so oat and soy of the same size stay separate. */
-export function coffeeLineKey(productId: string, milk: CoffeeMilk): string {
-  return `${productId}::${milk}`;
+export function coffeeLineKey(productId: string, option: string): string {
+  return `${productId}::${option}`;
 }
 
 export function isCoffeeSize(value: string): value is CoffeeSize {
@@ -120,9 +193,13 @@ export type CoffeeShelfGroup = {
  * Any later coffee added with cup sizes is grouped the same way.
  */
 export function coffeeShelfGroups(
-  products: Array<{ id: string; coffeeType?: string; size?: string }>
+  products: Array<{ id: string; coffeeType?: string; size?: string; coffeeFormat?: string }>
 ): CoffeeShelfGroup[] {
-  const stocked = new Set(products.map((product) => product.id));
+  const stocked = new Set(
+    products
+      .filter((product) => coffeeFormatOf(product) === "1")
+      .map((product) => product.id)
+  );
   const groups: CoffeeShelfGroup[] = [];
   for (const type of COFFEE_TYPES) {
     const rows = COFFEE_MENU.filter(
@@ -136,6 +213,7 @@ export function coffeeShelfGroups(
   const knownIds = new Set(groups.flatMap((group) => group.rows.map((row) => row.id)));
   const extra = new Map<string, CoffeeShelfGroup>();
   for (const product of products) {
+    if (coffeeFormatOf(product) !== "1") continue;
     if (knownIds.has(product.id)) continue;
     const type = String(product.coffeeType || "").trim();
     const size = String(product.size || "").trim().toLowerCase();

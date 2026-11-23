@@ -9,17 +9,23 @@ import {
 } from "@/lib/dataPaths";
 import {
   COFFEE_MENU,
+  coffee2ChoiceLabel,
+  coffeeFormatOf,
   coffeeProductId,
   coffeeMilkLabel,
   coffeeSizeLabel,
   coffeeUnitPrice,
   isBordeauxSuperieurAt29,
+  isCoffee2Choice,
+  isCoffeeFormat,
   isCoffeeMilk,
   isCoffeeSize,
   isFrenchShelfWine,
   normalizeBottleCategory,
+  normalizeCoffee3Buttons,
   splitCoffeeName,
   type BottleCategory,
+  type CoffeeFormat,
   type CoffeeSize,
 } from "@/lib/operations/pub/bottleShopCategories";
 
@@ -37,6 +43,10 @@ export type BottleProduct = {
   size?: CoffeeSize;
   /** Drink name without the size, e.g. "Long black". */
   coffeeType?: string;
+  /** Coffee 1 keeps sizes and milks. Coffee 2 and 3 use their own buttons. */
+  coffeeFormat?: CoffeeFormat;
+  /** Coffee 3 button labels, always three. */
+  buttons?: [string, string, string];
 };
 
 export type BottleOrderLine = {
@@ -47,6 +57,8 @@ export type BottleOrderLine = {
   category?: BottleCategory;
   /** Coffee milk slug. Beer and wine leave this off. */
   milk?: string;
+  /** Coffee 2 or Coffee 3 button. Coffee 1 leaves this off. */
+  choice?: string;
 };
 
 export type BottleOrder = {
@@ -193,6 +205,9 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
   const category = normalizeBottleCategory(raw.category, { id, name });
   const sizeRaw = String(raw.size || "").trim().toLowerCase();
   const coffeeType = String(raw.coffeeType || "").trim();
+  const formatRaw = String(raw.coffeeFormat || "").trim();
+  const coffeeFormat: CoffeeFormat | undefined =
+    category === "coffee" ? (isCoffeeFormat(formatRaw) ? formatRaw : "1") : undefined;
   return {
     id,
     name,
@@ -201,8 +216,13 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
     imageUrl: String(raw.imageUrl || `/bottleshop/${id}.svg`).trim(),
     active: raw.active !== false,
     category,
-    ...(category === "coffee" && isCoffeeSize(sizeRaw) ? { size: sizeRaw } : {}),
+    ...(coffeeFormat === "1" && isCoffeeSize(sizeRaw) ? { size: sizeRaw } : {}),
+    ...(coffeeFormat === "2" ? { size: "large" as const } : {}),
     ...(category === "coffee" && coffeeType ? { coffeeType } : {}),
+    ...(coffeeFormat ? { coffeeFormat } : {}),
+    ...(coffeeFormat === "3"
+      ? { buttons: normalizeCoffee3Buttons(raw.buttons) }
+      : {}),
   };
 }
 
@@ -570,7 +590,14 @@ export async function updateBottleProduct(
   patch: Partial<
     Pick<
       BottleProduct,
-      "name" | "price" | "quantity" | "imageUrl" | "active" | "category"
+      | "name"
+      | "price"
+      | "quantity"
+      | "imageUrl"
+      | "active"
+      | "category"
+      | "coffeeFormat"
+      | "buttons"
     >
   >
 ): Promise<BottleProduct> {
@@ -603,10 +630,14 @@ export async function updateBottleProduct(
             name: nextName,
           })
         : current.category,
+    ...(patch.coffeeFormat != null ? { coffeeFormat: patch.coffeeFormat } : {}),
+    ...(patch.buttons != null ? { buttons: patch.buttons } : {}),
   };
-  store.products[idx] = next;
+  const normalized = normalizeProduct(next);
+  if (!normalized) throw new Error("Product name is required");
+  store.products[idx] = normalized;
   await writeStore(store);
-  return next;
+  return normalized;
 }
 
 /** Remove one product from this owner's bottle shop, including its photo. */
@@ -673,6 +704,7 @@ export async function createCoffeeProducts(input: {
       category: "coffee",
       size,
       coffeeType: typeName,
+      coffeeFormat: "1",
     };
     store.products.push(product);
     created.push(product);
@@ -683,6 +715,36 @@ export async function createCoffeeProducts(input: {
   }
   await writeStore(store);
   return { products: created, skipped };
+}
+
+/** Coffee 2 is Large with Choc, Strawb, and Caramel. Coffee 3 is three editable buttons. */
+export async function createStyledCoffee(input: {
+  name: string;
+  price?: number;
+  quantity?: number;
+  format: "2" | "3";
+  buttons?: string[];
+}): Promise<BottleProduct> {
+  const name = String(input.name || "").trim();
+  if (!name) throw new Error("Product name is required");
+  const format = input.format === "3" ? "3" : "2";
+  const store = await readStore();
+  const product: BottleProduct = {
+    id: newId("coffee"),
+    name,
+    price: Math.max(0, Number(input.price) || 0),
+    quantity: Math.max(0, Math.floor(Number(input.quantity) || 0)),
+    imageUrl: "/bottleshop/wine-01.svg",
+    active: true,
+    category: "coffee",
+    coffeeType: name,
+    coffeeFormat: format,
+    ...(format === "2" ? { size: "large" as const } : {}),
+    ...(format === "3" ? { buttons: normalizeCoffee3Buttons(input.buttons) } : {}),
+  };
+  store.products.push(product);
+  await writeStore(store);
+  return product;
 }
 
 export async function createBottleProduct(input: {
@@ -710,7 +772,7 @@ export async function createBottleProduct(input: {
 }
 
 export type PlaceOrderInput = {
-  items: Array<{ productId: string; quantity: number; milk?: string }>;
+  items: Array<{ productId: string; quantity: number; milk?: string; choice?: string }>;
   customerName?: string;
   customerNote?: string;
   customerId?: string;
@@ -754,7 +816,10 @@ export async function placeBottleOrder(
   const items = Array.isArray(input.items) ? input.items : [];
   if (!items.length) throw new Error("Select at least one item");
 
-  const wanted = new Map<string, { productId: string; milk: string; quantity: number }>();
+  const wanted = new Map<
+    string,
+    { productId: string; milk: string; choice: string; quantity: number }
+  >();
   for (const item of items) {
     const productId = String(item.productId || "").trim();
     const quantity = Math.floor(Number(item.quantity) || 0);
@@ -762,17 +827,18 @@ export async function placeBottleOrder(
     const milk = isCoffeeMilk(String(item.milk || "").trim())
       ? String(item.milk).trim()
       : "";
-    const key = `${productId}\0${milk}`;
+    const choice = String(item.choice || "").trim();
+    const key = `${productId}\0${milk}\0${choice}`;
     const prev = wanted.get(key);
     if (prev) prev.quantity += quantity;
-    else wanted.set(key, { productId, milk, quantity });
+    else wanted.set(key, { productId, milk, choice, quantity });
   }
   if (!wanted.size) throw new Error("Select at least one item");
 
   const store = await readStore();
   const lines: BottleOrderLine[] = [];
 
-  for (const { productId, milk, quantity } of wanted.values()) {
+  for (const { productId, milk, choice, quantity } of wanted.values()) {
     const product = store.products.find((p) => p.id === productId && p.active);
     if (!product) throw new Error(`Bottle not found: ${productId}`);
     // Coffee is made to order. Stock counts stay on beer and wine.
@@ -784,15 +850,41 @@ export async function placeBottleOrder(
       }
       product.quantity -= quantity;
     }
-    const milkSlug =
-      product.category === "coffee" ? (isCoffeeMilk(milk) ? milk : "full-cream") : "";
+    const format = product.category === "coffee" ? coffeeFormatOf(product) : "1";
+    let lineName = product.name;
+    let unitPrice = product.price;
+    let milkSlug = "";
+    let choiceSlug = "";
+    if (product.category === "coffee" && format === "1") {
+      milkSlug = isCoffeeMilk(milk) ? milk : "full-cream";
+      lineName = `${product.name}, ${coffeeMilkLabel(milkSlug)}`;
+      unitPrice = coffeeUnitPrice(product.price, milkSlug);
+    } else if (product.category === "coffee" && format === "2") {
+      if (!isCoffee2Choice(choice)) {
+        throw new Error("Choose Choc, Strawb, or Caramel.");
+      }
+      choiceSlug = choice;
+      const drink = /\blarge\b/i.test(product.name)
+        ? product.name
+        : `${product.name}, Large`;
+      lineName = `${drink}, ${coffee2ChoiceLabel(choice)}`;
+    } else if (product.category === "coffee" && format === "3") {
+      const buttons = normalizeCoffee3Buttons(product.buttons);
+      const index = Number(choice);
+      if (!Number.isInteger(index) || index < 0 || index > 2) {
+        throw new Error("Choose one of the three buttons.");
+      }
+      choiceSlug = String(index);
+      lineName = `${product.name}, ${buttons[index]}`;
+    }
     lines.push({
       productId: product.id,
-      name: milkSlug ? `${product.name}, ${coffeeMilkLabel(milkSlug)}` : product.name,
+      name: lineName,
       quantity,
-      unitPrice: milkSlug ? coffeeUnitPrice(product.price, milkSlug) : product.price,
+      unitPrice,
       category: product.category,
       ...(milkSlug ? { milk: milkSlug } : {}),
+      ...(choiceSlug ? { choice: choiceSlug } : {}),
     });
   }
 
