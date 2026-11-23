@@ -817,7 +817,6 @@ export default function BottleShopCategoryPage() {
 
         <BottleShopInstallButton
           title={category === "coffee" ? "J&S Espresso Bar" : undefined}
-          showInstalledNote={category !== "coffee"}
         />
 
         {category === "coffee" ? <CoffeeVanReplyLink /> : null}
