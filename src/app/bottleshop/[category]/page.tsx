@@ -102,7 +102,7 @@ function CoffeeDrink({
   const [milk, setMilk] = useState<CoffeeMilk>("full-cream");
   const [pick, setPick] = useState(choices[0]?.slug || "");
   const size = sizes.find((item) => item.id === sizeId) || sizes[0];
-  const option = format === "1" ? milk : pick;
+  const option = format === "1" ? milk : format === "4" ? "large" : pick;
   const key = size ? coffeeLineKey(size.id, option) : "";
   const unit = size
     ? format === "1"
@@ -110,10 +110,14 @@ function CoffeeDrink({
       : size.price
     : 0;
   const surchargeOn = coffeeMilkExtra(milk) > 0;
+  const optionSlugs =
+    format === "1"
+      ? COFFEE_MILKS.map((row) => row.slug)
+      : format === "4"
+        ? ["large"]
+        : choices.map((row) => row.slug);
   const reserved = sizes.some((item) =>
-    (format === "1" ? COFFEE_MILKS.map((row) => row.slug) : choices.map((row) => row.slug)).some(
-      (slug) => (cart[coffeeLineKey(item.id, slug)] || 0) > 0
-    )
+    optionSlugs.some((slug) => (cart[coffeeLineKey(item.id, slug)] || 0) > 0)
   );
   return (
     <div
@@ -148,7 +152,7 @@ function CoffeeDrink({
           <div style={productLetter}>{title}</div>
         </div>
       ) : null}
-      {format === "2" ? (
+      {format === "2" || format === "4" ? (
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
           <button
             type="button"
@@ -219,7 +223,7 @@ function CoffeeDrink({
           </div>
         ))}
       </div>
-      ) : (
+      ) : format === "4" ? null : (
         <div style={{ display: "flex", gap: 6 }}>
           {choices.map((item) => (
             <button
@@ -230,7 +234,8 @@ function CoffeeDrink({
               style={{
                 ...choiceStyle(item.slug === pick),
                 flex: "1 1 0",
-                padding: "10px 4px",
+                padding: "10px 2px",
+                fontSize: choices.length > 3 ? "0.82rem" : "0.95rem",
               }}
             >
               {item.button}
@@ -562,6 +567,12 @@ export default function BottleShopCategoryPage() {
             });
           }
         }
+        continue;
+      }
+      if (format === "4") {
+        const key = coffeeLineKey(product.id, "large");
+        const qty = cart[key] || 0;
+        if (qty > 0) reserved.push({ key, product, qty, choiceLabel: "Large" });
         continue;
       }
       if (format === "3") {

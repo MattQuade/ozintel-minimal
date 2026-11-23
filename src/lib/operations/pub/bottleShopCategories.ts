@@ -34,11 +34,11 @@ export const COFFEE_SIZES = [
 
 export type CoffeeSize = (typeof COFFEE_SIZES)[number]["slug"];
 
-/** Three coffee card layouts. Coffee 1 is the original size and milk card. */
-export type CoffeeFormat = "1" | "2" | "3";
+/** Coffee card layouts. Coffee 1 is the original size and milk card. */
+export type CoffeeFormat = "1" | "2" | "3" | "4";
 
 export function isCoffeeFormat(value: string): value is CoffeeFormat {
-  return value === "1" || value === "2" || value === "3";
+  return value === "1" || value === "2" || value === "3" || value === "4";
 }
 
 export function coffeeFormatOf(product: { coffeeFormat?: string } | null | undefined): CoffeeFormat {
@@ -51,6 +51,7 @@ export const COFFEE_2_CHOICES = [
   { slug: "choc", label: "Choc" },
   { slug: "strawb", label: "Strawb" },
   { slug: "caramel", label: "Caramel" },
+  { slug: "vanilla", label: "Vanilla" },
 ] as const;
 
 export type Coffee2Choice = (typeof COFFEE_2_CHOICES)[number]["slug"];
@@ -82,11 +83,12 @@ export type StockMenuChoice = {
   coffeeFormat?: CoffeeFormat;
 };
 
-/** Stock dropdown. Coffee stays one public shelf, with three card formats. */
+/** Stock dropdown. Coffee stays one public shelf, with four card formats. */
 export const STOCK_MENU: StockMenuChoice[] = [
   { value: "coffee-1", label: "Coffee 1", category: "coffee", coffeeFormat: "1" },
   { value: "coffee-2", label: "Coffee 2", category: "coffee", coffeeFormat: "2" },
   { value: "coffee-3", label: "Coffee 3", category: "coffee", coffeeFormat: "3" },
+  { value: "coffee-4", label: "Coffee 4", category: "coffee", coffeeFormat: "4" },
   ...BOTTLE_SHOP_CATEGORIES.filter((item) => item.slug !== "coffee").map((item) => ({
     value: item.slug,
     label: item.label,

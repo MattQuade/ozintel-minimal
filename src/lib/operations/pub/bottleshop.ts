@@ -217,7 +217,7 @@ function normalizeProduct(raw: Partial<BottleProduct>): BottleProduct | null {
     active: raw.active !== false,
     category,
     ...(coffeeFormat === "1" && isCoffeeSize(sizeRaw) ? { size: sizeRaw } : {}),
-    ...(coffeeFormat === "2" ? { size: "large" as const } : {}),
+    ...(coffeeFormat === "2" || coffeeFormat === "4" ? { size: "large" as const } : {}),
     ...(category === "coffee" && coffeeType ? { coffeeType } : {}),
     ...(coffeeFormat ? { coffeeFormat } : {}),
     ...(coffeeFormat === "3"
@@ -717,17 +717,17 @@ export async function createCoffeeProducts(input: {
   return { products: created, skipped };
 }
 
-/** Coffee 2 is Large with Choc, Strawb, and Caramel. Coffee 3 is three editable buttons. */
+/** Coffee 2 is Large plus flavours. Coffee 3 is three editable buttons. Coffee 4 is Large only. */
 export async function createStyledCoffee(input: {
   name: string;
   price?: number;
   quantity?: number;
-  format: "2" | "3";
+  format: "2" | "3" | "4";
   buttons?: string[];
 }): Promise<BottleProduct> {
   const name = String(input.name || "").trim();
   if (!name) throw new Error("Product name is required");
-  const format = input.format === "3" ? "3" : "2";
+  const format = input.format === "3" ? "3" : input.format === "4" ? "4" : "2";
   const store = await readStore();
   const product: BottleProduct = {
     id: newId("coffee"),
@@ -739,7 +739,7 @@ export async function createStyledCoffee(input: {
     category: "coffee",
     coffeeType: name,
     coffeeFormat: format,
-    ...(format === "2" ? { size: "large" as const } : {}),
+    ...(format === "2" || format === "4" ? { size: "large" as const } : {}),
     ...(format === "3" ? { buttons: normalizeCoffee3Buttons(input.buttons) } : {}),
   };
   store.products.push(product);
@@ -861,7 +861,7 @@ export async function placeBottleOrder(
       unitPrice = coffeeUnitPrice(product.price, milkSlug);
     } else if (product.category === "coffee" && format === "2") {
       if (!isCoffee2Choice(choice)) {
-        throw new Error("Choose Choc, Strawb, or Caramel.");
+        throw new Error("Choose Choc, Strawb, Caramel, or Vanilla.");
       }
       choiceSlug = choice;
       const drink = /\blarge\b/i.test(product.name)
@@ -876,6 +876,10 @@ export async function placeBottleOrder(
       }
       choiceSlug = String(index);
       lineName = `${product.name}, ${buttons[index]}`;
+    } else if (product.category === "coffee" && format === "4") {
+      lineName = /\blarge\b/i.test(product.name)
+        ? product.name
+        : `${product.name}, Large`;
     }
     lines.push({
       productId: product.id,

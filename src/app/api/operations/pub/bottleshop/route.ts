@@ -51,7 +51,10 @@ export async function POST(req: NextRequest) {
     const category = String(body.category || "").trim().toLowerCase();
     const coffeeFormat = String(body.coffeeFormat || "").trim();
     const sizes = Array.isArray(body.sizes) ? body.sizes : [];
-    if (category === "coffee" && (coffeeFormat === "2" || coffeeFormat === "3")) {
+    if (
+      category === "coffee" &&
+      (coffeeFormat === "2" || coffeeFormat === "3" || coffeeFormat === "4")
+    ) {
       const product = await withBottleShopOwner(() =>
         createStyledCoffee({
           name: body.name,

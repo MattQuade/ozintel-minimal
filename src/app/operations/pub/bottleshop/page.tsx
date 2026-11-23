@@ -1053,10 +1053,12 @@ function BottleShopAdminInner() {
               {stockMenuChoice(newProductCategory).coffeeFormat === "1"
                 ? "Name the coffee and pick one cup size. Add it again for another size. A size you delete stays off."
                 : stockMenuChoice(newProductCategory).coffeeFormat === "2"
-                  ? "Name the drink. Customers see Large, then Choc, Strawb, and Caramel."
+                  ? "Name the drink. Customers see Large, then Choc, Strawb, Caramel, and Vanilla."
                   : stockMenuChoice(newProductCategory).coffeeFormat === "3"
                     ? "Name the drink, then edit the three buttons."
-                    : "Add a new item (e.g. 24pk cider), then upload its photo."}
+                    : stockMenuChoice(newProductCategory).coffeeFormat === "4"
+                      ? "Name the drink. Customers see Large, then the price and quantity."
+                      : "Add a new item (e.g. 24pk cider), then upload its photo."}
             </p>
             <input
               value={newProductName}
