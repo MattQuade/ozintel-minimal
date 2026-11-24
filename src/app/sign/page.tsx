@@ -181,6 +181,12 @@ export default function SignDocumentPage() {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [open?.id]);
+
+  useEffect(() => {
+    if (!open?.id) return;
+    document.getElementById("open-sign-doc")?.scrollIntoView({ block: "start" });
+  }, [open?.id]);
+
   const mine = me ? open?.owner.email.toLowerCase() === me.email.toLowerCase() : false;
   const waiting = docs.filter((doc) => {
     if (!me) return false;
@@ -195,7 +201,7 @@ export default function SignDocumentPage() {
         background: "#f4f7fb",
         color: "#0c2f6b",
         minHeight: "100vh",
-        padding: "calc(20px + env(safe-area-inset-top, 0px)) 16px 48px",
+        padding: "calc(20px + env(safe-area-inset-top, 0px)) 16px calc(180px + env(safe-area-inset-bottom, 0px))",
       }}
     >
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
@@ -214,6 +220,72 @@ export default function SignDocumentPage() {
           <p>{status || "Restore your account on the home page, then open this again."}</p>
         ) : (
           <>
+            {open ? (
+              <section
+                id="open-sign-doc"
+                style={{
+                  background: "white",
+                  border: "2px solid #047857",
+                  borderRadius: 12,
+                  padding: 14,
+                  marginBottom: 20,
+                }}
+              >
+                <h2 style={{ margin: "0 0 8px", fontSize: "1.3rem" }}>{open.title}</h2>
+                <p style={{ margin: "0 0 8px" }}>
+                  {open.owner.name}: {when(open.owner.signedAt)}
+                  <br />
+                  {open.signer.name}: {when(open.signer.signedAt)}
+                </p>
+                <a href={`/api/sign-docs/${open.id}/file`} style={pdfLink}>
+                  Open the PDF
+                </a>
+                {!open.uploaded && open.body ? (
+                  <a href={`/api/sign-docs/${open.id}/word`} style={{ ...pdfLink, background: "#075985" }}>
+                    Download Word
+                  </a>
+                ) : null}
+                <p style={{ margin: "12px 0 8px", fontWeight: 700 }}>
+                  {mine ? "Your signature" : `Sign as ${me.name}`}
+                </p>
+                <canvas
+                  ref={canvasRef}
+                  style={{
+                    width: "100%",
+                    height: 160,
+                    border: "1px solid #d5deea",
+                    borderRadius: 8,
+                    touchAction: "none",
+                    background: "white",
+                  }}
+                  onPointerDown={(event) => {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas?.getContext("2d");
+                    if (!ctx) return;
+                    drawing.current = true;
+                    moved.current = true;
+                    canvas?.setPointerCapture(event.pointerId);
+                    const p = point(event);
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                  }}
+                  onPointerMove={(event) => {
+                    if (!drawing.current) return;
+                    const ctx = canvasRef.current?.getContext("2d");
+                    if (!ctx) return;
+                    const p = point(event);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
+                  }}
+                  onPointerUp={() => {
+                    drawing.current = false;
+                  }}
+                />
+                <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
+                  {busy ? "Saving…" : "Put my signature on the PDF"}
+                </button>
+              </section>
+            ) : null}
             <section
               style={{
                 background: "white",
@@ -270,7 +342,13 @@ export default function SignDocumentPage() {
               <section style={{ marginBottom: 16 }}>
                 <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Waiting for your signature</h2>
                 {waiting.map((doc) => (
-                  <DocRow key={doc.id} doc={doc} onOpen={() => setOpenId(doc.id)} onDelete={() => void removeDoc(doc.id)} />
+                  <DocRow
+                    key={doc.id}
+                    doc={doc}
+                    selected={doc.id === openId}
+                    onOpen={() => setOpenId(doc.id)}
+                    onDelete={() => void removeDoc(doc.id)}
+                  />
                 ))}
               </section>
             ) : null}
@@ -279,80 +357,19 @@ export default function SignDocumentPage() {
               <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Your documents</h2>
               {docs.length ? (
                 docs.map((doc) => (
-                  <DocRow key={doc.id} doc={doc} onOpen={() => setOpenId(doc.id)} onDelete={() => void removeDoc(doc.id)} />
+                  <DocRow
+                    key={doc.id}
+                    doc={doc}
+                    selected={doc.id === openId}
+                    onOpen={() => setOpenId(doc.id)}
+                    onDelete={() => void removeDoc(doc.id)}
+                  />
                 ))
               ) : (
                 <p style={{ color: "#5b6b82" }}>None yet.</p>
               )}
             </section>
 
-            {open ? (
-              <section
-                style={{
-                  background: "white",
-                  border: "1px solid #d5deea",
-                  borderRadius: 12,
-                  padding: 14,
-                }}
-              >
-                <h2 style={{ margin: "0 0 8px", fontSize: "1.3rem" }}>{open.title}</h2>
-                <p style={{ margin: "0 0 8px" }}>
-                  {open.owner.name}: {when(open.owner.signedAt)}
-                  <br />
-                  {open.signer.name}: {when(open.signer.signedAt)}
-                </p>
-                <p style={{ margin: "0 0 12px" }}>
-                  <a href={`/api/sign-docs/${open.id}/file`} target="_blank" rel="noreferrer">
-                    Open the PDF
-                  </a>
-                  {!open.uploaded && open.body ? (
-                    <>
-                      {" · "}
-                      <a href={`/api/sign-docs/${open.id}/word`}>Download Word</a>
-                    </>
-                  ) : null}
-                </p>
-                <p style={{ margin: "0 0 8px", fontWeight: 700 }}>
-                  {mine ? "Your signature" : `Sign as ${me.name}`}
-                </p>
-                <canvas
-                  ref={canvasRef}
-                  style={{
-                    width: "100%",
-                    height: 160,
-                    border: "1px solid #d5deea",
-                    borderRadius: 8,
-                    touchAction: "none",
-                    background: "white",
-                  }}
-                  onPointerDown={(event) => {
-                    const canvas = canvasRef.current;
-                    const ctx = canvas?.getContext("2d");
-                    if (!ctx) return;
-                    drawing.current = true;
-                    moved.current = true;
-                    canvas?.setPointerCapture(event.pointerId);
-                    const p = point(event);
-                    ctx.beginPath();
-                    ctx.moveTo(p.x, p.y);
-                  }}
-                  onPointerMove={(event) => {
-                    if (!drawing.current) return;
-                    const ctx = canvasRef.current?.getContext("2d");
-                    if (!ctx) return;
-                    const p = point(event);
-                    ctx.lineTo(p.x, p.y);
-                    ctx.stroke();
-                  }}
-                  onPointerUp={() => {
-                    drawing.current = false;
-                  }}
-                />
-                <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
-                  {busy ? "Saving…" : "Put my signature on the PDF"}
-                </button>
-              </section>
-            ) : null}
             {status ? <p style={{ marginTop: 12 }}>{status}</p> : null}
           </>
         )}
@@ -388,26 +405,64 @@ const rowButton: CSSProperties = {
   width: "100%",
   textAlign: "left",
   padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d5deea",
+  border: "none",
   background: "white",
   color: "#0c2f6b",
   fontWeight: 700,
   cursor: "pointer",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "rgba(4, 120, 87, 0.25)",
 };
 
-function DocRow({ doc, onOpen, onDelete }: { doc: SignDoc; onOpen: () => void; onDelete: () => void }) {
+const pdfLink: CSSProperties = {
+  display: "inline-block",
+  marginRight: 8,
+  marginTop: 8,
+  padding: "12px 14px",
+  borderRadius: 10,
+  background: "#047857",
+  color: "white",
+  fontWeight: 700,
+  textDecoration: "none",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "rgba(4, 120, 87, 0.35)",
+};
+
+function DocRow({
+  doc,
+  selected,
+  onOpen,
+  onDelete,
+}: {
+  doc: SignDoc;
+  selected: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }}>
-      <button type="button" onClick={onOpen} style={{ ...rowButton, flex: 1 }}>
+    <div
+      style={{
+        marginBottom: 8,
+        borderRadius: 10,
+        border: selected ? "2px solid #047857" : "1px solid #d5deea",
+        background: "white",
+        overflow: "hidden",
+      }}
+    >
+      <button type="button" onClick={onOpen} style={rowButton}>
         {doc.title}
         <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
           {doc.owner.name} and {doc.signer.name}
         </span>
       </button>
-      <button type="button" onClick={onDelete} style={deleteButton}>
-        Delete
-      </button>
+      <div style={{ display: "flex", gap: 8, padding: "0 8px 8px", flexWrap: "wrap" }}>
+        <a href={`/api/sign-docs/${doc.id}/file`} style={{ ...pdfLink, marginTop: 0 }}>
+          Open the PDF
+        </a>
+        <button type="button" onClick={onDelete} style={deleteButton}>
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
@@ -462,4 +517,5 @@ const deleteButton: CSSProperties = {
   color: "#b91c1c",
   fontWeight: 700,
   cursor: "pointer",
+  touchAction: "manipulation",
 };
