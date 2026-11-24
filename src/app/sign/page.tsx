@@ -133,7 +133,18 @@ export default function SignDocumentPage() {
         return;
       }
       moved.current = false;
-      setStatus("Signature saved on the PDF.");
+      const saved = data.document as SignDoc | undefined;
+      const otherName = saved
+        ? saved.owner.email.toLowerCase() === me?.email.toLowerCase()
+          ? saved.signer.name
+          : saved.owner.name
+        : "The other person";
+      const otherSigned = saved
+        ? saved.owner.email.toLowerCase() === me?.email.toLowerCase()
+          ? saved.signer.signedAt
+          : saved.owner.signedAt
+        : undefined;
+      setStatus(otherSigned ? "Both signatures are on the PDF." : `Signed. ${otherName} can sign it from their OzIntel login.`);
       await load(true);
     } catch {
       setStatus("Could not save the signature. Draw it again and try once more.");
@@ -182,17 +193,7 @@ export default function SignDocumentPage() {
     ctx.lineJoin = "round";
   }, [open?.id]);
 
-  useEffect(() => {
-    if (!open?.id) return;
-    document.getElementById("open-sign-doc")?.scrollIntoView({ block: "start" });
-  }, [open?.id]);
-
   const mine = me ? open?.owner.email.toLowerCase() === me.email.toLowerCase() : false;
-  const needsMySignature = (doc: SignDoc) => {
-    if (!me) return false;
-    const party = doc.owner.email.toLowerCase() === me.email.toLowerCase() ? doc.owner : doc.signer;
-    return !party.signedAt;
-  };
 
   return (
     <main
@@ -212,80 +213,13 @@ export default function SignDocumentPage() {
         </p>
         <h1 style={{ margin: "0 0 8px", fontSize: "1.8rem" }}>Sign a document</h1>
         <p style={{ margin: "0 0 20px", color: "#5b6b82", lineHeight: 1.45 }}>
-          Write it here and OzIntel makes the PDF. Or upload a PDF you saved from Word.
-          Sign with your finger, then the other person signs from their OzIntel login.
+          Upload the PDF, sign it, and the other person signs it from their OzIntel login.
         </p>
 
         {!me ? (
           <p>{status || "Restore your account on the home page, then open this again."}</p>
         ) : (
           <>
-            {open ? (
-              <section
-                id="open-sign-doc"
-                style={{
-                  background: "white",
-                  border: "2px solid #047857",
-                  borderRadius: 12,
-                  padding: 14,
-                  marginBottom: 20,
-                }}
-              >
-                <h2 style={{ margin: "0 0 8px", fontSize: "1.3rem" }}>{open.title}</h2>
-                <p style={{ margin: "0 0 8px" }}>
-                  {open.owner.name}: {when(open.owner.signedAt)}
-                  <br />
-                  {open.signer.name}: {when(open.signer.signedAt)}
-                </p>
-                <a href={`/api/sign-docs/${open.id}/file`} style={pdfLink}>
-                  Open the PDF
-                </a>
-                {!open.uploaded && open.body ? (
-                  <a href={`/api/sign-docs/${open.id}/word`} style={{ ...pdfLink, background: "#075985" }}>
-                    Download Word
-                  </a>
-                ) : null}
-                <p style={{ margin: "12px 0 8px", fontWeight: 700 }}>
-                  {mine ? "Your signature" : `Sign as ${me.name}`}
-                </p>
-                <canvas
-                  ref={canvasRef}
-                  style={{
-                    width: "100%",
-                    height: 160,
-                    border: "1px solid #d5deea",
-                    borderRadius: 8,
-                    touchAction: "none",
-                    background: "white",
-                  }}
-                  onPointerDown={(event) => {
-                    const canvas = canvasRef.current;
-                    const ctx = canvas?.getContext("2d");
-                    if (!ctx) return;
-                    drawing.current = true;
-                    moved.current = true;
-                    canvas?.setPointerCapture(event.pointerId);
-                    const p = point(event);
-                    ctx.beginPath();
-                    ctx.moveTo(p.x, p.y);
-                  }}
-                  onPointerMove={(event) => {
-                    if (!drawing.current) return;
-                    const ctx = canvasRef.current?.getContext("2d");
-                    if (!ctx) return;
-                    const p = point(event);
-                    ctx.lineTo(p.x, p.y);
-                    ctx.stroke();
-                  }}
-                  onPointerUp={() => {
-                    drawing.current = false;
-                  }}
-                />
-                <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
-                  {busy ? "Saving…" : "Put my signature on the PDF"}
-                </button>
-              </section>
-            ) : null}
             <section
               style={{
                 background: "white",
@@ -342,14 +276,78 @@ export default function SignDocumentPage() {
               <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Your documents</h2>
               {docs.length ? (
                 docs.map((doc) => (
-                  <DocRow
-                    key={doc.id}
-                    doc={doc}
-                    selected={doc.id === openId}
-                    waiting={needsMySignature(doc)}
-                    onOpen={() => setOpenId(doc.id)}
-                    onDelete={() => void removeDoc(doc.id)}
-                  />
+                  <div key={doc.id}>
+                    <DocRow
+                      doc={doc}
+                      selected={doc.id === openId}
+                      onOpen={() => setOpenId(doc.id)}
+                      onDelete={() => void removeDoc(doc.id)}
+                    />
+                    {open?.id === doc.id ? (
+                      <section
+                        style={{
+                          background: "white",
+                          border: "1px solid #d5deea",
+                          borderRadius: 12,
+                          padding: 14,
+                          margin: "-4px 0 12px",
+                        }}
+                      >
+                        <p style={{ margin: "0 0 8px" }}>
+                          {open.owner.name}: {when(open.owner.signedAt)}
+                          <br />
+                          {open.signer.name}: {when(open.signer.signedAt)}
+                        </p>
+                        <a href={pdfHref(open)} style={pdfLink}>
+                          Open the PDF
+                        </a>
+                        {!open.uploaded && open.body ? (
+                          <a href={`/api/sign-docs/${open.id}/word`} style={{ ...pdfLink, background: "#075985" }}>
+                            Download Word
+                          </a>
+                        ) : null}
+                        <p style={{ margin: "12px 0 8px", fontWeight: 700 }}>
+                          {mine ? "Your signature" : `Sign as ${me.name}`}
+                        </p>
+                        <canvas
+                          ref={canvasRef}
+                          style={{
+                            width: "100%",
+                            height: 160,
+                            border: "1px solid #d5deea",
+                            borderRadius: 8,
+                            touchAction: "none",
+                            background: "white",
+                          }}
+                          onPointerDown={(event) => {
+                            const canvas = canvasRef.current;
+                            const ctx = canvas?.getContext("2d");
+                            if (!ctx) return;
+                            drawing.current = true;
+                            moved.current = true;
+                            canvas?.setPointerCapture(event.pointerId);
+                            const p = point(event);
+                            ctx.beginPath();
+                            ctx.moveTo(p.x, p.y);
+                          }}
+                          onPointerMove={(event) => {
+                            if (!drawing.current) return;
+                            const ctx = canvasRef.current?.getContext("2d");
+                            if (!ctx) return;
+                            const p = point(event);
+                            ctx.lineTo(p.x, p.y);
+                            ctx.stroke();
+                          }}
+                          onPointerUp={() => {
+                            drawing.current = false;
+                          }}
+                        />
+                        <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
+                          {busy ? "Saving…" : "Put my signature on the PDF"}
+                        </button>
+                      </section>
+                    ) : null}
+                  </div>
                 ))
               ) : (
                 <p style={{ color: "#5b6b82" }}>None yet.</p>
@@ -414,16 +412,19 @@ const pdfLink: CSSProperties = {
   WebkitTapHighlightColor: "rgba(4, 120, 87, 0.35)",
 };
 
+function pdfHref(doc: SignDoc) {
+  const base = doc.title.replace(/[^\w .'-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Document";
+  return `/api/sign-docs/${doc.id}/file/${encodeURIComponent(`${base}.pdf`)}`;
+}
+
 function DocRow({
   doc,
   selected,
-  waiting,
   onOpen,
   onDelete,
 }: {
   doc: SignDoc;
   selected: boolean;
-  waiting: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -441,11 +442,10 @@ function DocRow({
         {doc.title}
         <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
           {doc.owner.name} and {doc.signer.name}
-          {waiting ? " · Waiting for your signature" : ""}
         </span>
       </button>
       <div style={{ display: "flex", gap: 8, padding: "0 8px 8px", flexWrap: "wrap" }}>
-        <a href={`/api/sign-docs/${doc.id}/file`} style={{ ...pdfLink, marginTop: 0 }}>
+        <a href={pdfHref(doc)} style={{ ...pdfLink, marginTop: 0 }}>
           Open the PDF
         </a>
         <button type="button" onClick={onDelete} style={deleteButton}>
@@ -460,41 +460,12 @@ function signaturePng(canvas: HTMLCanvasElement): string {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx || canvas.width < 1 || canvas.height < 1) return "";
   const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let minX = canvas.width;
-  let minY = canvas.height;
-  let maxX = 0;
-  let maxY = 0;
-  let ink = false;
-  for (let y = 0; y < canvas.height; y += 1) {
-    for (let x = 0; x < canvas.width; x += 1) {
-      const i = (y * canvas.width + x) * 4;
-      if (pixels[i] < 245 || pixels[i + 1] < 245 || pixels[i + 2] < 245) {
-        ink = true;
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
+  for (let i = 0; i < pixels.length; i += 16) {
+    if (pixels[i] < 245 || pixels[i + 1] < 245 || pixels[i + 2] < 245) {
+      return canvas.toDataURL("image/png");
     }
   }
-  if (!ink) return "";
-  const pad = 10;
-  minX = Math.max(0, minX - pad);
-  minY = Math.max(0, minY - pad);
-  maxX = Math.min(canvas.width - 1, maxX + pad);
-  maxY = Math.min(canvas.height - 1, maxY + pad);
-  const cropW = maxX - minX + 1;
-  const cropH = maxY - minY + 1;
-  const scale = Math.min(1, 640 / cropW, 240 / cropH);
-  const out = document.createElement("canvas");
-  out.width = Math.max(1, Math.round(cropW * scale));
-  out.height = Math.max(1, Math.round(cropH * scale));
-  const outCtx = out.getContext("2d");
-  if (!outCtx) return "";
-  outCtx.fillStyle = "#ffffff";
-  outCtx.fillRect(0, 0, out.width, out.height);
-  outCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, out.width, out.height);
-  return out.toDataURL("image/png");
+  return "";
 }
 
 const deleteButton: CSSProperties = {

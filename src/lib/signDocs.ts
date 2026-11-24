@@ -198,9 +198,7 @@ async function addSignaturePage(
         // A bad image leaves the box blank rather than failing the whole PDF.
       }
     }
-    const when = slot.party.signedAt
-      ? `Signed ${sydneyStamp(slot.party.signedAt)} (Sydney)`
-      : "Not signed yet";
+    const when = slot.party.signedAt ? `Signed ${sydneyStamp(slot.party.signedAt)}` : "Not signed yet";
     drawLabel(when, MARGIN, slot.y - 150, 11, font);
   }
 }
@@ -222,7 +220,17 @@ export async function renderSignPdf(doc: SignDoc): Promise<Uint8Array> {
   const ownerPng = await readOptional(signPath(doc.id, "owner"));
   const signerPng = await readOptional(signPath(doc.id, "signer"));
   await addSignaturePage(pdf, doc, ownerPng, signerPng);
+  pdf.setTitle(winAnsi(doc.title) || "Document");
   return pdf.save();
+}
+
+export function signDocFileName(title: string): string {
+  const base = winAnsi(title)
+    .replace(/[^\w .'-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return `${base || "Document"}.pdf`;
 }
 
 const renders = new Map<string, Promise<void>>();
@@ -381,9 +389,11 @@ export async function readSignPdf(id: string, email: string): Promise<Buffer | n
   if (!doc) return null;
   const pending = renders.get(doc.id);
   if (pending) await pending;
-  const existing = await readOptional(pdfPath(doc.id));
-  if (existing) return existing;
-  await trackRender(doc);
+  try {
+    await saveRendered(doc);
+  } catch (error) {
+    console.error("[sign-docs] pdf", error);
+  }
   return readOptional(pdfPath(doc.id));
 }
 
