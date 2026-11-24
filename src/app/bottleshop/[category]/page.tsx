@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
+  glossEmerald,
   productLetter,
   shopCanvas,
   shopCard,
@@ -796,8 +797,14 @@ export default function BottleShopCategoryPage() {
           <p style={{ margin: "0 0 8px", color: shopMuted, fontSize: "0.9rem" }}>
             OzIntel · Pub Bottle Shop
           </p>
-          <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", ...productLetter }}>
-            {categoryLabel}
+          <h1
+            style={{
+              margin: "0 0 12px",
+              fontSize: "1.75rem",
+              ...(category === "coffee" ? glossEmerald : productLetter),
+            }}
+          >
+            {category === "coffee" ? "J&S Espresso Bar" : categoryLabel}
           </h1>
           <p style={{ margin: "0 0 12px" }}>
             <a
@@ -899,8 +906,14 @@ export default function BottleShopCategoryPage() {
           OzIntel · Pub Bottle Shop
           {unlockedName ? ` · ${unlockedName}` : ""}
         </p>
-        <h1 style={{ margin: "0 0 12px", fontSize: "1.75rem", ...productLetter }}>
-          {categoryLabel}
+        <h1
+          style={{
+            margin: "0 0 12px",
+            fontSize: "1.75rem",
+            ...(category === "coffee" ? glossEmerald : productLetter),
+          }}
+        >
+          {category === "coffee" ? "J&S Espresso Bar" : categoryLabel}
         </h1>
         <p style={{ margin: "0 0 12px" }}>
           <a
@@ -924,9 +937,7 @@ export default function BottleShopCategoryPage() {
             : `Reserve ${categoryLabel} here — pay and collect at the pub.`}
         </p>
 
-        <BottleShopInstallButton
-          title={category === "coffee" ? "J&S Espresso Bar" : undefined}
-        />
+        <BottleShopInstallButton />
 
         {category === "coffee" ? <CoffeeVanReplyLink /> : null}
         {category === "coffee" && coffeeReply ? (

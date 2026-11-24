@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { shopSage } from "@/components/bottleShopLook";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -26,11 +25,7 @@ function isIos() {
  * Lets customers install a bottle-shop-only home-screen app
  * (separate from the full OzIntel PWA).
  */
-export default function BottleShopInstallButton({
-  title = "Collingullie Hotel",
-}: {
-  title?: string;
-}) {
+export default function BottleShopInstallButton() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null
   );
@@ -70,25 +65,7 @@ export default function BottleShopInstallButton({
     };
   }, []);
 
-  if (installed) {
-    return (
-      <div style={{ margin: "0 0 16px", textAlign: "center" }}>
-        <p
-          style={{
-            margin: 0,
-            color: shopSage,
-            fontSize: "1.9rem",
-            fontWeight: 800,
-            lineHeight: 1.2,
-            textShadow:
-              "0 1px 0 rgba(255,255,255,0.95), 0 1px 1px rgba(70, 105, 78, 0.28)",
-          }}
-        >
-          {title}
-        </p>
-      </div>
-    );
-  }
+  if (installed) return null;
 
   return (
     <div

@@ -3,7 +3,7 @@ import BottleShopInstallButton from "@/components/BottleShopInstallButton";
 import BottleShopReplies from "@/components/BottleShopReplies";
 import BottleShopVisitBeacon from "@/components/BottleShopVisitBeacon";
 import { BOTTLE_SHOP_CATEGORIES } from "@/lib/operations/pub/bottleShopCategories";
-import { shopCanvas } from "@/components/bottleShopLook";
+import { glossEmerald, shopCanvas } from "@/components/bottleShopLook";
 
 /** Category hub — server-rendered so phones see shelves even if JS is delayed. */
 export default function BottleShopHubPage() {
@@ -37,13 +37,13 @@ export default function BottleShopHubPage() {
       <BottleShopVisitBeacon />
       <h1
         style={{
-          color: "#f97316",
+          ...glossEmerald,
           fontSize: "2rem",
           lineHeight: 1.2,
           margin: "0 0 16px",
         }}
       >
-        Bottle Shop
+        Collingullie Hotel
       </h1>
       <BottleShopInstallButton />
       <BottleShopReplies />
