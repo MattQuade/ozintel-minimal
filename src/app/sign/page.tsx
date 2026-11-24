@@ -188,11 +188,11 @@ export default function SignDocumentPage() {
   }, [open?.id]);
 
   const mine = me ? open?.owner.email.toLowerCase() === me.email.toLowerCase() : false;
-  const waiting = docs.filter((doc) => {
+  const needsMySignature = (doc: SignDoc) => {
     if (!me) return false;
     const party = doc.owner.email.toLowerCase() === me.email.toLowerCase() ? doc.owner : doc.signer;
     return !party.signedAt;
-  });
+  };
 
   return (
     <main
@@ -338,21 +338,6 @@ export default function SignDocumentPage() {
               </button>
             </section>
 
-            {waiting.length ? (
-              <section style={{ marginBottom: 16 }}>
-                <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Waiting for your signature</h2>
-                {waiting.map((doc) => (
-                  <DocRow
-                    key={doc.id}
-                    doc={doc}
-                    selected={doc.id === openId}
-                    onOpen={() => setOpenId(doc.id)}
-                    onDelete={() => void removeDoc(doc.id)}
-                  />
-                ))}
-              </section>
-            ) : null}
-
             <section style={{ marginBottom: 16 }}>
               <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Your documents</h2>
               {docs.length ? (
@@ -361,6 +346,7 @@ export default function SignDocumentPage() {
                     key={doc.id}
                     doc={doc}
                     selected={doc.id === openId}
+                    waiting={needsMySignature(doc)}
                     onOpen={() => setOpenId(doc.id)}
                     onDelete={() => void removeDoc(doc.id)}
                   />
@@ -431,11 +417,13 @@ const pdfLink: CSSProperties = {
 function DocRow({
   doc,
   selected,
+  waiting,
   onOpen,
   onDelete,
 }: {
   doc: SignDoc;
   selected: boolean;
+  waiting: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -453,6 +441,7 @@ function DocRow({
         {doc.title}
         <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
           {doc.owner.name} and {doc.signer.name}
+          {waiting ? " · Waiting for your signature" : ""}
         </span>
       </button>
       <div style={{ display: "flex", gap: 8, padding: "0 8px 8px", flexWrap: "wrap" }}>
