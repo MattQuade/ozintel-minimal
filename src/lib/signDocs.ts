@@ -17,6 +17,8 @@ export type SignDoc = {
   createdAt: string;
   /** True when the PDF started as an upload from Word. */
   uploaded: boolean;
+  /** Original upload name, unchanged. */
+  fileName?: string;
   owner: SignParty;
   signer: SignParty;
 };
@@ -308,8 +310,10 @@ export async function createSignDoc(input: {
   owner: { email: string; name: string };
   signer: { email: string; name: string };
   pdf?: Buffer;
+  fileName?: string;
 }): Promise<SignDoc> {
-  const title = String(input.title || "").trim().slice(0, 120);
+  const fileName = String(input.fileName || "").trim().slice(0, 180);
+  const title = String(input.title || fileName || "").trim().slice(0, 180);
   const body = String(input.body || "").trim().slice(0, 40000);
   if (!title) throw new Error("Give the document a title.");
   if (!body && !input.pdf?.length) throw new Error("Write the document or upload the PDF.");
@@ -326,6 +330,7 @@ export async function createSignDoc(input: {
       body,
       createdAt: new Date().toISOString(),
       uploaded: Boolean(input.pdf?.length),
+      fileName,
       owner: { email: ownerEmail, name: input.owner.name.trim() || ownerEmail },
       signer: { email: signerEmail, name: input.signer.name.trim() || signerEmail },
     };
@@ -389,11 +394,9 @@ export async function readSignPdf(id: string, email: string): Promise<Buffer | n
   if (!doc) return null;
   const pending = renders.get(doc.id);
   if (pending) await pending;
-  try {
-    await saveRendered(doc);
-  } catch (error) {
-    console.error("[sign-docs] pdf", error);
-  }
+  const existing = await readOptional(pdfPath(doc.id));
+  if (existing) return existing;
+  await trackRender(doc);
   return readOptional(pdfPath(doc.id));
 }
 

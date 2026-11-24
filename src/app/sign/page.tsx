@@ -9,6 +9,7 @@ type SignDoc = {
   body: string;
   createdAt: string;
   uploaded: boolean;
+  fileName?: string;
   owner: Party;
   signer: Party;
 };
@@ -29,6 +30,10 @@ function when(iso?: string) {
   }
 }
 
+function docName(doc: SignDoc) {
+  return doc.fileName || doc.title;
+}
+
 export default function SignDocumentPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [people, setPeople] = useState<Party[]>([]);
@@ -42,7 +47,6 @@ export default function SignDocumentPage() {
   const [busy, setBusy] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
-  const moved = useRef(false);
 
   const load = useCallback(async (keepStatus = false) => {
     const res = await fetch("/api/sign-docs", { credentials: "include", cache: "no-store" });
@@ -74,18 +78,21 @@ export default function SignDocumentPage() {
   };
 
   const createDoc = async () => {
-    if (!title.trim()) {
-      setStatus("Give the document a title.");
+    if (!file && !title.trim()) {
+      setStatus(body.trim() ? "Give the document a title." : "Choose the PDF.");
       return;
     }
     setBusy(true);
-    setStatus("Making the PDF…");
+    setStatus("Saving the document…");
     try {
       const form = new FormData();
-      form.set("title", title.trim());
-      form.set("body", body);
+      form.set("title", file ? file.name.replace(/\.pdf$/i, "") : title.trim());
+      form.set("body", file ? "" : body);
       form.set("signerEmail", signerEmail);
-      if (file) form.set("file", file);
+      if (file) {
+        form.set("file", file);
+        form.set("fileName", file.name);
+      }
       const res = await fetch("/api/sign-docs", {
         method: "POST",
         credentials: "include",
@@ -100,8 +107,8 @@ export default function SignDocumentPage() {
       setBody("");
       setFile(null);
       setOpenId(data.document.id);
-      setStatus("PDF is ready. Sign in the box below.");
-      await load();
+      setStatus("Sign in the box under the document.");
+      await load(true);
     } catch {
       setStatus("Could not save the document.");
     } finally {
@@ -132,7 +139,6 @@ export default function SignDocumentPage() {
         setStatus(data.error || "Could not save the signature.");
         return;
       }
-      moved.current = false;
       const saved = data.document as SignDoc | undefined;
       const otherName = saved
         ? saved.owner.email.toLowerCase() === me?.email.toLowerCase()
@@ -144,7 +150,9 @@ export default function SignDocumentPage() {
           ? saved.signer.signedAt
           : saved.owner.signedAt
         : undefined;
-      setStatus(otherSigned ? "Both signatures are on the PDF." : `Signed. ${otherName} can sign it from their OzIntel login.`);
+      setStatus(
+        otherSigned ? "Both signatures are on the document." : `Signed. ${otherName} can sign it from their OzIntel login.`
+      );
       await load(true);
     } catch {
       setStatus("Could not save the signature. Draw it again and try once more.");
@@ -156,7 +164,6 @@ export default function SignDocumentPage() {
   const removeDoc = async (id: string) => {
     if (!window.confirm("Delete this document? It will be removed for both people.")) return;
     setBusy(true);
-    setStatus("Deleting…");
     try {
       const res = await fetch(`/api/sign-docs/${id}`, { method: "DELETE", credentials: "include" });
       const data = await res.json().catch(() => ({}));
@@ -187,8 +194,8 @@ export default function SignDocumentPage() {
     if (!ctx) return;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#0c2f6b";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#111111";
+    ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [open?.id]);
@@ -213,7 +220,7 @@ export default function SignDocumentPage() {
         </p>
         <h1 style={{ margin: "0 0 8px", fontSize: "1.8rem" }}>Sign a document</h1>
         <p style={{ margin: "0 0 20px", color: "#5b6b82", lineHeight: 1.45 }}>
-          Upload the PDF, sign it, and the other person signs it from their OzIntel login.
+          Upload the PDF and sign in the box. It stays in OzIntel. The other person signs it from their login.
         </p>
 
         {!me ? (
@@ -229,38 +236,33 @@ export default function SignDocumentPage() {
                 marginBottom: 20,
               }}
             >
-              <label style={{ display: "block", fontWeight: 700, marginBottom: 6 }}>Title</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                style={field}
-              />
-              <label style={{ display: "block", fontWeight: 700, margin: "12px 0 6px" }}>
-                Document
-              </label>
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={8}
-                placeholder="Type the document. Leave this blank if you are uploading a PDF."
-                style={{ ...field, resize: "vertical" }}
-              />
-              <label style={{ display: "block", fontWeight: 700, margin: "12px 0 6px" }}>
-                PDF from Word (optional)
-              </label>
+              <label style={{ display: "block", fontWeight: 700, marginBottom: 6 }}>PDF</label>
               <input
                 type="file"
                 accept="application/pdf,.pdf"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                onChange={(event) => {
+                  const next = event.target.files?.[0] || null;
+                  setFile(next);
+                  if (next) setTitle("");
+                }}
               />
-              <label style={{ display: "block", fontWeight: 700, margin: "12px 0 6px" }}>
-                Ask this person to sign
-              </label>
-              <select
-                value={signerEmail}
-                onChange={(e) => setSignerEmail(e.target.value)}
-                style={field}
-              >
+              {file ? (
+                <p style={{ margin: "8px 0 0", fontWeight: 700 }}>{file.name}</p>
+              ) : (
+                <>
+                  <label style={{ display: "block", fontWeight: 700, margin: "12px 0 6px" }}>Or type it here</label>
+                  <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" style={field} />
+                  <textarea
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    rows={6}
+                    placeholder="Document"
+                    style={{ ...field, marginTop: 8, resize: "vertical" }}
+                  />
+                </>
+              )}
+              <label style={{ display: "block", fontWeight: 700, margin: "12px 0 6px" }}>Ask this person to sign</label>
+              <select value={signerEmail} onChange={(e) => setSignerEmail(e.target.value)} style={field}>
                 {people.map((person) => (
                   <option key={person.email} value={person.email}>
                     {person.name}
@@ -268,7 +270,7 @@ export default function SignDocumentPage() {
                 ))}
               </select>
               <button type="button" disabled={busy} onClick={() => void createDoc()} style={primary}>
-                {busy ? "Working…" : "Make the PDF"}
+                {busy ? "Working…" : "Save in OzIntel"}
               </button>
             </section>
 
@@ -276,13 +278,18 @@ export default function SignDocumentPage() {
               <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Your documents</h2>
               {docs.length ? (
                 docs.map((doc) => (
-                  <div key={doc.id}>
-                    <DocRow
-                      doc={doc}
-                      selected={doc.id === openId}
-                      onOpen={() => setOpenId(doc.id)}
-                      onDelete={() => void removeDoc(doc.id)}
-                    />
+                  <div key={doc.id} style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+                      <button type="button" onClick={() => setOpenId(doc.id === openId ? "" : doc.id)} style={rowButton}>
+                        {docName(doc)}
+                        <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
+                          {doc.owner.name} and {doc.signer.name}
+                        </span>
+                      </button>
+                      <button type="button" onClick={() => void removeDoc(doc.id)} style={deleteButton}>
+                        Delete
+                      </button>
+                    </div>
                     {open?.id === doc.id ? (
                       <section
                         style={{
@@ -290,25 +297,16 @@ export default function SignDocumentPage() {
                           border: "1px solid #d5deea",
                           borderRadius: 12,
                           padding: 14,
-                          margin: "-4px 0 12px",
+                          marginTop: 8,
                         }}
                       >
-                        <p style={{ margin: "0 0 8px" }}>
+                        <StoredPdf id={doc.id} />
+                        <p style={{ margin: "12px 0 8px" }}>
                           {open.owner.name}: {when(open.owner.signedAt)}
                           <br />
                           {open.signer.name}: {when(open.signer.signedAt)}
                         </p>
-                        <a href={pdfHref(open)} style={pdfLink}>
-                          Open the PDF
-                        </a>
-                        {!open.uploaded && open.body ? (
-                          <a href={`/api/sign-docs/${open.id}/word`} style={{ ...pdfLink, background: "#075985" }}>
-                            Download Word
-                          </a>
-                        ) : null}
-                        <p style={{ margin: "12px 0 8px", fontWeight: 700 }}>
-                          {mine ? "Your signature" : `Sign as ${me.name}`}
-                        </p>
+                        <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{mine ? "Your signature" : `Sign as ${me.name}`}</p>
                         <canvas
                           ref={canvasRef}
                           style={{
@@ -324,7 +322,6 @@ export default function SignDocumentPage() {
                             const ctx = canvas?.getContext("2d");
                             if (!ctx) return;
                             drawing.current = true;
-                            moved.current = true;
                             canvas?.setPointerCapture(event.pointerId);
                             const p = point(event);
                             ctx.beginPath();
@@ -353,13 +350,77 @@ export default function SignDocumentPage() {
                 <p style={{ color: "#5b6b82" }}>None yet.</p>
               )}
             </section>
-
             {status ? <p style={{ marginTop: 12 }}>{status}</p> : null}
           </>
         )}
       </div>
     </main>
   );
+}
+
+function StoredPdf({ id }: { id: string }) {
+  const holder = useRef<HTMLDivElement | null>(null);
+  const [note, setNote] = useState("Opening the document…");
+
+  useEffect(() => {
+    const host = holder.current;
+    if (!host) return;
+    let cancelled = false;
+    host.replaceChildren();
+    setNote("Opening the document…");
+    (async () => {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const res = await fetch(`/api/sign-docs/${id}/file`, { credentials: "include", cache: "no-store" });
+      if (!res.ok) throw new Error("missing");
+      const data = new Uint8Array(await res.arrayBuffer());
+      const pdf = await pdfjs.getDocument({ data }).promise;
+      if (cancelled) return;
+      const width = Math.max(host.clientWidth || 320, 280);
+      const count = Math.min(pdf.numPages, 12);
+      for (let number = 1; number <= count; number += 1) {
+        if (cancelled) return;
+        const page = await pdf.getPage(number);
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: width / base.width });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
+        canvas.style.display = "block";
+        canvas.style.marginBottom = "8px";
+        canvas.style.background = "#ffffff";
+        const ctx = canvas.getContext("2d");
+        if (!ctx) continue;
+        host.appendChild(canvas);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+      }
+      if (!cancelled) setNote("");
+    })().catch(() => {
+      if (!cancelled) setNote("The document is stored in OzIntel.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  return (
+    <div>
+      {note ? <p style={{ margin: "0 0 8px", color: "#5b6b82" }}>{note}</p> : null}
+      <div ref={holder} />
+    </div>
+  );
+}
+
+function signaturePng(canvas: HTMLCanvasElement): string {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx || canvas.width < 1 || canvas.height < 1) return "";
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let i = 0; i < pixels.length; i += 16) {
+    if (pixels[i] < 250) return canvas.toDataURL("image/png");
+  }
+  return "";
 }
 
 const field: CSSProperties = {
@@ -382,91 +443,22 @@ const primary: CSSProperties = {
   color: "white",
   fontWeight: 700,
   cursor: "pointer",
+  touchAction: "manipulation",
 };
 
 const rowButton: CSSProperties = {
   display: "block",
-  width: "100%",
+  flex: 1,
   textAlign: "left",
   padding: 12,
-  border: "none",
+  borderRadius: 10,
+  border: "1px solid #d5deea",
   background: "white",
   color: "#0c2f6b",
   fontWeight: 700,
   cursor: "pointer",
   touchAction: "manipulation",
-  WebkitTapHighlightColor: "rgba(4, 120, 87, 0.25)",
 };
-
-const pdfLink: CSSProperties = {
-  display: "inline-block",
-  marginRight: 8,
-  marginTop: 8,
-  padding: "12px 14px",
-  borderRadius: 10,
-  background: "#047857",
-  color: "white",
-  fontWeight: 700,
-  textDecoration: "none",
-  touchAction: "manipulation",
-  WebkitTapHighlightColor: "rgba(4, 120, 87, 0.35)",
-};
-
-function pdfHref(doc: SignDoc) {
-  const base = doc.title.replace(/[^\w .'-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "Document";
-  return `/api/sign-docs/${doc.id}/file/${encodeURIComponent(`${base}.pdf`)}`;
-}
-
-function DocRow({
-  doc,
-  selected,
-  onOpen,
-  onDelete,
-}: {
-  doc: SignDoc;
-  selected: boolean;
-  onOpen: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div
-      style={{
-        marginBottom: 8,
-        borderRadius: 10,
-        border: selected ? "2px solid #047857" : "1px solid #d5deea",
-        background: "white",
-        overflow: "hidden",
-      }}
-    >
-      <button type="button" onClick={onOpen} style={rowButton}>
-        {doc.title}
-        <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
-          {doc.owner.name} and {doc.signer.name}
-        </span>
-      </button>
-      <div style={{ display: "flex", gap: 8, padding: "0 8px 8px", flexWrap: "wrap" }}>
-        <a href={pdfHref(doc)} style={{ ...pdfLink, marginTop: 0 }}>
-          Open the PDF
-        </a>
-        <button type="button" onClick={onDelete} style={deleteButton}>
-          Delete
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function signaturePng(canvas: HTMLCanvasElement): string {
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx || canvas.width < 1 || canvas.height < 1) return "";
-  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  for (let i = 0; i < pixels.length; i += 16) {
-    if (pixels[i] < 245 || pixels[i + 1] < 245 || pixels[i + 2] < 245) {
-      return canvas.toDataURL("image/png");
-    }
-  }
-  return "";
-}
 
 const deleteButton: CSSProperties = {
   flex: "0 0 auto",

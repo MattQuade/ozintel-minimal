@@ -60,14 +60,17 @@ export async function POST(req: NextRequest) {
     let title = "";
     let body = "";
     let signerEmail = "";
+    let fileName = "";
     let pdf: Buffer | undefined;
     if (type.includes("multipart/form-data")) {
       const form = await req.formData();
       title = String(form.get("title") || "");
       body = String(form.get("body") || "");
       signerEmail = String(form.get("signerEmail") || "");
+      fileName = String(form.get("fileName") || "");
       const file = form.get("file");
       if (file instanceof File && file.size) {
+        if (!fileName) fileName = file.name;
         if (file.type && file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
           return NextResponse.json(
             { success: false, error: "Upload the PDF saved from Word." },
@@ -75,6 +78,9 @@ export async function POST(req: NextRequest) {
           );
         }
         pdf = Buffer.from(await file.arrayBuffer());
+        const exact = fileName || file.name;
+        fileName = exact;
+        title = exact.replace(/\.pdf$/i, "");
       }
     } else {
       const json = await req.json().catch(() => ({}));
@@ -97,6 +103,7 @@ export async function POST(req: NextRequest) {
       title,
       body,
       pdf,
+      fileName,
       owner: { email: me.email, name: me.name },
       signer: { email: signer.email, name: signer.name },
     });
