@@ -47,7 +47,6 @@ export default function SignDocumentPage() {
   const [busy, setBusy] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
-  const strokes = useRef<ImageData[]>([]);
 
   const load = useCallback(async (keepStatus = false) => {
     const res = await fetch("/api/sign-docs", { credentials: "include", cache: "no-store" });
@@ -195,21 +194,21 @@ export default function SignDocumentPage() {
     if (!ctx) return;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    strokes.current = [];
+    ctx.beginPath();
     ctx.strokeStyle = "#111111";
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [open?.id]);
 
-  const undoStroke = () => {
+  const clearSignature = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    const prev = strokes.current.pop();
-    if (prev) ctx.putImageData(prev, 0, 0);
-    else ctx.fillStyle = "#ffffff";
-    if (!prev) ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawing.current = false;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
     ctx.strokeStyle = "#111111";
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
@@ -323,49 +322,57 @@ export default function SignDocumentPage() {
                           {open.signer.name}: {when(open.signer.signedAt)}
                         </p>
                         <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{mine ? "Your signature" : `Sign as ${me.name}`}</p>
-                        <div style={{ position: "relative" }}>
-                        <button
-                          type="button"
-                          onClick={undoStroke}
-                          aria-label="Back"
-                          style={backButton}
-                        >
-                          ←
-                        </button>
-                        <canvas
-                          ref={canvasRef}
-                          style={{
-                            width: "100%",
-                            height: 160,
-                            border: "1px solid #d5deea",
-                            borderRadius: 8,
-                            touchAction: "none",
-                            background: "white",
-                          }}
-                          onPointerDown={(event) => {
-                            const canvas = canvasRef.current;
-                            const ctx = canvas?.getContext("2d");
-                            if (!ctx || !canvas) return;
-                            strokes.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-                            if (strokes.current.length > 30) strokes.current.shift();
-                            drawing.current = true;
-                            canvas.setPointerCapture(event.pointerId);
-                            const p = point(event);
-                            ctx.beginPath();
-                            ctx.moveTo(p.x, p.y);
-                          }}
-                          onPointerMove={(event) => {
-                            if (!drawing.current) return;
-                            const ctx = canvasRef.current?.getContext("2d");
-                            if (!ctx) return;
-                            const p = point(event);
-                            ctx.lineTo(p.x, p.y);
-                            ctx.stroke();
-                          }}
-                          onPointerUp={() => {
-                            drawing.current = false;
-                          }}
-                        />
+                        <div style={signatureBox}>
+                          <button
+                            type="button"
+                            aria-label="Back"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              clearSignature();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              clearSignature();
+                            }}
+                            style={backButton}
+                          >
+                            ←
+                          </button>
+                          <canvas
+                            ref={canvasRef}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              height: 160,
+                              touchAction: "none",
+                              background: "white",
+                            }}
+                            onPointerDown={(event) => {
+                              const canvas = canvasRef.current;
+                              const ctx = canvas?.getContext("2d");
+                              if (!ctx || !canvas) return;
+                              drawing.current = true;
+                              canvas.setPointerCapture(event.pointerId);
+                              const p = point(event);
+                              ctx.beginPath();
+                              ctx.moveTo(p.x, p.y);
+                            }}
+                            onPointerMove={(event) => {
+                              if (!drawing.current) return;
+                              const ctx = canvasRef.current?.getContext("2d");
+                              if (!ctx) return;
+                              const p = point(event);
+                              ctx.lineTo(p.x, p.y);
+                              ctx.stroke();
+                            }}
+                            onPointerUp={() => {
+                              drawing.current = false;
+                            }}
+                            onPointerCancel={() => {
+                              drawing.current = false;
+                            }}
+                          />
                         </div>
                         <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
                           {busy ? "Saving…" : "Put my signature on the PDF"}
@@ -488,19 +495,29 @@ const rowButton: CSSProperties = {
   touchAction: "manipulation",
 };
 
+const signatureBox: CSSProperties = {
+  position: "relative",
+  background: "white",
+  border: "1px solid #d5deea",
+  borderRadius: 8,
+  paddingTop: 44,
+};
+
 const backButton: CSSProperties = {
   position: "absolute",
   top: 6,
   left: 6,
   zIndex: 2,
-  padding: "2px 8px",
+  width: 44,
+  height: 32,
+  padding: 0,
   borderRadius: 8,
-  border: "1px solid #d5deea",
-  background: "white",
+  border: "1px solid #b7c4d6",
+  background: "#e8eef6",
   color: "#0c2f6b",
   fontWeight: 700,
-  fontSize: "0.9rem",
-  lineHeight: 1.2,
+  fontSize: "1.1rem",
+  lineHeight: "30px",
   cursor: "pointer",
   touchAction: "manipulation",
 };
