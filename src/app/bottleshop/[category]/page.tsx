@@ -21,6 +21,7 @@ import {
   COFFEE_2_CHOICES,
   COFFEE_MILKS,
   COFFEE_MILK_ROWS,
+  coffeeButtonPrice,
   coffeeFormatOf,
   coffeeLineKey,
   coffeeMilkExtra,
@@ -58,6 +59,7 @@ type ReserveLine = {
   milk?: CoffeeMilk;
   choice?: string;
   choiceLabel?: string;
+  unitPrice?: number;
 };
 
 function choiceStyle(selected: boolean): CSSProperties {
@@ -104,10 +106,13 @@ function CoffeeDrink({
   const size = sizes.find((item) => item.id === sizeId) || sizes[0];
   const option = format === "1" ? milk : format === "4" ? "large" : pick;
   const key = size ? coffeeLineKey(size.id, option) : "";
+  const pickedLabel = choices.find((item) => item.slug === pick)?.button || "";
   const unit = size
     ? format === "1"
       ? coffeeUnitPrice(size.price, milk)
-      : size.price
+      : format === "3"
+        ? coffeeButtonPrice(pickedLabel, size.price)
+        : size.price
     : 0;
   const surchargeOn = coffeeMilkExtra(milk) > 0;
   const optionSlugs =
@@ -580,7 +585,16 @@ export default function BottleShopCategoryPage() {
           const slug = String(index);
           const key = coffeeLineKey(product.id, slug);
           const qty = cart[key] || 0;
-          if (qty > 0) reserved.push({ key, product, qty, choice: slug, choiceLabel: label });
+          if (qty > 0) {
+            reserved.push({
+              key,
+              product,
+              qty,
+              choice: slug,
+              choiceLabel: label,
+              unitPrice: coffeeButtonPrice(label, product.price),
+            });
+          }
         });
         continue;
       }
@@ -599,7 +613,11 @@ export default function BottleShopCategoryPage() {
         (sum, l) =>
           sum +
           l.qty *
-            (l.milk ? coffeeUnitPrice(l.product.price, l.milk) : l.product.price),
+            (l.unitPrice != null
+              ? l.unitPrice
+              : l.milk
+                ? coffeeUnitPrice(l.product.price, l.milk)
+                : l.product.price),
         0
       ),
     [lines]
@@ -1181,9 +1199,11 @@ export default function BottleShopCategoryPage() {
                     —{" "}
                     {money(
                       l.qty *
-                        (l.milk
-                          ? coffeeUnitPrice(l.product.price, l.milk)
-                          : l.product.price)
+                        (l.unitPrice != null
+                          ? l.unitPrice
+                          : l.milk
+                            ? coffeeUnitPrice(l.product.price, l.milk)
+                            : l.product.price)
                     )}
                   </span>
                   <button

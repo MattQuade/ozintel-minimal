@@ -64,6 +64,17 @@ export function coffee2ChoiceLabel(slug: string): string {
   return COFFEE_2_CHOICES.find((item) => item.slug === slug)?.label || slug;
 }
 
+/** Price written on a Coffee 3 button, such as "Cheese $5". */
+export function coffeeButtonPrice(label: string, fallback = 0): number {
+  const matches = String(label || "").match(/\$\s*(\d+(?:\.\d{1,2})?)/g);
+  if (!matches || !matches.length) {
+    const fallbackPrice = Number(fallback);
+    return Number.isFinite(fallbackPrice) && fallbackPrice > 0 ? fallbackPrice : 0;
+  }
+  const amount = Number(matches[matches.length - 1].replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
 /** Coffee 3 is one row of three labels the ledger can rename. */
 export function normalizeCoffee3Buttons(raw: unknown): [string, string, string] {
   const list = Array.isArray(raw) ? raw : [];

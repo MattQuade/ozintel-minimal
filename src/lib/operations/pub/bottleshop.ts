@@ -10,6 +10,7 @@ import {
 import {
   COFFEE_MENU,
   coffee2ChoiceLabel,
+  coffeeButtonPrice,
   coffeeFormatOf,
   coffeeProductId,
   coffeeMilkLabel,
@@ -876,6 +877,7 @@ export async function placeBottleOrder(
       }
       choiceSlug = String(index);
       lineName = `${product.name}, ${buttons[index]}`;
+      unitPrice = coffeeButtonPrice(buttons[index], product.price);
     } else if (product.category === "coffee" && format === "4") {
       lineName = /\blarge\b/i.test(product.name)
         ? product.name
