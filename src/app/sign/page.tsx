@@ -47,6 +47,7 @@ export default function SignDocumentPage() {
   const [busy, setBusy] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
+  const strokes = useRef<ImageData[]>([]);
 
   const load = useCallback(async (keepStatus = false) => {
     const res = await fetch("/api/sign-docs", { credentials: "include", cache: "no-store" });
@@ -194,11 +195,26 @@ export default function SignDocumentPage() {
     if (!ctx) return;
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    strokes.current = [];
     ctx.strokeStyle = "#111111";
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
   }, [open?.id]);
+
+  const undoStroke = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const prev = strokes.current.pop();
+    if (prev) ctx.putImageData(prev, 0, 0);
+    else ctx.fillStyle = "#ffffff";
+    if (!prev) ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#111111";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  };
 
   const mine = me ? open?.owner.email.toLowerCase() === me.email.toLowerCase() : false;
 
@@ -307,6 +323,15 @@ export default function SignDocumentPage() {
                           {open.signer.name}: {when(open.signer.signedAt)}
                         </p>
                         <p style={{ margin: "0 0 8px", fontWeight: 700 }}>{mine ? "Your signature" : `Sign as ${me.name}`}</p>
+                        <div style={{ position: "relative" }}>
+                        <button
+                          type="button"
+                          onClick={undoStroke}
+                          aria-label="Back"
+                          style={backButton}
+                        >
+                          ←
+                        </button>
                         <canvas
                           ref={canvasRef}
                           style={{
@@ -320,9 +345,11 @@ export default function SignDocumentPage() {
                           onPointerDown={(event) => {
                             const canvas = canvasRef.current;
                             const ctx = canvas?.getContext("2d");
-                            if (!ctx) return;
+                            if (!ctx || !canvas) return;
+                            strokes.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+                            if (strokes.current.length > 30) strokes.current.shift();
                             drawing.current = true;
-                            canvas?.setPointerCapture(event.pointerId);
+                            canvas.setPointerCapture(event.pointerId);
                             const p = point(event);
                             ctx.beginPath();
                             ctx.moveTo(p.x, p.y);
@@ -339,6 +366,7 @@ export default function SignDocumentPage() {
                             drawing.current = false;
                           }}
                         />
+                        </div>
                         <button type="button" disabled={busy} onClick={() => void saveSignature()} style={primary}>
                           {busy ? "Saving…" : "Put my signature on the PDF"}
                         </button>
@@ -456,6 +484,23 @@ const rowButton: CSSProperties = {
   background: "white",
   color: "#0c2f6b",
   fontWeight: 700,
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
+const backButton: CSSProperties = {
+  position: "absolute",
+  top: 6,
+  left: 6,
+  zIndex: 2,
+  padding: "2px 8px",
+  borderRadius: 8,
+  border: "1px solid #d5deea",
+  background: "white",
+  color: "#0c2f6b",
+  fontWeight: 700,
+  fontSize: "0.9rem",
+  lineHeight: 1.2,
   cursor: "pointer",
   touchAction: "manipulation",
 };

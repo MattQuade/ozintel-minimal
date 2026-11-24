@@ -1,6 +1,18 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFRawStream,
+  PDFRef,
+  StandardFonts,
+  decodePDFRawStream,
+  rgb,
+  type PDFFont,
+  type PDFPage,
+} from "pdf-lib";
 import sharp from "sharp";
 import { getSignDocsDir, getSignDocsIndexPath } from "@/lib/dataPaths";
 
@@ -205,6 +217,52 @@ async function addSignaturePage(
   }
 }
 
+function contentText(pdf: PDFDocument, page: PDFPage): string {
+  const contents = page.node.Contents();
+  if (!contents) return "";
+  const parts: Buffer[] = [];
+  const take = (value: unknown) => {
+    if (!value) return;
+    const looked = value instanceof PDFRef ? pdf.context.lookup(value) : value;
+    if (looked instanceof PDFArray) {
+      for (let i = 0; i < looked.size(); i += 1) take(looked.get(i));
+      return;
+    }
+    if (looked instanceof PDFRawStream) {
+      try {
+        parts.push(Buffer.from(decodePDFRawStream(looked).decode()));
+      } catch {
+        parts.push(Buffer.from(looked.contents));
+      }
+    }
+  };
+  take(contents);
+  return Buffer.concat(parts).toString("latin1");
+}
+
+function pageHasImage(pdf: PDFDocument, page: PDFPage): boolean {
+  const resources = page.node.Resources();
+  if (!resources) return false;
+  const looked = resources instanceof PDFRef ? pdf.context.lookup(resources) : resources;
+  if (!(looked instanceof PDFDict)) return false;
+  return Boolean(looked.lookup(PDFName.of("XObject")));
+}
+
+function pageLooksBlank(pdf: PDFDocument, page: PDFPage): boolean {
+  if (pageHasImage(pdf, page)) return false;
+  const raw = contentText(pdf, page).replace(/%[^\r\n]*/g, "");
+  return !/(\bTj\b|\bTJ\b|\bDo\b)/.test(raw);
+}
+
+/** Word often saves a blank page after the letter. Drop those before the signature page. */
+function dropTrailingBlankPages(pdf: PDFDocument) {
+  while (pdf.getPageCount() > 1) {
+    const last = pdf.getPageCount() - 1;
+    if (!pageLooksBlank(pdf, pdf.getPage(last))) break;
+    pdf.removePage(last);
+  }
+}
+
 export async function renderSignPdf(doc: SignDoc): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   if (doc.uploaded) {
@@ -213,6 +271,7 @@ export async function renderSignPdf(doc: SignDoc): Promise<Uint8Array> {
       const src = await PDFDocument.load(source);
       const copied = await pdf.copyPages(src, src.getPageIndices());
       for (const page of copied) pdf.addPage(page);
+      dropTrailingBlankPages(pdf);
     } else {
       await drawTextPages(doc, pdf);
     }
@@ -394,9 +453,11 @@ export async function readSignPdf(id: string, email: string): Promise<Buffer | n
   if (!doc) return null;
   const pending = renders.get(doc.id);
   if (pending) await pending;
-  const existing = await readOptional(pdfPath(doc.id));
-  if (existing) return existing;
-  await trackRender(doc);
+  try {
+    await saveRendered(doc);
+  } catch (error) {
+    console.error("[sign-docs] pdf", error);
+  }
   return readOptional(pdfPath(doc.id));
 }
 
