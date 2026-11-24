@@ -34,6 +34,11 @@ function docName(doc: SignDoc) {
   return doc.fileName || doc.title;
 }
 
+function downloadName(doc: SignDoc) {
+  const raw = (doc.fileName || doc.title || "Document").trim();
+  return /\.pdf$/i.test(raw) ? raw : `${raw}.pdf`;
+}
+
 export default function SignDocumentPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [people, setPeople] = useState<Party[]>([]);
@@ -156,6 +161,45 @@ export default function SignDocumentPage() {
       await load(true);
     } catch {
       setStatus("Could not save the signature. Draw it again and try once more.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadDoc = async (doc: SignDoc) => {
+    setBusy(true);
+    setStatus("Preparing the PDF…");
+    try {
+      const res = await fetch(`/api/sign-docs/${doc.id}/file`, { credentials: "include", cache: "no-store" });
+      if (!res.ok) {
+        setStatus("Could not download the PDF.");
+        return;
+      }
+      const name = downloadName(doc);
+      const file = new File([await res.blob()], name, { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: name });
+          setStatus("");
+          return;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            setStatus("");
+            return;
+          }
+        }
+      }
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setStatus("Downloaded. Attach it to your email.");
+    } catch {
+      setStatus("Could not download the PDF.");
     } finally {
       setBusy(false);
     }
@@ -305,6 +349,9 @@ export default function SignDocumentPage() {
                         Delete
                       </button>
                     </div>
+                    <button type="button" disabled={busy} onClick={() => void downloadDoc(doc)} style={downloadButton}>
+                      {busy ? "Working…" : "Download"}
+                    </button>
                     {open?.id === doc.id ? (
                       <section
                         style={{
@@ -518,6 +565,20 @@ const backButton: CSSProperties = {
   fontWeight: 700,
   fontSize: "1.1rem",
   lineHeight: "30px",
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
+const downloadButton: CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: 8,
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "#075985",
+  color: "white",
+  fontWeight: 700,
   cursor: "pointer",
   touchAction: "manipulation",
 };
