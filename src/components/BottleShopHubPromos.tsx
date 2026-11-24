@@ -5,7 +5,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 type HubButton = { id: string; label: string };
 
 const FALLBACK: HubButton[] = [
-  { id: "tue-draw", label: "Tue Nite Draw $2,500" },
+  { id: "tue-draw", label: "Tue Nite Draw $3,000" },
   { id: "fri-raffles", label: "Fri Nite Meat Raffles" },
 ];
 

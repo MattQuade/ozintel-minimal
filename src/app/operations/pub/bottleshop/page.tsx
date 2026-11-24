@@ -194,11 +194,11 @@ function BottleShopAdminInner() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<ShopCustomer[]>([]);
   const [hubButtons, setHubButtons] = useState<HubButton[]>([
-    { id: "tue-draw", label: "Tue Nite Draw $2,500" },
+    { id: "tue-draw", label: "Tue Nite Draw $3,000" },
     { id: "fri-raffles", label: "Fri Nite Meat Raffles" },
   ]);
   const [hubDrafts, setHubDrafts] = useState<Record<string, string>>({
-    "tue-draw": "Tue Nite Draw $2,500",
+    "tue-draw": "Tue Nite Draw $3,000",
     "fri-raffles": "Fri Nite Meat Raffles",
   });
   const [status, setStatus] = useState("");

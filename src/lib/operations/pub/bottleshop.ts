@@ -97,7 +97,7 @@ export type BottleHubButton = {
 };
 
 const DEFAULT_HUB_BUTTONS: BottleHubButton[] = [
-  { id: "tue-draw", label: "Tue Nite Draw $2,500" },
+  { id: "tue-draw", label: "Tue Nite Draw $3,000" },
   { id: "fri-raffles", label: "Fri Nite Meat Raffles" },
 ];
 
@@ -134,10 +134,15 @@ function normalizeHubButtons(raw: unknown): BottleHubButton[] {
       byId.set(id, label);
     }
   }
-  return DEFAULT_HUB_BUTTONS.map((fallback) => ({
-    id: fallback.id,
-    label: byId.get(fallback.id) || fallback.label,
-  }));
+  return DEFAULT_HUB_BUTTONS.map((fallback) => {
+    const stored = byId.get(fallback.id);
+    // The Tuesday draw was raised from $2,500. Keep any other custom wording.
+    const label =
+      fallback.id === "tue-draw" && stored === "Tue Nite Draw $2,500"
+        ? fallback.label
+        : stored || fallback.label;
+    return { id: fallback.id, label };
+  });
 }
 
 function normalizeAccessCode(raw: string) {
