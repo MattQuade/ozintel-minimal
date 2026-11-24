@@ -27,6 +27,15 @@ export function getBottleShopVisitsPath(): string {
   return path.join(getDataDir(), "bottleshop-visits.json");
 }
 
+/** On-screen signed documents. One index plus the PDF for each document. */
+export function getSignDocsDir(): string {
+  return path.join(getDataDir(), "sign-docs");
+}
+
+export function getSignDocsIndexPath(): string {
+  return path.join(getSignDocsDir(), "index.json");
+}
+
 /** Repo-bundled seed file (used once when persistent disk is empty). */
 export function getRepoSeedUsersPath(): string {
   return path.join(process.cwd(), "data", "users.json");

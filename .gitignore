@@ -26,3 +26,5 @@ data/accounting-pins.json
 data/bottleshop-visits.json
 # In-app Safe Arrival / emergency alerts (live on OZINTEL_DATA_DIR in production)
 data/alert-inbox/
+# Signed documents (live on OZINTEL_DATA_DIR in production)
+data/sign-docs/
