@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import sharp from "sharp";
 import { getSignDocsDir, getSignDocsIndexPath } from "@/lib/dataPaths";
 
 export type SignParty = {
@@ -224,10 +225,48 @@ export async function renderSignPdf(doc: SignDoc): Promise<Uint8Array> {
   return pdf.save();
 }
 
+const renders = new Map<string, Promise<void>>();
+
 async function saveRendered(doc: SignDoc) {
   const bytes = await renderSignPdf(doc);
+  const stillThere = (await readIndex()).some((item) => item.id === doc.id);
+  if (!stillThere) {
+    await fs.rm(pdfPath(doc.id), { force: true });
+    return;
+  }
   await fs.mkdir(getSignDocsDir(), { recursive: true });
   await fs.writeFile(pdfPath(doc.id), bytes);
+}
+
+/** Rebuild the PDF without making the signature button wait on it. */
+function trackRender(doc: SignDoc): Promise<void> {
+  const existing = renders.get(doc.id);
+  if (existing) return existing;
+  const job = saveRendered(doc)
+    .catch((error) => {
+      console.error("[sign-docs] pdf", error);
+    })
+    .finally(() => {
+      if (renders.get(doc.id) === job) renders.delete(doc.id);
+    });
+  renders.set(doc.id, job);
+  return job;
+}
+
+async function fitSignature(png: Buffer): Promise<Buffer> {
+  if (!png.length || png.length > 1_500_000) throw new Error("Draw your signature again.");
+  try {
+    const fitted = await sharp(png, { failOn: "error" })
+      .resize({ width: 640, height: 240, fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
+    if (!fitted.length || fitted.length > 400_000) throw new Error("Draw your signature again.");
+    return fitted;
+  } catch (error) {
+    if (error instanceof Error && error.message === "Draw your signature again.") throw error;
+    if (png.length <= 400_000) return png;
+    throw new Error("Draw your signature again.");
+  }
 }
 
 export function isSignParty(doc: SignDoc, email: string): "owner" | "signer" | "" {
@@ -287,7 +326,9 @@ export async function createSignDoc(input: {
     const docs = await readIndex();
     docs.push(doc);
     await writeIndex(docs);
-    await saveRendered(doc);
+    return doc;
+  }).then(async (doc) => {
+    await trackRender(doc);
     return doc;
   });
 }
@@ -299,33 +340,51 @@ export async function signSignDoc(input: {
 }): Promise<SignDoc> {
   const safe = safeId(input.id);
   if (!safe) throw new Error("Document not found.");
-  if (!input.png.length || input.png.length > 400_000) throw new Error("Draw your signature again.");
-  return enqueue(async () => {
+  const png = await fitSignature(input.png);
+  const next = await enqueue(async () => {
     const docs = await readIndex();
     const idx = docs.findIndex((item) => item.id === safe);
     if (idx < 0) throw new Error("Document not found.");
     const role = isSignParty(docs[idx], input.email);
     if (!role) throw new Error("This document is not yours to sign.");
     await fs.mkdir(getSignDocsDir(), { recursive: true });
-    await fs.writeFile(signPath(safe, role), input.png);
+    await fs.writeFile(signPath(safe, role), png);
     const party = { ...docs[idx][role], signedAt: new Date().toISOString() };
-    const next: SignDoc = { ...docs[idx], [role]: party };
-    docs[idx] = next;
+    const updated: SignDoc = { ...docs[idx], [role]: party };
+    docs[idx] = updated;
     await writeIndex(docs);
-    await saveRendered(next);
-    return next;
+    return updated;
+  });
+  void trackRender(next);
+  return next;
+}
+
+export async function deleteSignDoc(id: string, email: string): Promise<void> {
+  const safe = safeId(id);
+  if (!safe) throw new Error("Document not found.");
+  await enqueue(async () => {
+    const docs = await readIndex();
+    const idx = docs.findIndex((item) => item.id === safe);
+    if (idx < 0 || !isSignParty(docs[idx], email)) throw new Error("Document not found.");
+    docs.splice(idx, 1);
+    await writeIndex(docs);
+    await Promise.all(
+      [pdfPath(safe), sourcePath(safe), signPath(safe, "owner"), signPath(safe, "signer")].map((file) =>
+        fs.rm(file, { force: true })
+      )
+    );
   });
 }
 
 export async function readSignPdf(id: string, email: string): Promise<Buffer | null> {
   const doc = await getSignDoc(id, email);
   if (!doc) return null;
+  const pending = renders.get(doc.id);
+  if (pending) await pending;
   const existing = await readOptional(pdfPath(doc.id));
   if (existing) return existing;
-  const bytes = await renderSignPdf(doc);
-  await fs.mkdir(getSignDocsDir(), { recursive: true });
-  await fs.writeFile(pdfPath(doc.id), bytes);
-  return Buffer.from(bytes);
+  await trackRender(doc);
+  return readOptional(pdfPath(doc.id));
 }
 
 export function signDocWordHtml(doc: SignDoc): string {

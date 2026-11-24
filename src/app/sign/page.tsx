@@ -44,7 +44,7 @@ export default function SignDocumentPage() {
   const drawing = useRef(false);
   const moved = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepStatus = false) => {
     const res = await fetch("/api/sign-docs", { credentials: "include", cache: "no-store" });
     const data = await res.json().catch(() => ({}));
     if (!data.success) {
@@ -56,7 +56,7 @@ export default function SignDocumentPage() {
     setPeople(Array.isArray(data.people) ? data.people : []);
     setDocs(Array.isArray(data.documents) ? data.documents : []);
     setSignerEmail((prev) => prev || data.people?.[0]?.email || "");
-    setStatus("");
+    if (!keepStatus) setStatus("");
   }, []);
 
   useEffect(() => {
@@ -112,7 +112,8 @@ export default function SignDocumentPage() {
   const saveSignature = async () => {
     const canvas = canvasRef.current;
     const doc = docs.find((item) => item.id === openId);
-    if (!canvas || !doc || !moved.current) {
+    const png = canvas ? signaturePng(canvas) : "";
+    if (!doc || !png) {
       setStatus("Draw your signature in the box first.");
       return;
     }
@@ -123,7 +124,8 @@ export default function SignDocumentPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ png: canvas.toDataURL("image/png") }),
+        body: JSON.stringify({ png }),
+        signal: AbortSignal.timeout(20000),
       });
       const data = await res.json().catch(() => ({}));
       if (!data.success) {
@@ -132,9 +134,30 @@ export default function SignDocumentPage() {
       }
       moved.current = false;
       setStatus("Signature saved on the PDF.");
-      await load();
+      await load(true);
     } catch {
-      setStatus("Could not save the signature.");
+      setStatus("Could not save the signature. Draw it again and try once more.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeDoc = async (id: string) => {
+    if (!window.confirm("Delete this document? It will be removed for both people.")) return;
+    setBusy(true);
+    setStatus("Deleting…");
+    try {
+      const res = await fetch(`/api/sign-docs/${id}`, { method: "DELETE", credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) {
+        setStatus(data.error || "Could not delete the document.");
+        return;
+      }
+      if (openId === id) setOpenId("");
+      setStatus("Document deleted.");
+      await load(true);
+    } catch {
+      setStatus("Could not delete the document.");
     } finally {
       setBusy(false);
     }
@@ -145,9 +168,10 @@ export default function SignDocumentPage() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width * 2));
-    canvas.height = Math.max(1, Math.floor(rect.height * 2));
+    if (canvas.width !== 600 || canvas.height !== 200) {
+      canvas.width = 600;
+      canvas.height = 200;
+    }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.fillStyle = "#ffffff";
@@ -246,9 +270,7 @@ export default function SignDocumentPage() {
               <section style={{ marginBottom: 16 }}>
                 <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Waiting for your signature</h2>
                 {waiting.map((doc) => (
-                  <button key={doc.id} type="button" onClick={() => setOpenId(doc.id)} style={rowButton}>
-                    {doc.title}
-                  </button>
+                  <DocRow key={doc.id} doc={doc} onOpen={() => setOpenId(doc.id)} onDelete={() => void removeDoc(doc.id)} />
                 ))}
               </section>
             ) : null}
@@ -257,12 +279,7 @@ export default function SignDocumentPage() {
               <h2 style={{ fontSize: "1.1rem", margin: "0 0 8px" }}>Your documents</h2>
               {docs.length ? (
                 docs.map((doc) => (
-                  <button key={doc.id} type="button" onClick={() => setOpenId(doc.id)} style={rowButton}>
-                    {doc.title}
-                    <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
-                      {doc.owner.name} and {doc.signer.name}
-                    </span>
-                  </button>
+                  <DocRow key={doc.id} doc={doc} onOpen={() => setOpenId(doc.id)} onDelete={() => void removeDoc(doc.id)} />
                 ))
               ) : (
                 <p style={{ color: "#5b6b82" }}>None yet.</p>
@@ -370,12 +387,79 @@ const rowButton: CSSProperties = {
   display: "block",
   width: "100%",
   textAlign: "left",
-  marginBottom: 8,
   padding: 12,
   borderRadius: 10,
   border: "1px solid #d5deea",
   background: "white",
   color: "#0c2f6b",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+function DocRow({ doc, onOpen, onDelete }: { doc: SignDoc; onOpen: () => void; onDelete: () => void }) {
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }}>
+      <button type="button" onClick={onOpen} style={{ ...rowButton, flex: 1 }}>
+        {doc.title}
+        <span style={{ display: "block", fontWeight: 500, color: "#5b6b82" }}>
+          {doc.owner.name} and {doc.signer.name}
+        </span>
+      </button>
+      <button type="button" onClick={onDelete} style={deleteButton}>
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function signaturePng(canvas: HTMLCanvasElement): string {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx || canvas.width < 1 || canvas.height < 1) return "";
+  const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let minX = canvas.width;
+  let minY = canvas.height;
+  let maxX = 0;
+  let maxY = 0;
+  let ink = false;
+  for (let y = 0; y < canvas.height; y += 1) {
+    for (let x = 0; x < canvas.width; x += 1) {
+      const i = (y * canvas.width + x) * 4;
+      if (pixels[i] < 245 || pixels[i + 1] < 245 || pixels[i + 2] < 245) {
+        ink = true;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (!ink) return "";
+  const pad = 10;
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(canvas.width - 1, maxX + pad);
+  maxY = Math.min(canvas.height - 1, maxY + pad);
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const scale = Math.min(1, 640 / cropW, 240 / cropH);
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(cropW * scale));
+  out.height = Math.max(1, Math.round(cropH * scale));
+  const outCtx = out.getContext("2d");
+  if (!outCtx) return "";
+  outCtx.fillStyle = "#ffffff";
+  outCtx.fillRect(0, 0, out.width, out.height);
+  outCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
+}
+
+const deleteButton: CSSProperties = {
+  flex: "0 0 auto",
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
   fontWeight: 700,
   cursor: "pointer",
 };
