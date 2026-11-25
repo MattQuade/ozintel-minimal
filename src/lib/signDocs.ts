@@ -285,6 +285,12 @@ export async function renderSignPdf(doc: SignDoc): Promise<Uint8Array> {
   return pdf.save();
 }
 
+export function signPdfFileName(fileName: string | undefined, title: string): string {
+  const raw = (fileName || title || "Document").replace(/[\r\n"]/g, "").trim();
+  const name = /\.pdf$/i.test(raw) ? raw : `${raw}.pdf`;
+  return name.slice(0, 180);
+}
+
 export function signDocFileName(title: string): string {
   const base = winAnsi(title)
     .replace(/[^\w .'-]+/g, " ")

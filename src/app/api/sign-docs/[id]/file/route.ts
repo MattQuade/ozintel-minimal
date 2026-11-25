@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSignDoc, readSignPdf } from "@/lib/signDocs";
+import { getSignDoc, readSignPdf, signPdfFileName } from "@/lib/signDocs";
 import { sessionEmail } from "@/app/api/sign-docs/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function pdfFileName(fileName: string | undefined, title: string): string {
-  const raw = (fileName || title || "Document").replace(/[\r\n"]/g, "").trim();
-  const name = /\.pdf$/i.test(raw) ? raw : `${raw}.pdf`;
-  return name.slice(0, 180);
-}
 
 function attachmentHeader(name: string): string {
   const ascii = name.replace(/[^\x20-\x7E]/g, "_");
@@ -31,7 +25,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": save ? attachmentHeader(pdfFileName(doc.fileName, doc.title)) : "inline",
+      "Content-Disposition": save ? attachmentHeader(signPdfFileName(doc.fileName, doc.title)) : "inline",
       "Cache-Control": "no-store",
     },
   });

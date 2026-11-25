@@ -21,18 +21,18 @@ export function smtpFromAddress(): string {
   return `${INVOICE_BRAND.businessName} <${user}>`;
 }
 
-function smtpUser(): string {
+export function smtpUser(): string {
   return String(process.env.SMTP_USER || "admin@ozintel.com.au").trim();
 }
 
 /** BCC so a copy lands in the ozintel mailbox (SMTP never writes Sent itself). */
-function smtpBccAddress(): string {
+export function smtpBccAddress(): string {
   const explicit = String(process.env.SMTP_BCC || "").trim();
   if (explicit) return explicit;
   return smtpUser();
 }
 
-function createTransport() {
+export function createTransport() {
   const host = String(process.env.SMTP_HOST || "ventraip.email").trim();
   const port = Number(process.env.SMTP_PORT || 587) || 587;
   const user = smtpUser();

@@ -49,6 +49,7 @@ export default function SignDocumentPage() {
   const [signerEmail, setSignerEmail] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [openId, setOpenId] = useState("");
+  const [emailTo, setEmailTo] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
@@ -161,6 +162,35 @@ export default function SignDocumentPage() {
       await load(true);
     } catch {
       setStatus("Could not save the signature. Draw it again and try once more.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const emailDoc = async (doc: SignDoc) => {
+    const to = (emailTo[doc.id] || "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      setStatus("Type the email address to send it to.");
+      return;
+    }
+    if (!window.confirm(`Email ${downloadName(doc)} to ${to} from admin@ozintel.com.au?`)) return;
+    setBusy(true);
+    setStatus("Sending the email…");
+    try {
+      const res = await fetch(`/api/sign-docs/${doc.id}/email`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) {
+        setStatus(data.error || "Could not send the email.");
+        return;
+      }
+      setStatus(`Sent ${downloadName(doc)} to ${data.to}.`);
+    } catch {
+      setStatus("Could not send the email.");
     } finally {
       setBusy(false);
     }
@@ -317,6 +347,22 @@ export default function SignDocumentPage() {
                     >
                       Download
                     </a>
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <input
+                        type="email"
+                        inputMode="email"
+                        autoComplete="off"
+                        placeholder="Email address"
+                        value={emailTo[doc.id] || ""}
+                        onChange={(event) =>
+                          setEmailTo((prev) => ({ ...prev, [doc.id]: event.target.value }))
+                        }
+                        style={{ ...field, width: "auto", flex: 1, minWidth: 0 }}
+                      />
+                      <button type="button" disabled={busy} onClick={() => void emailDoc(doc)} style={emailButton}>
+                        Email
+                      </button>
+                    </div>
                     {open?.id === doc.id ? (
                       <section
                         style={{
@@ -547,6 +593,18 @@ const downloadButton: CSSProperties = {
   fontWeight: 700,
   textAlign: "center",
   textDecoration: "none",
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
+const emailButton: CSSProperties = {
+  flex: "0 0 auto",
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "#047857",
+  color: "white",
+  fontWeight: 700,
   cursor: "pointer",
   touchAction: "manipulation",
 };
