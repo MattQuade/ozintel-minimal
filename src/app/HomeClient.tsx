@@ -2041,9 +2041,6 @@ export default function HomePage({
         <a href="/bottleshop" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#b45309', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Bottle Shop
         </a>
-        <a href="/sign" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#047857', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
-          Sign a document
-        </a>
         <a href="/decision-brief" style={{ padding: '20px', fontSize: '1.625rem', border: 'none', borderRadius: '12px', width: '90%', maxWidth: '400px', cursor: 'pointer', background: '#6d28d9', color: 'white', fontWeight: 'bold', textDecoration: 'none', boxSizing: 'border-box', textAlign: 'center' }}>
           Intel
         </a>

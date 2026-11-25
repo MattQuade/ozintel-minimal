@@ -123,6 +123,25 @@ export default function OperationsIndexPage() {
         >
           Logistics Operations
         </a>
+        <a
+          href="/sign"
+          style={{
+            display: "block",
+            width: "90%",
+            maxWidth: 400,
+            padding: 20,
+            fontSize: "1.3rem",
+            borderRadius: 12,
+            background: "#047857",
+            color: "white",
+            textDecoration: "none",
+            fontWeight: "bold",
+            boxSizing: "border-box",
+            textAlign: "center",
+          }}
+        >
+          Sign a document
+        </a>
       </div>
     </main>
   );
