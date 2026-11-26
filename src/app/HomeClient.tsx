@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import {
+  clearSessionEmailCookie,
+  persistSessionEmailCookie,
+} from '@/lib/client/sessionEmail';
 import dynamic from 'next/dynamic';
 import { getAlertLocation } from '@/lib/alerts/getAlertLocation';
 import AlertInbox from '@/components/AlertInbox';
@@ -43,7 +47,6 @@ const ADMIN_SELF_EMAIL = 'mattquade2000@gmail.com';
 
 // ---------- Cookie helpers ----------
 const COOKIE_NAME = 'ozintel_user_email';
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 function normalizeEmailClient(email: string) {
   return String(email || "")
@@ -66,8 +69,7 @@ function normalizeRestoreQuery(query: string) {
 }
 
 function setUserCookie(email: string) {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; max-age=${COOKIE_MAX_AGE}; path=/; SameSite=Lax; Secure`;
+  persistSessionEmailCookie(email);
 }
 
 function getUserCookie(): string | null {
@@ -77,8 +79,7 @@ function getUserCookie(): string | null {
 }
 
 function clearUserCookie() {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${COOKIE_NAME}=; max-age=0; path=/; SameSite=Lax; Secure`;
+  clearSessionEmailCookie();
 }
 
 type HomeClientProps = {
@@ -372,9 +373,6 @@ export default function HomePage({
         return true;
       }
 
-      clearUserCookie();
-      localStorage.removeItem('ozintel_current_user');
-      setCurrentUser(null);
       if (!silent) {
         setStatus(
           data.error ||
@@ -399,7 +397,9 @@ export default function HomePage({
         localStorage.setItem('ozintel_current_user', JSON.stringify(initialUser));
         setUserCookie(initialUser.email);
       } else if (storedUser) {
-        setCurrentUser(JSON.parse(storedUser));
+        const remembered = JSON.parse(storedUser) as UserProfile;
+        setCurrentUser(remembered);
+        if (remembered?.email) setUserCookie(remembered.email);
       }
       if (adminAuth === 'true') setIsAdminAuthenticated(true);
 
@@ -472,13 +472,14 @@ export default function HomePage({
           setEmergencyContacts(JSON.parse(storedEmergency));
         }
       }
+
+      const cookieEmail = getUserCookie();
+      if (cookieEmail && !initialUser && !storedUser) {
+        setUserCookie(cookieEmail);
+        void restoreFromServer(cookieEmail, true);
+      }
     } catch (e) {
       console.error("Storage load error:", e);
-    }
-
-    const cookieEmail = getUserCookie();
-    if (cookieEmail && !initialUser) {
-      void restoreFromServer(cookieEmail, true);
     }
   }, []);
 
@@ -520,10 +521,18 @@ export default function HomePage({
   useEffect(() => {
     if (!currentUser?.email) return;
 
-    const syncMe = async () => {
+    const syncMe = async (retried = false) => {
       try {
-        const res = await fetch(`${API_BASE}/api/me`, { cache: 'no-store' });
-        if (res.status === 401) {
+        const res = await fetch(`${API_BASE}/api/me`, {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (res.status === 401 && currentUser?.email && !retried) {
+          setUserCookie(currentUser.email);
+          await syncMe(true);
+          return;
+        }
+        if (res.status === 404) {
           clearUserCookie();
           localStorage.removeItem('ozintel_current_user');
           setCurrentUser(null);

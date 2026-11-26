@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json(
         { success: false, authenticated: false, error: "Account not found" },
-        { status: 401 }
+        { status: 404 }
       );
     }
 
