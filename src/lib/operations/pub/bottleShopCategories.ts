@@ -1,3 +1,17 @@
+/** Dollars typed in the ledger, shown as Tue Nite Draw $3,500. */
+export function tueDrawAmount(label: string): string {
+  const match = String(label || "").match(/\$\s*([\d,]+(?:\.\d+)?)/);
+  if (!match) return "";
+  return match[1].replace(/,/g, "");
+}
+
+export function tueDrawLabel(amount: string): string {
+  const n = Number(String(amount || "").replace(/,/g, "").trim());
+  if (!Number.isFinite(n) || n < 0) return "";
+  const formatted = Math.round(n).toLocaleString("en-AU");
+  return `Tue Nite Draw $${formatted}`;
+}
+
 /** Public bottle shop shelves — keep this list tiny and fixed. */
 export const BOTTLE_SHOP_CATEGORIES = [
   { slug: "coffee", label: "Coffee" },

@@ -136,7 +136,7 @@ function normalizeHubButtons(raw: unknown): BottleHubButton[] {
   }
   return DEFAULT_HUB_BUTTONS.map((fallback) => {
     const stored = byId.get(fallback.id);
-    // The Tuesday draw was raised from $2,500. Keep any other custom wording.
+    // Older ledgers still say $2,500. Leave that as $3,000 until a new amount is saved.
     const label =
       fallback.id === "tue-draw" && stored === "Tue Nite Draw $2,500"
         ? fallback.label
