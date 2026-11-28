@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Papa from 'papaparse';
 import { classifyBatch, type BankRule } from '../../../core/rules/rulesEngine';
 import AccountingGate from '@/components/AccountingGate';
+import BankFeedCard from '@/components/BankFeedCard';
 import ReceiptAttach from '@/components/ReceiptAttach';
 import { formatAuDate, formatAuDateRange, toIsoDateInput } from '@/lib/accounting/dates';
 import { isoDateInRange } from '@/lib/accounting/journalPeriods';
@@ -765,6 +766,8 @@ function BankImport() {
             from this upload are tagged <span className="font-semibold">{quarter}</span>.
           </div>
         )}
+
+        <BankFeedCard />
 
         <div className="bg-white rounded-3xl shadow-xl px-4 py-8">
           <div className="mb-8">
