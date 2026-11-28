@@ -254,6 +254,19 @@ export function getImportBatchFilePath(): string {
   return path.join(getAccountingDataDir(), "import-batch.json");
 }
 
+/**
+ * Token hash → owner email. One small file, so a feed post does not scan silos.
+ * The raw token and signing secret stay in the owner's own feed file.
+ */
+export function getBankFeedIndexPath(): string {
+  return path.join(getDataDir(), "bank-feed-index.json");
+}
+
+/** This owner's Redbark feed address, signing secret, and account map. */
+export function getBankFeedFilePath(): string {
+  return path.join(getAccountingDataDir(), "bank-feed.json");
+}
+
 /** Products and services that can be dropped onto an invoice. */
 export function getInvoiceItemsFilePath(): string {
   return path.join(getAccountingDataDir(), "invoice-items.json");

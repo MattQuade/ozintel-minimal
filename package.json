@@ -15,6 +15,7 @@
     "test:assets": "npx tsx src/lib/accounting/runDepreciationFixtures.ts",
     "test:invoice-match": "npx tsx src/lib/accounting/runInvoiceDepositMatchFixtures.ts",
     "test:import-batch": "npx tsx src/lib/accounting/runImportBatchFixtures.ts",
+    "test:bank-feed": "npx tsx src/lib/accounting/runBankFeedFixtures.ts",
     "test:partial-payments": "npx tsx src/lib/accounting/runPartialPaymentFixtures.ts",
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",
